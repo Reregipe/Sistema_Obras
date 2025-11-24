@@ -4,9 +4,18 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Layout } from "./components/Layout";
+import { useRealtimeRoleChanges } from "@/hooks/useRealtimeRoleChanges";
+
+export const MainLayout = ({ children }: { children: React.ReactNode }) => {
+  // Hook para escutar mudanças em tempo real de permissões
+  useRealtimeRoleChanges();
+  
+  return <Layout>{children}</Layout>;
+};
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
+import AcceptInvite from "./pages/AcceptInvite";
 import Acionamentos from "./pages/Acionamentos";
 import Obras from "./pages/Obras";
 import Medicoes from "./pages/Medicoes";
@@ -28,74 +37,75 @@ const App = () => (
       <BrowserRouter>
         <Routes>
           <Route path="/auth" element={<Auth />} />
+          <Route path="/accept-invite" element={<AcceptInvite />} />
           <Route path="/" element={
             <ProtectedRoute>
-              <Layout>
+              <MainLayout>
                 <Index />
-              </Layout>
+              </MainLayout>
             </ProtectedRoute>
           } />
           <Route path="/acionamentos" element={
             <ProtectedRoute>
-              <Layout>
+              <MainLayout>
                 <Acionamentos />
-              </Layout>
+              </MainLayout>
             </ProtectedRoute>
           } />
           <Route path="/obras" element={
             <ProtectedRoute>
-              <Layout>
+              <MainLayout>
                 <Obras />
-              </Layout>
+              </MainLayout>
             </ProtectedRoute>
           } />
           <Route path="/medicoes" element={
             <ProtectedRoute>
-              <Layout>
+              <MainLayout>
                 <Medicoes />
-              </Layout>
+              </MainLayout>
             </ProtectedRoute>
           } />
           <Route path="/materiais" element={
             <ProtectedRoute>
-              <Layout>
+              <MainLayout>
                 <Materiais />
-              </Layout>
+              </MainLayout>
             </ProtectedRoute>
           } />
           <Route path="/equipes" element={
             <ProtectedRoute>
-              <Layout>
+              <MainLayout>
                 <Equipes />
-              </Layout>
+              </MainLayout>
             </ProtectedRoute>
           } />
           <Route path="/viaturas" element={
             <ProtectedRoute>
-              <Layout>
+              <MainLayout>
                 <Viaturas />
-              </Layout>
+              </MainLayout>
             </ProtectedRoute>
           } />
           <Route path="/codigos-mo" element={
             <ProtectedRoute>
-              <Layout>
+              <MainLayout>
                 <CodigosMO />
-              </Layout>
+              </MainLayout>
             </ProtectedRoute>
           } />
           <Route path="/relatorios" element={
             <ProtectedRoute>
-              <Layout>
+              <MainLayout>
                 <Relatorios />
-              </Layout>
+              </MainLayout>
             </ProtectedRoute>
           } />
           <Route path="/configuracoes" element={
             <ProtectedRoute>
-              <Layout>
+              <MainLayout>
                 <Configuracoes />
-              </Layout>
+              </MainLayout>
             </ProtectedRoute>
           } />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

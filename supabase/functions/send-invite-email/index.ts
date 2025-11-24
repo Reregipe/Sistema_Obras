@@ -48,7 +48,7 @@ const handler = async (req: Request): Promise<Response> => {
 
     // Build invite URL
     const baseUrl = Deno.env.get("SUPABASE_URL")?.replace(".supabase.co", ".lovableproject.com") || "";
-    const inviteUrl = `${baseUrl}/auth?invite=${token}`;
+    const inviteUrl = `${baseUrl}/accept-invite?token=${token}`;
 
     // Format roles list
     const rolesList = roles.map((r) => roleNames[r] || r).join(", ");
