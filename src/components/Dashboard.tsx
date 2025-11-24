@@ -4,6 +4,7 @@ import { CheckCircle2, Clock, AlertCircle, FileText, Wrench, TrendingUp } from "
 import { QuickAccessCards } from "./QuickAccessCards";
 import { RecentActivity } from "./RecentActivity";
 import heroBg from "@/assets/hero-bg.jpg";
+import logo from "@/assets/logo-engeletrica.png";
 
 const statusSteps = [
   { 
@@ -90,9 +91,16 @@ export const Dashboard = () => {
         <header className="relative">
           <div className="container mx-auto px-6 py-8">
             <div className="flex items-center justify-between">
-              <div className="text-white">
-                <h1 className="text-4xl font-bold mb-2">Sistema de Gestão de Obras</h1>
-                <p className="text-lg opacity-90">Controle completo do fluxo de trabalho - Energisa MT</p>
+              <div className="flex items-center gap-6">
+                <img 
+                  src={logo} 
+                  alt="Engeletrica Logo" 
+                  className="h-16 w-auto bg-white rounded-lg px-3 py-2"
+                />
+                <div className="text-white">
+                  <h1 className="text-4xl font-bold mb-2">Sistema de Gestão de Obras</h1>
+                  <p className="text-lg opacity-90">Controle completo do fluxo de trabalho - Energisa MT</p>
+                </div>
               </div>
               <Badge variant="secondary" className="px-6 py-3 text-base font-semibold bg-white/20 text-white border-white/30">
                 Dashboard
