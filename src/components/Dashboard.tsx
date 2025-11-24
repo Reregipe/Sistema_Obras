@@ -91,15 +91,15 @@ export const Dashboard = () => {
         <header className="relative">
           <div className="container mx-auto px-6 py-6">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="bg-white rounded-lg p-2 shadow-lg">
+              <div className="flex items-center gap-6">
+                <div className="bg-white rounded-lg px-6 py-3 shadow-lg">
                   <img 
                     src={logo} 
                     alt="Engeletrica" 
-                    className="h-12 w-auto"
+                    className="h-10 w-auto"
                   />
                 </div>
-                <div className="text-white border-l border-white/30 pl-4">
+                <div className="text-white">
                   <h1 className="text-3xl font-bold">Sistema de Gestão de Obras</h1>
                   <p className="text-sm opacity-90">Energisa MT - Controle do fluxo de trabalho</p>
                 </div>
