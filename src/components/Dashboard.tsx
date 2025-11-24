@@ -89,20 +89,22 @@ export const Dashboard = () => {
       >
         <div className="absolute inset-0 bg-gradient-to-r from-primary/95 to-primary/80"></div>
         <header className="relative">
-          <div className="container mx-auto px-6 py-8">
+          <div className="container mx-auto px-6 py-6">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-6">
-                <img 
-                  src={logo} 
-                  alt="Engeletrica Logo" 
-                  className="h-16 w-auto bg-white rounded-lg px-3 py-2"
-                />
-                <div className="text-white">
-                  <h1 className="text-4xl font-bold mb-2">Sistema de Gestão de Obras</h1>
-                  <p className="text-lg opacity-90">Controle completo do fluxo de trabalho - Energisa MT</p>
+              <div className="flex items-center gap-4">
+                <div className="bg-white rounded-lg p-2 shadow-lg">
+                  <img 
+                    src={logo} 
+                    alt="Engeletrica" 
+                    className="h-12 w-auto"
+                  />
+                </div>
+                <div className="text-white border-l border-white/30 pl-4">
+                  <h1 className="text-3xl font-bold">Sistema de Gestão de Obras</h1>
+                  <p className="text-sm opacity-90">Energisa MT - Controle do fluxo de trabalho</p>
                 </div>
               </div>
-              <Badge variant="secondary" className="px-6 py-3 text-base font-semibold bg-white/20 text-white border-white/30">
+              <Badge variant="secondary" className="px-4 py-2 text-sm font-semibold bg-white text-primary">
                 Dashboard
               </Badge>
             </div>
