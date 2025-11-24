@@ -1,6 +1,8 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { UsersManagement } from "@/components/settings/UsersManagement";
+import { SystemSettings } from "@/components/settings/SystemSettings";
+import { UserRolesHistory } from "@/components/settings/UserRolesHistory";
+import { InvitesManagement } from "@/components/settings/InvitesManagement";
 import { useAuth } from "@/hooks/useAuth";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle } from "lucide-react";
@@ -33,6 +35,8 @@ const Configuracoes = () => {
       <Tabs defaultValue="users" className="space-y-6">
         <TabsList>
           <TabsTrigger value="users">Usuários</TabsTrigger>
+          <TabsTrigger value="invites">Convites</TabsTrigger>
+          <TabsTrigger value="history">Auditoria</TabsTrigger>
           <TabsTrigger value="system">Sistema</TabsTrigger>
         </TabsList>
 
@@ -40,18 +44,16 @@ const Configuracoes = () => {
           <UsersManagement />
         </TabsContent>
 
+        <TabsContent value="invites">
+          <InvitesManagement />
+        </TabsContent>
+
+        <TabsContent value="history">
+          <UserRolesHistory />
+        </TabsContent>
+
         <TabsContent value="system">
-          <Card>
-            <CardHeader>
-              <CardTitle>Configurações do Sistema</CardTitle>
-              <CardDescription>Configurações gerais da aplicação</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p className="text-muted-foreground text-center py-8">
-                Configurações do sistema em desenvolvimento.
-              </p>
-            </CardContent>
-          </Card>
+          <SystemSettings />
         </TabsContent>
       </Tabs>
     </div>

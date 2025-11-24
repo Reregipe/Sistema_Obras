@@ -209,6 +209,42 @@ export type Database = {
           },
         ]
       }
+      invites: {
+        Row: {
+          aceito_em: string | null
+          convidado_por: string
+          criado_em: string | null
+          email: string
+          expira_em: string
+          id: string
+          roles: string[]
+          status: string
+          token: string
+        }
+        Insert: {
+          aceito_em?: string | null
+          convidado_por: string
+          criado_em?: string | null
+          email: string
+          expira_em: string
+          id?: string
+          roles?: string[]
+          status?: string
+          token: string
+        }
+        Update: {
+          aceito_em?: string | null
+          convidado_por?: string
+          criado_em?: string | null
+          email?: string
+          expira_em?: string
+          id?: string
+          roles?: string[]
+          status?: string
+          token?: string
+        }
+        Relationships: []
+      }
       lista_aplicacao_cabecalho: {
         Row: {
           data_emissao: string
@@ -554,6 +590,36 @@ export type Database = {
         }
         Relationships: []
       }
+      system_settings: {
+        Row: {
+          atualizado_em: string | null
+          atualizado_por: string | null
+          chave: string
+          descricao: string | null
+          id: string
+          tipo: string
+          valor: string
+        }
+        Insert: {
+          atualizado_em?: string | null
+          atualizado_por?: string | null
+          chave: string
+          descricao?: string | null
+          id?: string
+          tipo?: string
+          valor: string
+        }
+        Update: {
+          atualizado_em?: string | null
+          atualizado_por?: string | null
+          chave?: string
+          descricao?: string | null
+          id?: string
+          tipo?: string
+          valor?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           concedido_em: string | null
@@ -574,6 +640,36 @@ export type Database = {
           concedido_por?: string | null
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_roles_history: {
+        Row: {
+          acao: string
+          concedido_por: string | null
+          criado_em: string | null
+          id: string
+          motivo: string | null
+          role: string
+          user_id: string
+        }
+        Insert: {
+          acao: string
+          concedido_por?: string | null
+          criado_em?: string | null
+          id?: string
+          motivo?: string | null
+          role: string
+          user_id: string
+        }
+        Update: {
+          acao?: string
+          concedido_por?: string | null
+          criado_em?: string | null
+          id?: string
+          motivo?: string | null
+          role?: string
           user_id?: string
         }
         Relationships: []
