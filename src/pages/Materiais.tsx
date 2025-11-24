@@ -1,6 +1,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
+import { MateriaisTable } from "@/components/tables/MateriaisTable";
 
 const Materiais = () => {
   return (
@@ -21,12 +22,10 @@ const Materiais = () => {
       <Card>
         <CardHeader>
           <CardTitle>Catálogo de Materiais</CardTitle>
-          <CardDescription>8 materiais cadastrados</CardDescription>
+          <CardDescription>Todos os materiais cadastrados</CardDescription>
         </CardHeader>
         <CardContent>
-          <p className="text-muted-foreground text-center py-8">
-            Lista de materiais será exibida aqui.
-          </p>
+          <MateriaisTable />
         </CardContent>
       </Card>
     </div>
