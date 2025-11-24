@@ -2,10 +2,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { QuickAccessCards } from "./QuickAccessCards";
 import { RecentActivity } from "./RecentActivity";
 import { WorkflowSteps } from "./WorkflowSteps";
+import { MonitoringDashboard } from "./MonitoringDashboard";
 
 export const DashboardContent = () => {
   return (
     <div className="container mx-auto px-6 py-8">
+      {/* Monitoring Dashboard */}
+      <div className="mb-8">
+        <MonitoringDashboard />
+      </div>
+
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
         <Card>
