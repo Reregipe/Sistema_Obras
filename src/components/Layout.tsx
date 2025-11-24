@@ -1,6 +1,7 @@
 import { ReactNode } from "react";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "./AppSidebar";
+import { NotificationCenter } from "./NotificationCenter";
 import logo from "@/assets/logo-engeletrica.png";
 import { Menu } from "lucide-react";
 
@@ -36,6 +37,7 @@ export const Layout = ({ children }: LayoutProps) => {
               </div>
               
               <div className="ml-auto flex items-center gap-2">
+                <NotificationCenter />
                 <span className="text-sm text-muted-foreground">
                   Energisa MT
                 </span>

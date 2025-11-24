@@ -338,6 +338,45 @@ export type Database = {
         }
         Relationships: []
       }
+      notificacoes: {
+        Row: {
+          criado_em: string | null
+          etapa: string | null
+          id_notificacao: string
+          lida: boolean | null
+          mensagem: string
+          referencia_id: string | null
+          referencia_tipo: string | null
+          tipo: string
+          titulo: string
+          usuario_id: string | null
+        }
+        Insert: {
+          criado_em?: string | null
+          etapa?: string | null
+          id_notificacao?: string
+          lida?: boolean | null
+          mensagem: string
+          referencia_id?: string | null
+          referencia_tipo?: string | null
+          tipo: string
+          titulo: string
+          usuario_id?: string | null
+        }
+        Update: {
+          criado_em?: string | null
+          etapa?: string | null
+          id_notificacao?: string
+          lida?: boolean | null
+          mensagem?: string
+          referencia_id?: string | null
+          referencia_tipo?: string | null
+          tipo?: string
+          titulo?: string
+          usuario_id?: string | null
+        }
+        Relationships: []
+      }
       obras: {
         Row: {
           alimentador: string | null
