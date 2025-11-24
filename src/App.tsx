@@ -16,6 +16,7 @@ import { ProtectedRoute } from "./components/ProtectedRoute";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import AcceptInvite from "./pages/AcceptInvite";
+import Analytics from "./pages/Analytics";
 import Acionamentos from "./pages/Acionamentos";
 import Obras from "./pages/Obras";
 import Medicoes from "./pages/Medicoes";
@@ -105,6 +106,13 @@ const App = () => (
             <ProtectedRoute>
               <MainLayout>
                 <Configuracoes />
+              </MainLayout>
+            </ProtectedRoute>
+          } />
+          <Route path="/analytics" element={
+            <ProtectedRoute>
+              <MainLayout>
+                <Analytics />
               </MainLayout>
             </ProtectedRoute>
           } />
