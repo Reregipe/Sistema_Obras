@@ -1,11 +1,14 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, History, UserPlus, UserMinus } from "lucide-react";
+import { Loader2, History, UserPlus, UserMinus, Download, FileText } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { exportToPDF, exportToExcel } from "@/utils/exportUtils";
+import { useRealtimeRoleChanges } from "@/hooks/useRealtimeRoleChanges";
 
 interface HistoryEntry {
   id: string;
@@ -31,6 +34,9 @@ export const UserRolesHistory = () => {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
+
+  // Hook para escutar mudanças em tempo real
+  useRealtimeRoleChanges();
 
   const fetchHistory = async () => {
     setLoading(true);
@@ -89,13 +95,37 @@ export const UserRolesHistory = () => {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <History className="h-5 w-5" />
-          Histórico de Permissões
-        </CardTitle>
-        <CardDescription>
-          Auditoria completa de mudanças de permissões (últimas 50 ações)
-        </CardDescription>
+        <div className="flex items-center justify-between flex-wrap gap-4">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <History className="h-5 w-5" />
+              Histórico de Permissões
+            </CardTitle>
+            <CardDescription>
+              Auditoria completa de mudanças de permissões (últimas 50 ações)
+            </CardDescription>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => exportToPDF(history)}
+              disabled={history.length === 0}
+            >
+              <FileText className="h-4 w-4 mr-2" />
+              PDF
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => exportToExcel(history)}
+              disabled={history.length === 0}
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Excel
+            </Button>
+          </div>
+        </div>
       </CardHeader>
       <CardContent>
         {history.length === 0 ? (
