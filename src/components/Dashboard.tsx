@@ -3,8 +3,6 @@ import { Badge } from "@/components/ui/badge";
 import { CheckCircle2, Clock, AlertCircle, FileText, Wrench, TrendingUp } from "lucide-react";
 import { QuickAccessCards } from "./QuickAccessCards";
 import { RecentActivity } from "./RecentActivity";
-import heroBg from "@/assets/hero-bg.jpg";
-import logo from "@/assets/logo-engeletrica.png";
 
 const statusSteps = [
   { 
@@ -79,41 +77,10 @@ const statusSteps = [
   }
 ];
 
-export const Dashboard = () => {
+export const DashboardContent = () => {
   return (
-    <div className="min-h-screen bg-background">
-      {/* Hero Header with Background */}
-      <div 
-        className="relative bg-cover bg-center border-b border-border"
-        style={{ backgroundImage: `url(${heroBg})` }}
-      >
-        <div className="absolute inset-0 bg-gradient-to-r from-primary/95 to-primary/80"></div>
-        <header className="relative">
-          <div className="container mx-auto px-6 py-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-6">
-                <div className="bg-white rounded-lg px-6 py-3 shadow-lg">
-                  <img 
-                    src={logo} 
-                    alt="Engeletrica" 
-                    className="h-10 w-auto"
-                  />
-                </div>
-                <div className="text-white">
-                  <h1 className="text-3xl font-bold">Sistema de Gestão de Obras</h1>
-                  <p className="text-sm opacity-90">Energisa MT - Controle do fluxo de trabalho</p>
-                </div>
-              </div>
-              <Badge variant="secondary" className="px-4 py-2 text-sm font-semibold bg-white text-primary">
-                Dashboard
-              </Badge>
-            </div>
-          </div>
-        </header>
-      </div>
-
-      <main className="container mx-auto px-6 py-8">
-        {/* Stats Cards */}
+    <div className="container mx-auto px-6 py-8">
+      {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <Card>
             <CardHeader className="pb-3">
@@ -209,7 +176,7 @@ export const Dashboard = () => {
 
         {/* Recent Activity */}
         <RecentActivity />
-      </main>
-    </div>
-  );
-};
+      </div>
+    );
+  };
+
