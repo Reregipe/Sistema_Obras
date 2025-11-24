@@ -30,6 +30,7 @@ const mainItems = [
   { title: "Obras", url: "/obras", icon: Wrench },
   { title: "Medições", url: "/medicoes", icon: TrendingUp },
   { title: "Relatórios", url: "/relatorios", icon: BarChart3 },
+  { title: "Analytics", url: "/analytics", icon: TrendingUp },
 ];
 
 const cadastrosItems = [
