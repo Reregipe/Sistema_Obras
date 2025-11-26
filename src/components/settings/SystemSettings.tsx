@@ -162,6 +162,14 @@ export const SystemSettings = () => {
     return map[setting.chave] || { label: setting.descricao || setting.chave, keyHint: setting.chave };
   };
 
+  const hasSplitUps = settings.some(
+    (setting) => setting.chave === "ups_valor_lm" || setting.chave === "ups_valor_lv"
+  );
+
+  const visibleSettings = hasSplitUps
+    ? settings.filter((setting) => setting.chave !== "upr_valor_padrao")
+    : settings;
+
   return (
     <Card>
       <CardHeader>
@@ -175,7 +183,7 @@ export const SystemSettings = () => {
       </CardHeader>
       <CardContent>
         <div className="space-y-6">
-          {settings.map((setting) => (
+          {visibleSettings.map((setting) => (
             <div
               key={setting.id}
               className="flex flex-col space-y-2 p-4 border border-border rounded-lg"
