@@ -20,6 +20,7 @@ import Analytics from "./pages/Analytics";
 import Acionamentos from "./pages/Acionamentos";
 import Obras from "./pages/Obras";
 import Medicoes from "./pages/Medicoes";
+import MedicaoFinal from "./pages/MedicaoFinal";
 import Materiais from "./pages/Materiais";
 import Equipes from "./pages/Equipes";
 import Viaturas from "./pages/Viaturas";
@@ -64,6 +65,13 @@ const App = () => (
             <ProtectedRoute>
               <MainLayout>
                 <Medicoes />
+              </MainLayout>
+            </ProtectedRoute>
+          } />
+          <Route path="/medicao-final" element={
+            <ProtectedRoute>
+              <MainLayout>
+                <MedicaoFinal />
               </MainLayout>
             </ProtectedRoute>
           } />

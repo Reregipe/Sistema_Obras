@@ -132,6 +132,7 @@ export const UsersManagement = () => {
                           key={roleObj.role}
                           variant="outline"
                           className={roleColors[roleObj.role] || ""}
+                          title={roleNames[roleObj.role] || roleObj.role}
                         >
                           {roleNames[roleObj.role] || roleObj.role}
                         </Badge>

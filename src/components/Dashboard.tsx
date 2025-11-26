@@ -7,11 +7,6 @@ import { MonitoringDashboard } from "./MonitoringDashboard";
 export const DashboardContent = () => {
   return (
     <div className="container mx-auto px-6 py-8">
-      {/* Monitoring Dashboard */}
-      <div className="mb-8">
-        <MonitoringDashboard />
-      </div>
-
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
         <Card>
@@ -57,6 +52,11 @@ export const DashboardContent = () => {
 
       {/* Workflow Steps */}
       <WorkflowSteps />
+
+      {/* Monitoring Dashboard (após fluxo) */}
+      <div className="mb-8">
+        <MonitoringDashboard />
+      </div>
 
       {/* Quick Access */}
       <div className="mb-8">

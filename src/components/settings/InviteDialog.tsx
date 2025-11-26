@@ -23,11 +23,11 @@ interface InviteDialogProps {
 }
 
 const availableRoles = [
-  { value: "ADMIN", label: "Administrador", description: "Acesso total ao sistema" },
-  { value: "ADM", label: "Administrativo", description: "Gerenciamento administrativo" },
-  { value: "GESTOR", label: "Gestor", description: "Aprovações e gestão" },
-  { value: "OPER", label: "Operacional", description: "Operações diárias" },
-  { value: "FIN", label: "Financeiro", description: "Gestão financeira" },
+  { value: "ADMIN", label: "Administrador", description: "Acesso total ao sistema", preset: "Completo" },
+  { value: "ADM", label: "Administrativo", description: "Cadastros e ajustes administrativos" },
+  { value: "GESTOR", label: "Gestor", description: "Aprova medições/TCI e supervisiona" },
+  { value: "OPER", label: "Operacional", description: "Operações diárias / campo" },
+  { value: "FIN", label: "Financeiro", description: "Lotes, TCI e NF" },
 ];
 
 const emailSchema = z.string().email("Email inválido");
@@ -51,6 +51,10 @@ export const InviteDialog = ({
       newRoles.add(role);
     }
     setSelectedRoles(newRoles);
+  };
+
+  const applyPreset = (roles: string[]) => {
+    setSelectedRoles(new Set(roles));
   };
 
   const handleSend = async () => {
@@ -157,6 +161,25 @@ export const InviteDialog = ({
         </DialogHeader>
 
         <div className="space-y-4 py-4">
+          <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+            <span>Presets rápidos:</span>
+            <Button type="button" size="sm" variant="outline" onClick={() => applyPreset(["GESTOR"])}>
+              Gestor
+            </Button>
+            <Button type="button" size="sm" variant="outline" onClick={() => applyPreset(["ADM"])}>
+              Administrativo
+            </Button>
+            <Button type="button" size="sm" variant="outline" onClick={() => applyPreset(["FIN"])}>
+              Financeiro
+            </Button>
+            <Button type="button" size="sm" variant="outline" onClick={() => applyPreset(["OPER"])}>
+              Operacional
+            </Button>
+            <Button type="button" size="sm" variant="outline" onClick={() => applyPreset(["ADMIN"])}>
+              Administrador
+            </Button>
+          </div>
+
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
             <Input

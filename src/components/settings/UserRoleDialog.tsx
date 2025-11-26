@@ -27,11 +27,11 @@ interface UserRoleDialogProps {
 }
 
 const availableRoles = [
-  { value: "ADMIN", label: "Administrador", description: "Acesso total ao sistema" },
-  { value: "ADM", label: "Administrativo", description: "Gerenciamento administrativo" },
-  { value: "GESTOR", label: "Gestor", description: "Aprovações e gestão" },
-  { value: "OPER", label: "Operacional", description: "Operações diárias" },
-  { value: "FIN", label: "Financeiro", description: "Gestão financeira" },
+  { value: "ADMIN", label: "Administrador", description: "Acesso total ao sistema", sensitive: true },
+  { value: "ADM", label: "Administrativo", description: "Cadastros e ajustes administrativos" },
+  { value: "GESTOR", label: "Gestor", description: "Aprovações e gestão operacional" },
+  { value: "OPER", label: "Operacional", description: "Operações diárias / campo" },
+  { value: "FIN", label: "Financeiro", description: "Lotes, TCI e NF", sensitive: true },
 ];
 
 export const UserRoleDialog = ({
@@ -72,6 +72,18 @@ export const UserRoleDialog = ({
       // Determine roles to add and remove
       const rolesToAdd = Array.from(selectedRoles).filter((r) => !currentRoles.has(r));
       const rolesToRemove = Array.from(currentRoles).filter((r) => !selectedRoles.has(r));
+
+      const sensitiveAdded = rolesToAdd.some((r) => ["ADMIN", "FIN"].includes(r));
+      const sensitiveRemoved = rolesToRemove.some((r) => ["ADMIN", "FIN"].includes(r));
+      if (sensitiveAdded || sensitiveRemoved) {
+        const msg = sensitiveAdded
+          ? "Você está concedendo acesso sensível (ADMIN/FIN). Confirmar?"
+          : "Você está removendo acesso sensível (ADMIN/FIN). Confirmar?";
+        if (!window.confirm(msg)) {
+          setSaving(false);
+          return;
+        }
+      }
 
       // Remove roles
       if (rolesToRemove.length > 0) {
