@@ -95,7 +95,9 @@ export type Database = {
           numero_os: string | null
           origem: string
           prioridade: string
+          prioridade_nivel: string | null
           status: string
+          encarregado: string | null
         }
         Insert: {
           codigo_acionamento?: string | null
@@ -114,7 +116,9 @@ export type Database = {
           numero_os?: string | null
           origem: string
           prioridade: string
+          prioridade_nivel?: string | null
           status?: string
+          encarregado?: string | null
         }
         Update: {
           codigo_acionamento?: string | null
@@ -133,7 +137,9 @@ export type Database = {
           numero_os?: string | null
           origem?: string
           prioridade?: string
+          prioridade_nivel?: string | null
           status?: string
+          encarregado?: string | null
         }
         Relationships: [
           {

@@ -11,16 +11,22 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
+import { Label } from '@/components/ui/label';
 
 const acionamentoSchema = z.object({
   codigo_acionamento: z.string().min(1, 'Código é obrigatório'),
-  origem: z.string().min(1, 'Origem é obrigatória'),
-  prioridade: z.enum(['normal', 'media', 'alta', 'emergencia']),
-  modalidade: z.enum(['preventiva', 'corretiva', 'emergencia', 'melhorias']),
+  prioridade: z.enum(['emergencia', 'programado']),
+  prioridade_nivel: z.enum(['normal', 'media', 'alta']).optional(),
+  modalidade: z.enum(['LM', 'LV', 'LM+LV']),
+  encarregado: z.string().min(1, 'Encarregado é obrigatório'),
+  elemento_id: z.string().min(1, 'Elemento/ID é obrigatório'),
+  tipo_atividade: z.string().min(1, 'Tipo da atividade é obrigatório'),
+  status: z.enum(['concluido', 'em_andamento', 'pendente', 'cancelado', 'programado']),
   numero_os: z.string().optional(),
-  endereco: z.string().optional(),
+  observacao: z.string().optional(),
   municipio: z.string().optional(),
   data_abertura: z.string().min(1, 'Data de abertura é obrigatória'),
+  email_msg: z.string().optional(),
 });
 
 type AcionamentoFormData = z.infer<typeof acionamentoSchema>;
@@ -38,10 +44,20 @@ export const AcionamentoForm = ({ onSuccess, onCancel }: AcionamentoFormProps) =
   const form = useForm<AcionamentoFormData>({
     resolver: zodResolver(acionamentoSchema),
     defaultValues: {
-      prioridade: 'normal',
-      modalidade: 'preventiva',
-      data_abertura: new Date().toISOString().split('T')[0],
-    },
+      codigo_acionamento: '',
+      prioridade: undefined,
+      prioridade_nivel: undefined,
+      modalidade: undefined,
+      encarregado: '',
+      elemento_id: '',
+      tipo_atividade: '',
+      status: undefined,
+      numero_os: '',
+      observacao: '',
+      municipio: '',
+      data_abertura: '',
+      email_msg: '',
+    } as Partial<AcionamentoFormData>,
   });
 
   const onSubmit = async (data: AcionamentoFormData) => {
@@ -51,11 +67,16 @@ export const AcionamentoForm = ({ onSuccess, onCancel }: AcionamentoFormProps) =
 
     const { error } = await supabase.from('acionamentos').insert([{
       codigo_acionamento: data.codigo_acionamento,
-      origem: data.origem,
       prioridade: data.prioridade,
+      prioridade_nivel: data.prioridade_nivel,
       modalidade: data.modalidade,
+      encarregado: data.encarregado,
+      elemento_id: data.elemento_id,
+      tipo_atividade: data.tipo_atividade,
+      status: data.status,
       numero_os: data.numero_os || null,
-      endereco: data.endereco || null,
+      observacao: data.observacao || null,
+      email_msg: data.email_msg || null,
       municipio: data.municipio || null,
       criado_por: user.id,
       data_abertura: new Date(data.data_abertura).toISOString(),
@@ -81,29 +102,15 @@ export const AcionamentoForm = ({ onSuccess, onCancel }: AcionamentoFormProps) =
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <FormField
             control={form.control}
             name="codigo_acionamento"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Código do Acionamento*</FormLabel>
+                <FormLabel>Acionamento*</FormLabel>
                 <FormControl>
                   <Input placeholder="AC-2024-001" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="origem"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Origem*</FormLabel>
-                <FormControl>
-                  <Input placeholder="Energisa" {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -115,8 +122,30 @@ export const AcionamentoForm = ({ onSuccess, onCancel }: AcionamentoFormProps) =
             name="prioridade"
             render={({ field }) => (
               <FormItem>
+                <FormLabel>Tipo de Acionamento*</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione o tipo" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="emergencia">Emergência</SelectItem>
+                    <SelectItem value="programado">Programado</SelectItem>
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="prioridade_nivel"
+            render={({ field }) => (
+              <FormItem>
                 <FormLabel>Prioridade*</FormLabel>
-                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                <Select onValueChange={field.onChange} value={field.value}>
                   <FormControl>
                     <SelectTrigger>
                       <SelectValue placeholder="Selecione a prioridade" />
@@ -126,7 +155,6 @@ export const AcionamentoForm = ({ onSuccess, onCancel }: AcionamentoFormProps) =
                     <SelectItem value="normal">Normal</SelectItem>
                     <SelectItem value="media">Média</SelectItem>
                     <SelectItem value="alta">Alta</SelectItem>
-                    <SelectItem value="emergencia">Emergência</SelectItem>
                   </SelectContent>
                 </Select>
                 <FormMessage />
@@ -147,10 +175,9 @@ export const AcionamentoForm = ({ onSuccess, onCancel }: AcionamentoFormProps) =
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="preventiva">Preventiva</SelectItem>
-                    <SelectItem value="corretiva">Corretiva</SelectItem>
-                    <SelectItem value="emergencia">Emergência</SelectItem>
-                    <SelectItem value="melhorias">Melhorias</SelectItem>
+                <SelectItem value="LM">LM</SelectItem>
+                <SelectItem value="LV">LV</SelectItem>
+                <SelectItem value="LM+LV">LM + LV</SelectItem>
                   </SelectContent>
                 </Select>
                 <FormMessage />
@@ -160,13 +187,66 @@ export const AcionamentoForm = ({ onSuccess, onCancel }: AcionamentoFormProps) =
 
           <FormField
             control={form.control}
-            name="numero_os"
+            name="encarregado"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Número da OS</FormLabel>
+                <FormLabel>Encarregado*</FormLabel>
                 <FormControl>
-                  <Input placeholder="OS-123456" {...field} />
+                  <Input placeholder="Nome do encarregado fixo da equipe" {...field} />
                 </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="elemento_id"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Elemento / ID*</FormLabel>
+                <FormControl>
+                  <Input placeholder="Identificador do elemento/ativo" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="tipo_atividade"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Tipo da Atividade*</FormLabel>
+                <FormControl>
+                  <Input placeholder="Ex.: Manutenção preventiva" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="status"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Status*</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione o status" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="concluido">CONCLUÍDO</SelectItem>
+                    <SelectItem value="em_andamento">EM ANDAMENTO</SelectItem>
+                    <SelectItem value="pendente">PENDENTE</SelectItem>
+                    <SelectItem value="cancelado">CANCELADO</SelectItem>
+                    <SelectItem value="programado">PROGRAMADO</SelectItem>
+                  </SelectContent>
+                </Select>
                 <FormMessage />
               </FormItem>
             )}
@@ -203,13 +283,13 @@ export const AcionamentoForm = ({ onSuccess, onCancel }: AcionamentoFormProps) =
 
         <FormField
           control={form.control}
-          name="endereco"
+          name="observacao"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Endereço</FormLabel>
+              <FormLabel>Observação</FormLabel>
               <FormControl>
                 <Textarea 
-                  placeholder="Endereço completo do acionamento" 
+                  placeholder="Observações adicionais" 
                   className="resize-none"
                   {...field} 
                 />
@@ -218,6 +298,30 @@ export const AcionamentoForm = ({ onSuccess, onCancel }: AcionamentoFormProps) =
             </FormItem>
           )}
         />
+
+        <div className="space-y-2">
+          <Label>Email (.msg)</Label>
+          <Input
+            type="file"
+            accept=".msg"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (!file) {
+                form.setValue('email_msg', '');
+                return;
+              }
+              const reader = new FileReader();
+              reader.onload = () => {
+                const result = reader.result as string;
+                form.setValue('email_msg', result);
+              };
+              reader.readAsDataURL(file);
+            }}
+          />
+          <p className="text-xs text-muted-foreground">
+            Anexe o email original em formato .msg para manter o histórico no sistema.
+          </p>
+        </div>
 
         <div className="flex gap-2 justify-end">
           {onCancel && (
