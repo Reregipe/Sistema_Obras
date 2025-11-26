@@ -156,6 +156,8 @@ export const SystemSettings = () => {
     const map: Record<string, { label: string; keyHint: string }> = {
       ups_valor_lm: { label: "Valor padrão da UPS - Linha Morta", keyHint: "ups_valor_lm" },
       ups_valor_lv: { label: "Valor padrão da UPS - Linha Viva", keyHint: "ups_valor_lv" },
+      // Legado: exibir UPR como UPS enquanto a migration não for aplicada
+      upr_valor_padrao: { label: "Valor padrão da UPS", keyHint: "upr_valor_padrao (legado)" },
     };
     return map[setting.chave] || { label: setting.descricao || setting.chave, keyHint: setting.chave };
   };
