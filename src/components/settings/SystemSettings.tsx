@@ -152,6 +152,14 @@ export const SystemSettings = () => {
     );
   }
 
+  const friendly = (setting: SystemSetting) => {
+    const map: Record<string, { label: string; keyHint: string }> = {
+      ups_valor_lm: { label: "Valor padrão da UPS - Linha Morta", keyHint: "ups_valor_lm" },
+      ups_valor_lv: { label: "Valor padrão da UPS - Linha Viva", keyHint: "ups_valor_lv" },
+    };
+    return map[setting.chave] || { label: setting.descricao || setting.chave, keyHint: setting.chave };
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -173,10 +181,10 @@ export const SystemSettings = () => {
               <div className="flex items-center justify-between">
                 <div className="flex-1">
                   <Label htmlFor={setting.chave} className="text-sm font-medium">
-                    {setting.descricao || setting.chave}
+                    {friendly(setting).label}
                   </Label>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Chave: {setting.chave}
+                    Chave: {friendly(setting).keyHint}
                   </p>
                 </div>
                 <div className="flex items-center gap-4">
