@@ -216,11 +216,19 @@ supabase/
 
 #### 6.2 Equipes
 - **Localização**: `/equipes`
-- **Tabela**: `equipes`
-- **Campos**:
-  - Nome da equipe
-  - Encarregado
-  - Status (ativo/inativo)
+- **Visão rápida (cartões)**:
+  - 3 colunas: Equipe (selo), Encarregado (nome/telefone/linha e status ativa/inativa) e Componentes.
+  - Grid responsivo: até 3 cards por linha em telas largas.
+  - Badge de linha (viva/morta) e badge de status (ativa/inativa).
+- **Criar/Editar (modal)**:
+  - Campos: código, linha (viva/morta), encarregado, telefone, componentes (1 por linha) e flag “Equipe ativa?”.
+  - Botão “Nova Equipe” abre modal; cada card tem “Editar” que preenche o formulário.
+  - Persistência local em `localStorage` (chave `equipes-cards`) para não perder ao recarregar.
+  - Toast verde ao salvar; toast vermelho com mensagem de erro.
+- **Validações aplicadas**:
+  - Código da equipe não pode repetir.
+  - Encarregado não pode estar em mais de uma equipe.
+  - Componentes não podem se repetir em equipes diferentes.
 
 #### 6.3 Viaturas
 - **Localização**: `/viaturas`
@@ -856,3 +864,14 @@ Este documento cobre todas as funcionalidades implementadas no sistema EngElétr
 **Versão**: 1.0
 **Data**: Novembro 2024
 **Desenvolvido por**: Lovable + EngElétrica Team
+
+## Versionamento
+
+### 2025-11-27
+- Supabase agora aponta para o projeto `czpiltatsbhebdwyazap` (ajuste em `.env` e `supabase/config.toml`).
+- Migracoes reaplicadas para recriar o schema completo (acionamentos, usuarios, materiais, equipes etc.).
+- Chaves de UPS separadas por linha morta/viva (`ups_valor_lm`, `ups_valor_lv`) com valores padrao.
+- Tela de autenticacao: botao de mostrar/ocultar senha, fluxo de redefinicao por e-mail e bloqueio de cadastro duplicado.
+- Fluxo de primeiro acesso: conta nova precisa definir nova senha (must_change_password) antes de entrar.
+- Admin/Owner: para marcar um usuario como ADMIN, garantir coluna `concedido_por` em `public.user_roles`, criar perfil em `public.profiles` com o mesmo `id` do auth e inserir em `public.user_roles` com `role='ADMIN'`.
+- Recuperacao de senha: configurar **Authentication > URL Configuration > Site URL** para a porta/endereco usado no dev (ex.: `http://localhost:5174`) antes de enviar o e-mail de reset.

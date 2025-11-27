@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,29 +23,41 @@ export const SystemSettings = () => {
   const [editedValues, setEditedValues] = useState<Record<string, string>>({});
   const { toast } = useToast();
 
+  const requiredKeys = ["ups_valor_lm", "ups_valor_lv"];
+
   const fetchSettings = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from("system_settings")
-        .select("*")
-        .order("chave");
-
+      const { data, error } = await supabase.from("system_settings").select("*").order("chave");
       if (error) throw error;
-      
-      setSettings(data || []);
-      
-      // Initialize edited values
+
+      const list = data || [];
+      const missing = requiredKeys
+        .filter((key) => !list.find((s) => s.chave === key))
+        .map((key) => ({
+          id: crypto.randomUUID(),
+          chave: key,
+          valor: "",
+          descricao:
+            key === "ups_valor_lm"
+              ? "Valor padrao da UPS - Linha Morta"
+              : "Valor padrao da UPS - Linha Viva",
+          tipo: "number",
+        }));
+
+      const merged = [...list, ...missing];
+      setSettings(merged);
+
       const initialValues: Record<string, string> = {};
-      data?.forEach((setting) => {
+      merged.forEach((setting) => {
         initialValues[setting.chave] = setting.valor;
       });
       setEditedValues(initialValues);
     } catch (error) {
       console.error("Error fetching settings:", error);
       toast({
-        title: "Erro ao carregar configurações",
-        description: "Não foi possível carregar as configurações do sistema.",
+        title: "Erro ao carregar configuracoes",
+        description: "Nao foi possivel carregar as configuracoes do sistema.",
         variant: "destructive",
       });
     } finally {
@@ -67,40 +79,40 @@ export const SystemSettings = () => {
   const handleSave = async () => {
     setSaving(true);
     try {
-      // Update each setting that changed
-      const updates = settings
+      const changes = settings
         .filter((setting) => editedValues[setting.chave] !== setting.valor)
-        .map((setting) =>
-          supabase
-            .from("system_settings")
-            .update({ 
-              valor: editedValues[setting.chave],
-              atualizado_em: new Date().toISOString()
-            })
-            .eq("chave", setting.chave)
-        );
+        .map((setting) => ({
+          chave: setting.chave,
+          valor: editedValues[setting.chave] ?? "",
+          tipo: setting.tipo || "text",
+          descricao: setting.descricao,
+          atualizado_em: new Date().toISOString(),
+        }));
 
-      if (updates.length === 0) {
+      if (changes.length === 0) {
         toast({
-          title: "Nenhuma alteração",
-          description: "Não há configurações para salvar.",
+          title: "Nenhuma alteracao",
+          description: "Nao ha configuracoes para salvar.",
         });
         return;
       }
 
-      await Promise.all(updates);
+      const { error } = await supabase.from("system_settings").upsert(changes, {
+        onConflict: "chave",
+      });
+      if (error) throw error;
 
       toast({
-        title: "Configurações salvas",
-        description: "As configurações do sistema foram atualizadas com sucesso.",
+        title: "Configuracoes salvas",
+        description: "As configuracoes do sistema foram atualizadas com sucesso.",
       });
 
       fetchSettings();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error saving settings:", error);
       toast({
         title: "Erro ao salvar",
-        description: "Não foi possível salvar as configurações.",
+        description: error?.message || "Nao foi possivel salvar as configuracoes.",
         variant: "destructive",
       });
     } finally {
@@ -109,16 +121,13 @@ export const SystemSettings = () => {
   };
 
   const renderInput = (setting: SystemSetting) => {
-    const value = editedValues[setting.chave] || "";
-
+    const value = editedValues[setting.chave] ?? "";
     switch (setting.tipo) {
       case "boolean":
         return (
           <Switch
             checked={value === "true"}
-            onCheckedChange={(checked) =>
-              handleValueChange(setting.chave, checked ? "true" : "false")
-            }
+            onCheckedChange={(checked) => handleValueChange(setting.chave, checked ? "true" : "false")}
           />
         );
       case "number":
@@ -154,64 +163,44 @@ export const SystemSettings = () => {
 
   const friendly = (setting: SystemSetting) => {
     const map: Record<string, { label: string; keyHint: string }> = {
-      ups_valor_lm: { label: "Valor padrão da UPS - Linha Morta", keyHint: "ups_valor_lm" },
-      ups_valor_lv: { label: "Valor padrão da UPS - Linha Viva", keyHint: "ups_valor_lv" },
-      // Legado: exibir UPR como UPS enquanto a migration não for aplicada
-      upr_valor_padrao: { label: "Valor padrão da UPS", keyHint: "upr_valor_padrao (legado)" },
+      ups_valor_lm: { label: "Valor padrao da UPS - Linha Morta", keyHint: "ups_valor_lm" },
+      ups_valor_lv: { label: "Valor padrao da UPS - Linha Viva", keyHint: "ups_valor_lv" },
+      upr_valor_padrao: { label: "Valor padrao da UPS (legado)", keyHint: "upr_valor_padrao (legado)" },
     };
     return map[setting.chave] || { label: setting.descricao || setting.chave, keyHint: setting.chave };
   };
 
-  const hasSplitUps = settings.some(
-    (setting) => setting.chave === "ups_valor_lm" || setting.chave === "ups_valor_lv"
-  );
-
-  const visibleSettings = hasSplitUps
-    ? settings.filter((setting) => setting.chave !== "upr_valor_padrao")
-    : settings;
+  const hasSplitUps = settings.some((setting) => setting.chave === "ups_valor_lm" || setting.chave === "ups_valor_lv");
+  const visibleSettings = hasSplitUps ? settings.filter((setting) => setting.chave !== "upr_valor_padrao") : settings;
 
   return (
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Settings className="h-5 w-5" />
-          Configurações Gerais
+          Configuracoes Gerais
         </CardTitle>
-        <CardDescription>
-          Defina os parâmetros padrão do sistema
-        </CardDescription>
       </CardHeader>
       <CardContent>
         <div className="space-y-6">
           {visibleSettings.map((setting) => (
-            <div
-              key={setting.id}
-              className="flex flex-col space-y-2 p-4 border border-border rounded-lg"
-            >
+            <div key={setting.id} className="flex flex-col space-y-2 p-4 border border-border rounded-lg">
               <div className="flex items-center justify-between">
                 <div className="flex-1">
                   <Label htmlFor={setting.chave} className="text-sm font-medium">
                     {friendly(setting).label}
                   </Label>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Chave: {friendly(setting).keyHint}
-                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">Chave: {friendly(setting).keyHint}</p>
                 </div>
-                <div className="flex items-center gap-4">
-                  {renderInput(setting)}
-                </div>
+                <div className="flex items-center gap-4">{renderInput(setting)}</div>
               </div>
             </div>
           ))}
 
           <div className="flex justify-end pt-4">
             <Button onClick={handleSave} disabled={saving}>
-              {saving ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Save className="mr-2 h-4 w-4" />
-              )}
-              Salvar Configurações
+              {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+              Salvar Configuracoes
             </Button>
           </div>
         </div>

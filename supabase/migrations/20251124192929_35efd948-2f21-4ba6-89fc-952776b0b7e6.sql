@@ -13,8 +13,8 @@ CREATE TABLE public.profiles (
   atualizado_em TIMESTAMP WITH TIME ZONE DEFAULT now()
 );
 
--- Criar tabela de roles de usuário
-CREATE TABLE public.user_roles (
+-- Criar tabela de roles de usuário (idempotente)
+CREATE TABLE IF NOT EXISTS public.user_roles (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
   role app_role NOT NULL,
@@ -26,6 +26,22 @@ CREATE TABLE public.user_roles (
 -- Habilitar RLS
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_roles ENABLE ROW LEVEL SECURITY;
+
+-- Ajustar coluna role para usar o enum app_role se ainda estiver como text
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'user_roles'
+      AND column_name = 'role'
+      AND data_type = 'text'
+  ) THEN
+    ALTER TABLE public.user_roles
+      ALTER COLUMN role TYPE public.app_role USING role::public.app_role;
+  END IF;
+END $$;
 
 -- Função para verificar role (security definer para evitar recursão)
 CREATE OR REPLACE FUNCTION public.has_role(_user_id UUID, _role app_role)
@@ -39,7 +55,7 @@ AS $$
     SELECT 1
     FROM public.user_roles
     WHERE user_id = _user_id
-      AND role = _role
+      AND role::text = _role::text
   )
 $$;
 
@@ -55,7 +71,7 @@ AS $$
     SELECT 1
     FROM public.user_roles
     WHERE user_id = _user_id
-      AND role IN ('ADMIN', 'ADM')
+      AND role::text IN ('ADMIN', 'ADM')
   )
 $$;
 

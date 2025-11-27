@@ -6,7 +6,6 @@ import {
   TrendingUp,
   Package,
   Users,
-  Truck,
   Settings,
   BarChart3
 } from "lucide-react";
@@ -36,8 +35,7 @@ const mainItems = [
 const cadastrosItems = [
   { title: "Materiais", url: "/materiais", icon: Package },
   { title: "Equipes", url: "/equipes", icon: Users },
-  { title: "Viaturas", url: "/viaturas", icon: Truck },
-  { title: "Códigos MO", url: "/codigos-mo", icon: FileText },
+    { title: "Códigos MO", url: "/codigos-mo", icon: FileText },
 ];
 
 export function AppSidebar() {

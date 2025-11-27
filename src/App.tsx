@@ -23,7 +23,6 @@ import Medicoes from "./pages/Medicoes";
 import MedicaoFinal from "./pages/MedicaoFinal";
 import Materiais from "./pages/Materiais";
 import Equipes from "./pages/Equipes";
-import Viaturas from "./pages/Viaturas";
 import CodigosMO from "./pages/CodigosMO";
 import Relatorios from "./pages/Relatorios";
 import Configuracoes from "./pages/Configuracoes";
@@ -86,13 +85,6 @@ const App = () => (
             <ProtectedRoute>
               <MainLayout>
                 <Equipes />
-              </MainLayout>
-            </ProtectedRoute>
-          } />
-          <Route path="/viaturas" element={
-            <ProtectedRoute>
-              <MainLayout>
-                <Viaturas />
               </MainLayout>
             </ProtectedRoute>
           } />
