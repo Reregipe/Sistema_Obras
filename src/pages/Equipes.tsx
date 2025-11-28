@@ -48,16 +48,16 @@ const TeamBoard = ({ team, onEdit }: { team: TeamCard; onEdit?: () => void }) =>
   const number = team.code.replace(/\D+/g, "");
 
   return (
-    <div className="relative rounded-2xl border border-neutral-200 bg-white shadow-sm overflow-hidden">
+    <div className="rounded-2xl border border-neutral-200 bg-white shadow-sm overflow-hidden">
       {onEdit && (
-        <div className="absolute right-3 top-3">
+        <div className="flex justify-end px-4 pt-3">
           <Button size="sm" variant="outline" className="h-8 px-2" onClick={onEdit}>
             <Pencil className="h-4 w-4" />
             <span className="ml-1 text-xs">Editar</span>
           </Button>
         </div>
       )}
-      <div className="grid grid-cols-[1fr_1.2fr_1.8fr] border-b">
+      <div className="grid grid-cols-[160px_1fr] border-b">
         <div className="border-r">
           <div className="bg-amber-200 font-semibold text-center text-[11px] tracking-[0.12em] py-2 border-b uppercase text-neutral-800">
             Equipe
@@ -69,15 +69,15 @@ const TeamBoard = ({ team, onEdit }: { team: TeamCard; onEdit?: () => void }) =>
             </div>
           </div>
         </div>
-        <div className="border-r">
+        <div>
           <div className="bg-amber-200 font-semibold text-center text-[11px] tracking-[0.12em] py-2 border-b uppercase text-neutral-800">
             Encarregado
           </div>
-          <div className="flex flex-col items-center justify-center px-4 py-6 gap-2 text-sm font-semibold text-neutral-900 uppercase leading-tight">
-            <span className="inline-block bg-amber-50 px-4 py-2 rounded-md border border-amber-100 shadow-inner text-[13px]">
+          <div className="flex flex-col items-start justify-center px-4 py-6 gap-3 text-sm font-semibold text-neutral-900 uppercase leading-tight">
+            <span className="inline-block bg-amber-50 px-4 py-2 rounded-md border border-amber-100 shadow-inner text-[13px] whitespace-nowrap truncate max-w-full">
               {team.encarregado}
             </span>
-            <span className="flex items-center gap-1 text-xs font-normal text-neutral-700 normal-case">
+            <span className="flex items-center gap-2 text-xs font-normal text-neutral-700 normal-case">
               <Phone className="h-3 w-3" />
               <span className="tracking-wide">{team.phone}</span>
             </span>
@@ -99,33 +99,6 @@ const TeamBoard = ({ team, onEdit }: { team: TeamCard; onEdit?: () => void }) =>
             >
               {team.ativa === false ? "Inativa" : "Ativa"}
             </Badge>
-          </div>
-        </div>
-        <div>
-          <div className="bg-amber-200 font-semibold text-center text-[11px] tracking-[0.12em] py-2 border-b border-neutral-300 uppercase text-neutral-800">
-            Componentes
-          </div>
-          <div className="text-sm bg-white">
-            {team.members.length === 0 ? (
-              <div className="px-4 py-3 text-center text-muted-foreground border border-neutral-300 border-t-0">
-                Sem nomes cadastrados
-              </div>
-            ) : (
-              <div className="w-full border border-neutral-200 border-t-0 overflow-hidden rounded-br-2xl">
-                {team.members.map((member, idx) => (
-                  <div
-                    key={member}
-                    className={cn(
-                      "px-4 py-2 uppercase tracking-wide whitespace-nowrap text-left border-b border-neutral-100",
-                      idx % 2 === 0 ? "bg-neutral-50" : "bg-white",
-                      "last:border-b-0"
-                    )}
-                  >
-                    {member}
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
         </div>
       </div>
