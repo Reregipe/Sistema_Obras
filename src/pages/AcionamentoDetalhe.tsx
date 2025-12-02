@@ -12,7 +12,6 @@ import type { Database } from "@/integrations/supabase/types";
 
 type AcionamentoRow = Database["public"]["Tables"]["acionamentos"]["Row"];
 type EquipeRow = Database["public"]["Tables"]["equipes"]["Row"];
-type UsuarioRow = Database["public"]["Tables"]["usuarios"]["Row"];
 
 const STATUS_OPCOES = [
   "aberto",
@@ -33,7 +32,6 @@ export default function AcionamentoDetalhe() {
   const [info, setInfo] = useState<string | null>(null);
   const [acionamento, setAcionamento] = useState<AcionamentoRow | null>(null);
   const [equipes, setEquipes] = useState<EquipeRow[]>([]);
-  const [encarregados, setEncarregados] = useState<UsuarioRow[]>([]);
 
   const [form, setForm] = useState({
     status: "",
@@ -71,7 +69,7 @@ export default function AcionamentoDetalhe() {
     setForm((f) => ({
       ...f,
       id_equipe: idEquipe,
-      encarregado: equipe?.id_encarregado || f.encarregado,
+      encarregado: (equipe as any)?.encarregado_nome || f.encarregado,
     }));
   };
 
@@ -112,8 +110,6 @@ export default function AcionamentoDetalhe() {
 
         const { data: eqs } = await supabase.from("equipes").select("*").order("nome_equipe");
         setEquipes(eqs || []);
-        const { data: encs } = await supabase.from("usuarios").select("id_usuario, nome").order("nome");
-        setEncarregados(encs || []);
       } catch (err: any) {
         setErro(err.message || "Erro ao carregar dados");
       } finally {
@@ -298,18 +294,11 @@ export default function AcionamentoDetalhe() {
               </div>
               <div>
                 <Label>Encarregado</Label>
-                <Select value={form.encarregado} onValueChange={(v) => setForm((f) => ({ ...f, encarregado: v }))}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {encarregados.map((user) => (
-                      <SelectItem key={user.id_usuario} value={user.id_usuario}>
-                        {user.nome}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Input
+                  value={form.encarregado}
+                  onChange={(e) => setForm((f) => ({ ...f, encarregado: e.target.value }))}
+                  placeholder="Encarregado da equipe"
+                />
               </div>
               <div>
                 <Label>Data de abertura</Label>
