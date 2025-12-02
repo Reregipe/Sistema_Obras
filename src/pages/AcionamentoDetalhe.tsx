@@ -66,6 +66,15 @@ export default function AcionamentoDetalhe() {
     return isNaN(d.getTime()) ? null : d.toISOString();
   };
 
+  const setEquipeAndMaybeEncarregado = (idEquipe: string) => {
+    const equipe = equipes.find((e) => e.id_equipe === idEquipe);
+    setForm((f) => ({
+      ...f,
+      id_equipe: idEquipe,
+      encarregado: equipe?.id_encarregado || f.encarregado,
+    }));
+  };
+
   useEffect(() => {
     const load = async () => {
       if (!codigo) return;
@@ -274,7 +283,7 @@ export default function AcionamentoDetalhe() {
               </div>
               <div>
                 <Label>Equipe</Label>
-                <Select value={form.id_equipe} onValueChange={(v) => setForm((f) => ({ ...f, id_equipe: v }))}>
+                <Select value={form.id_equipe} onValueChange={setEquipeAndMaybeEncarregado}>
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione" />
                   </SelectTrigger>
