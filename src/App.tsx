@@ -18,6 +18,8 @@ import Auth from "./pages/Auth";
 import AcceptInvite from "./pages/AcceptInvite";
 import Analytics from "./pages/Analytics";
 import Acionamentos from "./pages/Acionamentos";
+import AcionamentoDetalhe from "./pages/AcionamentoDetalhe";
+import AcionamentoMateriais from "./pages/AcionamentoMateriais";
 import Obras from "./pages/Obras";
 import Medicoes from "./pages/Medicoes";
 import MedicaoFinal from "./pages/MedicaoFinal";
@@ -50,6 +52,20 @@ const App = () => (
             <ProtectedRoute>
               <MainLayout>
                 <Acionamentos />
+              </MainLayout>
+            </ProtectedRoute>
+          } />
+          <Route path="/acionamentos/:codigo" element={
+            <ProtectedRoute>
+              <MainLayout>
+                <AcionamentoDetalhe />
+              </MainLayout>
+            </ProtectedRoute>
+          } />
+          <Route path="/acionamentos/:id/materials" element={
+            <ProtectedRoute>
+              <MainLayout>
+                <AcionamentoMateriais />
               </MainLayout>
             </ProtectedRoute>
           } />

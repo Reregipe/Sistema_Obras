@@ -25,7 +25,7 @@ type CodigoMO = {
   ativo: string | null;
 };
 
-const CodigosMO = () => {
+export default function CodigosMO() {
   const { toast } = useToast();
   const [lista, setLista] = useState<CodigoMO[]>([]);
   const [loading, setLoading] = useState(false);
@@ -41,6 +41,10 @@ const CodigosMO = () => {
     tipo: "",
     ativo: true,
   });
+
+  useEffect(() => {
+    carregar();
+  }, []);
 
   const carregar = async () => {
     setLoading(true);
@@ -60,10 +64,6 @@ const CodigosMO = () => {
     }
     setLoading(false);
   };
-
-  useEffect(() => {
-    carregar();
-  }, []);
 
   const filtrados = useMemo(() => {
     const term = busca.toLowerCase();
@@ -129,7 +129,7 @@ const CodigosMO = () => {
 
   return (
     <div className="container mx-auto px-6 py-8">
-      <div className="flex items-center justify-between mb-4 gap-4">
+      <div className="flex items-center justify-between mb-4">
         <h1 className="text-3xl font-bold text-foreground">Códigos de Mão de Obra</h1>
         <Button variant="destructive" onClick={() => setOpen(true)} className="gap-2">
           <Plus className="h-4 w-4" />
@@ -139,7 +139,7 @@ const CodigosMO = () => {
 
       <Card className="shadow-sm">
         <CardHeader className="pb-3">
-          
+          <CardTitle>Catálogo de Códigos MO</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <Input
@@ -300,6 +300,4 @@ const CodigosMO = () => {
       </Dialog>
     </div>
   );
-};
-
-export default CodigosMO;
+}

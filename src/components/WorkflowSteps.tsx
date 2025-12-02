@@ -249,7 +249,7 @@ export const WorkflowSteps = () => {
       if (config.table === "acionamentos") {
         query = supabase
           .from("acionamentos")
-          .select("codigo_acionamento,numero_os,status,prioridade,municipio,modalidade,data_abertura")
+          .select("id_acionamento,codigo_acionamento,numero_os,status,prioridade,municipio,modalidade,data_abertura")
           .order("data_abertura", { ascending: false })
           .limit(50);
       } else {
@@ -324,6 +324,19 @@ export const WorkflowSteps = () => {
                   {item.modalidade} - {item.prioridade} - {item.municipio || "Sem municipio"}
                 </div>
                 <div className="text-xs text-muted-foreground">Aberto em {formatDate(item.data_abertura)}</div>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      if (item.id_acionamento) {
+                        navigate(`/acionamentos/${encodeURIComponent(item.id_acionamento)}/materials`);
+                      }
+                    }}
+                  >
+                    Lista de materiais
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           ))}
