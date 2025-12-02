@@ -172,13 +172,15 @@ export default function AcionamentoDetalhe() {
   return (
     <div className="container mx-auto px-6 py-6 space-y-6">
       <div className="flex items-center justify-between">
-        <div>
+        <div className="flex-1 text-center space-y-1">
           <h1 className="text-3xl font-bold text-foreground">Acionamento {codigo}</h1>
           <p className="text-sm text-muted-foreground">Edite apenas os dados do acionamento.</p>
         </div>
-        <Button asChild variant="outline">
-          <Link to="/acionamentos">Voltar</Link>
-        </Button>
+        <div className="ml-4">
+          <Button asChild variant="outline">
+            <Link to="/acionamentos">Voltar</Link>
+          </Button>
+        </div>
       </div>
 
       {(erro || info) && (
