@@ -6,23 +6,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, Save, AlertCircle } from "lucide-react";
+import { AlertCircle, Loader2, Save } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 
 type AcionamentoRow = Database["public"]["Tables"]["acionamentos"]["Row"];
-type EquipeRow = Database["public"]["Tables"]["equipes"]["Row"];
 
-const STATUS_OPCOES = [
-  "aberto",
-  "despachado",
-  "em_execucao",
-  "concluido",
-  "cancelado",
-  "programado",
-  "em_andamento",
-  "pendente",
-];
+const STATUS_OPCOES = ["concluido", "em_andamento", "pendente", "cancelado", "programado"];
+const PRIORIDADE_OPCOES = ["emergencia", "programado"];
+const PRIORIDADE_NIVEL_OPCOES = ["normal", "media", "alta"];
+const MODALIDADE_OPCOES = ["LM", "LV", "LM+LV"];
 
 export default function AcionamentoDetalhe() {
   const { codigo } = useParams();
@@ -31,46 +24,34 @@ export default function AcionamentoDetalhe() {
   const [erro, setErro] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [acionamento, setAcionamento] = useState<AcionamentoRow | null>(null);
-  const [equipes, setEquipes] = useState<EquipeRow[]>([]);
 
   const [form, setForm] = useState({
-    status: "",
+    codigo_acionamento: "",
     prioridade: "",
     prioridade_nivel: "",
-    municipio: "",
+    modalidade: "",
+    encarregado: "",
+    elemento_id: "",
+    tipo_atividade: "",
+    status: "",
     numero_os: "",
     observacao: "",
-    origem: "",
-    modalidade: "",
-    endereco: "",
+    municipio: "",
     data_abertura: "",
-    data_despacho: "",
-    data_chegada: "",
-    data_conclusao: "",
-    id_equipe: "",
-    encarregado: "",
+    email_msg: "",
   });
 
   const toDateInput = (value?: string | null) => {
     if (!value) return "";
     const d = new Date(value);
     if (isNaN(d.getTime())) return "";
-    return d.toISOString().slice(0, 16); // datetime-local
+    return d.toISOString().slice(0, 10);
   };
 
   const toISOOrNull = (value?: string) => {
     if (!value) return null;
     const d = new Date(value);
     return isNaN(d.getTime()) ? null : d.toISOString();
-  };
-
-  const setEquipeAndMaybeEncarregado = (idEquipe: string) => {
-    const equipe = equipes.find((e) => e.id_equipe === idEquipe);
-    setForm((f) => ({
-      ...f,
-      id_equipe: idEquipe,
-      encarregado: (equipe as any)?.encarregado_nome || f.encarregado,
-    }));
   };
 
   useEffect(() => {
@@ -91,25 +72,20 @@ export default function AcionamentoDetalhe() {
         }
         setAcionamento(data);
         setForm({
-          status: data.status || "",
+          codigo_acionamento: data.codigo_acionamento || "",
           prioridade: data.prioridade || "",
           prioridade_nivel: data.prioridade_nivel || "",
-          municipio: data.municipio || "",
+          modalidade: data.modalidade || "",
+          encarregado: (data as any).encarregado || "",
+          elemento_id: (data as any).elemento_id || "",
+          tipo_atividade: (data as any).tipo_atividade || "",
+          status: data.status || "",
           numero_os: data.numero_os || "",
           observacao: (data as any).observacao || "",
-          origem: data.origem || "",
-          modalidade: data.modalidade || "",
-          endereco: data.endereco || "",
+          municipio: data.municipio || "",
           data_abertura: toDateInput(data.data_abertura),
-          data_despacho: toDateInput(data.data_despacho),
-          data_chegada: toDateInput(data.data_chegada),
-          data_conclusao: toDateInput(data.data_conclusao),
-          id_equipe: data.id_equipe || "",
-          encarregado: (data as any).encarregado || "",
+          email_msg: (data as any).email_msg || "",
         });
-
-        const { data: eqs } = await supabase.from("equipes").select("*").order("nome_equipe");
-        setEquipes(eqs || []);
       } catch (err: any) {
         setErro(err.message || "Erro ao carregar dados");
       } finally {
@@ -128,21 +104,18 @@ export default function AcionamentoDetalhe() {
       const { error } = await supabase
         .from("acionamentos")
         .update({
-          status: form.status || null,
           prioridade: form.prioridade || null,
           prioridade_nivel: form.prioridade_nivel || null,
-          municipio: form.municipio || null,
+          modalidade: form.modalidade || null,
+          encarregado: form.encarregado || null,
+          elemento_id: form.elemento_id || null,
+          tipo_atividade: form.tipo_atividade || null,
+          status: form.status || null,
           numero_os: form.numero_os || null,
           observacao: form.observacao || null,
-          origem: form.origem || null,
-          modalidade: form.modalidade || null,
-          endereco: form.endereco || null,
+          municipio: form.municipio || null,
           data_abertura: toISOOrNull(form.data_abertura),
-          data_despacho: toISOOrNull(form.data_despacho),
-          data_chegada: toISOOrNull(form.data_chegada),
-          data_conclusao: toISOOrNull(form.data_conclusao),
-          id_equipe: form.id_equipe || null,
-          encarregado: form.encarregado || null,
+          email_msg: form.email_msg || null,
         })
         .eq("id_acionamento", acionamento.id_acionamento);
       if (error) throw error;
@@ -198,148 +171,139 @@ export default function AcionamentoDetalhe() {
       <Card>
         <CardHeader>
           <CardTitle>Dados do acionamento</CardTitle>
-          <CardDescription>Atualize informacoes principais.</CardDescription>
+          <CardDescription>Atualize apenas os campos do acionamento.</CardDescription>
         </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <div>
-                <Label>Código</Label>
-                <Input value={acionamento.codigo_acionamento || ""} disabled />
-              </div>
-              <div>
-                <Label>Origem</Label>
-                <Input value={form.origem} onChange={(e) => setForm((f) => ({ ...f, origem: e.target.value }))} />
-              </div>
-              <div>
-                <Label>Status</Label>
-                <Select value={form.status} onValueChange={(v) => setForm((f) => ({ ...f, status: v }))}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {STATUS_OPCOES.map((st) => (
-                      <SelectItem key={st} value={st}>
-                        {st}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Prioridade</Label>
-                <Select value={form.prioridade} onValueChange={(v) => setForm((f) => ({ ...f, prioridade: v }))}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="emergencia">Emergencia</SelectItem>
-                    <SelectItem value="programado">Programado</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Nível</Label>
-                <Select
-                  value={form.prioridade_nivel}
-                  onValueChange={(v) => setForm((f) => ({ ...f, prioridade_nivel: v }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="normal">Normal</SelectItem>
-                    <SelectItem value="media">Media</SelectItem>
-                    <SelectItem value="alta">Alta</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Modalidade</Label>
-                <Select value={form.modalidade} onValueChange={(v) => setForm((f) => ({ ...f, modalidade: v }))}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="LM">LM</SelectItem>
-                    <SelectItem value="LV">LV</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Município</Label>
-                <Input value={form.municipio} onChange={(e) => setForm((f) => ({ ...f, municipio: e.target.value }))} />
-              </div>
-              <div>
-                <Label>Endereço</Label>
-                <Input value={form.endereco} onChange={(e) => setForm((f) => ({ ...f, endereco: e.target.value }))} />
-              </div>
-              <div>
-                <Label>Número OS</Label>
-                <Input value={form.numero_os} onChange={(e) => setForm((f) => ({ ...f, numero_os: e.target.value }))} />
-              </div>
-              <div>
-                <Label>Equipe</Label>
-                <Select value={form.id_equipe} onValueChange={setEquipeAndMaybeEncarregado}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {equipes.map((eq) => (
-                      <SelectItem key={eq.id_equipe} value={eq.id_equipe}>
-                        {eq.nome_equipe}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Encarregado</Label>
-                <Input
-                  value={form.encarregado}
-                  onChange={(e) => setForm((f) => ({ ...f, encarregado: e.target.value }))}
-                  placeholder="Encarregado da equipe"
-                />
-              </div>
-              <div>
-                <Label>Data de abertura</Label>
-                <Input
-                  type="datetime-local"
-                  value={form.data_abertura}
-                  onChange={(e) => setForm((f) => ({ ...f, data_abertura: e.target.value }))}
-                />
-              </div>
-              <div>
-                <Label>Data de despacho</Label>
-                <Input
-                  type="datetime-local"
-                  value={form.data_despacho}
-                  onChange={(e) => setForm((f) => ({ ...f, data_despacho: e.target.value }))}
-                />
-              </div>
-              <div>
-                <Label>Data de chegada</Label>
-                <Input
-                  type="datetime-local"
-                  value={form.data_chegada}
-                  onChange={(e) => setForm((f) => ({ ...f, data_chegada: e.target.value }))}
-                />
-              </div>
-              <div>
-                <Label>Data de conclusão</Label>
-                <Input
-                  type="datetime-local"
-                  value={form.data_conclusao}
-                  onChange={(e) => setForm((f) => ({ ...f, data_conclusao: e.target.value }))}
-                />
-              </div>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <Label>Código</Label>
+              <Input value={form.codigo_acionamento} disabled />
             </div>
             <div>
-              <Label>Observacao</Label>
+              <Label>Prioridade</Label>
+              <Select value={form.prioridade} onValueChange={(v) => setForm((f) => ({ ...f, prioridade: v }))}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione" />
+                </SelectTrigger>
+                <SelectContent>
+                  {PRIORIDADE_OPCOES.map((opt) => (
+                    <SelectItem key={opt} value={opt}>
+                      {opt}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Nível</Label>
+              <Select
+                value={form.prioridade_nivel}
+                onValueChange={(v) => setForm((f) => ({ ...f, prioridade_nivel: v }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione" />
+                </SelectTrigger>
+                <SelectContent>
+                  {PRIORIDADE_NIVEL_OPCOES.map((opt) => (
+                    <SelectItem key={opt} value={opt}>
+                      {opt}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Modalidade</Label>
+              <Select value={form.modalidade} onValueChange={(v) => setForm((f) => ({ ...f, modalidade: v }))}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione" />
+                </SelectTrigger>
+                <SelectContent>
+                  {MODALIDADE_OPCOES.map((opt) => (
+                    <SelectItem key={opt} value={opt}>
+                      {opt}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Encarregado</Label>
+              <Input value={form.encarregado} onChange={(e) => setForm((f) => ({ ...f, encarregado: e.target.value }))} />
+            </div>
+            <div>
+              <Label>Elemento / ID</Label>
+              <Input value={form.elemento_id} onChange={(e) => setForm((f) => ({ ...f, elemento_id: e.target.value }))} />
+            </div>
+            <div>
+              <Label>Tipo de atividade</Label>
+              <Input
+                value={form.tipo_atividade}
+                onChange={(e) => setForm((f) => ({ ...f, tipo_atividade: e.target.value }))}
+              />
+            </div>
+            <div>
+              <Label>Status</Label>
+              <Select value={form.status} onValueChange={(v) => setForm((f) => ({ ...f, status: v }))}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione" />
+                </SelectTrigger>
+                <SelectContent>
+                  {STATUS_OPCOES.map((opt) => (
+                    <SelectItem key={opt} value={opt}>
+                      {opt}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Número OS</Label>
+              <Input value={form.numero_os} onChange={(e) => setForm((f) => ({ ...f, numero_os: e.target.value }))} />
+            </div>
+            <div>
+              <Label>Município</Label>
+              <Input value={form.municipio} onChange={(e) => setForm((f) => ({ ...f, municipio: e.target.value }))} />
+            </div>
+            <div>
+              <Label>Data de abertura</Label>
+              <Input
+                type="date"
+                value={form.data_abertura}
+                onChange={(e) => setForm((f) => ({ ...f, data_abertura: e.target.value }))}
+              />
+            </div>
+            <div className="md:col-span-2">
+              <Label>Observação</Label>
               <Textarea
                 value={form.observacao}
                 onChange={(e) => setForm((f) => ({ ...f, observacao: e.target.value }))}
               />
             </div>
+            <div className="md:col-span-2">
+              <Label>Email (.msg)</Label>
+              <Input
+                type="file"
+                accept=".msg"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) {
+                    setForm((f) => ({ ...f, email_msg: "" }));
+                    return;
+                  }
+                  const reader = new FileReader();
+                  reader.onload = () => {
+                    const result = reader.result as string;
+                    setForm((f) => ({ ...f, email_msg: result }));
+                  };
+                  reader.readAsDataURL(file);
+                }}
+              />
+              <p className="text-xs text-muted-foreground">
+                Anexe o email original em formato .msg para manter o histórico no sistema.
+              </p>
+            </div>
+          </div>
           <div className="flex justify-end">
             <Button onClick={handleSave} disabled={saving}>
               {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}

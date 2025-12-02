@@ -23,8 +23,19 @@ interface WorkflowStep {
 }
 
 type StepQueryConfig = {
-  table: "acionamentos" | "obras";
+  table: "acionamentos";
   filters: { type: "eq" | "in" | "is" | "not" | "or"; column: string; value?: any }[];
+};
+const applyFilters = (query: any, filters: StepQueryConfig["filters"]) => {
+  let q = query;
+  filters.forEach((filter) => {
+    if (filter.type === "eq") q = q.eq(filter.column, filter.value);
+    if (filter.type === "in") q = q.in(filter.column, filter.value);
+    if (filter.type === "is") q = q.is(filter.column, filter.value);
+    if (filter.type === "not") q = q.not(filter.column, "is", filter.value);
+    if (filter.type === "or" && typeof filter.value === "string") q = q.or(filter.value);
+  });
+  return q;
 };
 
 const workflowSteps: WorkflowStep[] = [
@@ -36,8 +47,7 @@ const workflowSteps: WorkflowStep[] = [
     color: "text-blue-600",
     bgColor: "bg-blue-50",
     route: "/acionamentos",
-    count: 5,
-    urgent: 2,
+    count: 0,
     status: "alert",
   },
   {
@@ -48,7 +58,7 @@ const workflowSteps: WorkflowStep[] = [
     color: "text-green-600",
     bgColor: "bg-green-50",
     route: "/acionamentos",
-    count: 12,
+    count: 0,
     status: "active",
   },
   {
@@ -59,8 +69,7 @@ const workflowSteps: WorkflowStep[] = [
     color: "text-orange-600",
     bgColor: "bg-orange-50",
     route: "/medicoes",
-    count: 8,
-    delayed: 3,
+    count: 0,
     status: "alert",
   },
   {
@@ -71,7 +80,7 @@ const workflowSteps: WorkflowStep[] = [
     color: "text-purple-600",
     bgColor: "bg-purple-50",
     route: "/obras",
-    count: 6,
+    count: 0,
     status: "active",
   },
   {
@@ -82,7 +91,7 @@ const workflowSteps: WorkflowStep[] = [
     color: "text-yellow-600",
     bgColor: "bg-yellow-50",
     route: "/obras",
-    count: 4,
+    count: 0,
     status: "pending",
   },
   {
@@ -93,8 +102,7 @@ const workflowSteps: WorkflowStep[] = [
     color: "text-red-600",
     bgColor: "bg-red-50",
     route: "/obras",
-    count: 7,
-    delayed: 2,
+    count: 0,
     status: "alert",
   },
   {
@@ -105,7 +113,7 @@ const workflowSteps: WorkflowStep[] = [
     color: "text-indigo-600",
     bgColor: "bg-indigo-50",
     route: "/obras",
-    count: 3,
+    count: 0,
     status: "active",
   },
   {
@@ -116,8 +124,7 @@ const workflowSteps: WorkflowStep[] = [
     color: "text-teal-600",
     bgColor: "bg-teal-50",
     route: "/medicoes",
-    count: 5,
-    urgent: 1,
+    count: 0,
     status: "alert",
   },
   {
@@ -128,7 +135,7 @@ const workflowSteps: WorkflowStep[] = [
     color: "text-cyan-600",
     bgColor: "bg-cyan-50",
     route: "/medicoes",
-    count: 2,
+    count: 0,
     status: "pending",
   },
   {
@@ -139,7 +146,7 @@ const workflowSteps: WorkflowStep[] = [
     color: "text-emerald-600",
     bgColor: "bg-emerald-50",
     route: "/medicoes",
-    count: 8,
+    count: 0,
     status: "completed",
   },
 ];
@@ -230,6 +237,29 @@ export const WorkflowSteps = () => {
     }
   }, [open, selectedStep]);
 
+  // Conta registros por etapa_atual diretamente no Supabase
+  useEffect(() => {
+    const fetchCounts = async () => {
+      try {
+        const updated = await Promise.all(
+          steps.map(async (step) => {
+            const config = stepConfigs[step.id];
+            if (!config) return step;
+            let query: any = supabase.from(config.table).select("*", { count: "exact", head: true });
+            query = applyFilters(query, config.filters);
+            const { count, error } = await query;
+            if (error) throw error;
+            return { ...step, count: count || 0 };
+          })
+        );
+        setSteps(updated);
+      } catch (err) {
+        console.error("Erro ao contar etapas", err);
+      }
+    };
+    fetchCounts();
+  }, [stepConfigs]); // stepConfigs é estável por useMemo
+
   const handleStepClick = (step: WorkflowStep) => {
     setItems([]);
     setError(null);
@@ -245,20 +275,11 @@ export const WorkflowSteps = () => {
     setError(null);
 
     try {
-      let query: any;
-      if (config.table === "acionamentos") {
-        query = supabase
-          .from("acionamentos")
-          .select("id_acionamento,codigo_acionamento,numero_os,status,prioridade,municipio,modalidade,data_abertura")
-          .order("data_abertura", { ascending: false })
-          .limit(50);
-      } else {
-        query = supabase
-          .from("obras")
-          .select("numero_os,os_numero,codigo_acionamento,os_status,gestor_aprovacao_status,tci_status,os_data_envio_energisa,os_data_abertura,os_data_aberta_pela_energisa")
-          .order("os_data_abertura", { ascending: false })
-          .limit(50);
-      }
+      let query: any = supabase
+        .from("acionamentos")
+        .select("id_acionamento,codigo_acionamento,numero_os,status,prioridade,municipio,modalidade,data_abertura,etapa_atual")
+        .order("data_abertura", { ascending: false })
+        .limit(50);
 
       for (const filter of config.filters) {
         if (filter.type === "eq") query = query.eq(filter.column, filter.value);
