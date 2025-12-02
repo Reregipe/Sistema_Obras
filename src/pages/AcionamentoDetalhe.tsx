@@ -11,6 +11,8 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 
 type AcionamentoRow = Database["public"]["Tables"]["acionamentos"]["Row"];
+type EquipeRow = Database["public"]["Tables"]["equipes"]["Row"];
+type UsuarioRow = Database["public"]["Tables"]["usuarios"]["Row"];
 
 const STATUS_OPCOES = [
   "aberto",
@@ -30,6 +32,8 @@ export default function AcionamentoDetalhe() {
   const [erro, setErro] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [acionamento, setAcionamento] = useState<AcionamentoRow | null>(null);
+  const [equipes, setEquipes] = useState<EquipeRow[]>([]);
+  const [encarregados, setEncarregados] = useState<UsuarioRow[]>([]);
 
   const [form, setForm] = useState({
     status: "",
@@ -46,7 +50,6 @@ export default function AcionamentoDetalhe() {
     data_chegada: "",
     data_conclusao: "",
     id_equipe: "",
-    id_viatura: "",
     encarregado: "",
   });
 
@@ -95,9 +98,13 @@ export default function AcionamentoDetalhe() {
           data_chegada: toDateInput(data.data_chegada),
           data_conclusao: toDateInput(data.data_conclusao),
           id_equipe: data.id_equipe || "",
-          id_viatura: data.id_viatura || "",
           encarregado: (data as any).encarregado || "",
         });
+
+        const { data: eqs } = await supabase.from("equipes").select("*").order("nome_equipe");
+        setEquipes(eqs || []);
+        const { data: encs } = await supabase.from("usuarios").select("id_usuario, nome").order("nome");
+        setEncarregados(encs || []);
       } catch (err: any) {
         setErro(err.message || "Erro ao carregar dados");
       } finally {
@@ -130,7 +137,6 @@ export default function AcionamentoDetalhe() {
           data_chegada: toISOOrNull(form.data_chegada),
           data_conclusao: toISOOrNull(form.data_conclusao),
           id_equipe: form.id_equipe || null,
-          id_viatura: form.id_viatura || null,
           encarregado: form.encarregado || null,
         })
         .eq("id_acionamento", acionamento.id_acionamento);
@@ -265,16 +271,34 @@ export default function AcionamentoDetalhe() {
                 <Input value={form.numero_os} onChange={(e) => setForm((f) => ({ ...f, numero_os: e.target.value }))} />
               </div>
               <div>
-                <Label>Equipe (id_equipe)</Label>
-                <Input value={form.id_equipe} onChange={(e) => setForm((f) => ({ ...f, id_equipe: e.target.value }))} />
-              </div>
-              <div>
-                <Label>Viatura (id_viatura)</Label>
-                <Input value={form.id_viatura} onChange={(e) => setForm((f) => ({ ...f, id_viatura: e.target.value }))} />
+                <Label>Equipe</Label>
+                <Select value={form.id_equipe} onValueChange={(v) => setForm((f) => ({ ...f, id_equipe: v }))}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {equipes.map((eq) => (
+                      <SelectItem key={eq.id_equipe} value={eq.id_equipe}>
+                        {eq.nome_equipe}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div>
                 <Label>Encarregado</Label>
-                <Input value={form.encarregado} onChange={(e) => setForm((f) => ({ ...f, encarregado: e.target.value }))} />
+                <Select value={form.encarregado} onValueChange={(v) => setForm((f) => ({ ...f, encarregado: v }))}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {encarregados.map((user) => (
+                      <SelectItem key={user.id_usuario} value={user.id_usuario}>
+                        {user.nome}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div>
                 <Label>Data de abertura</Label>
