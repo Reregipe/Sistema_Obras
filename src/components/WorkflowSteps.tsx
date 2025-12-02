@@ -336,6 +336,17 @@ export const WorkflowSteps = () => {
                   >
                     Lista de materiais
                   </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => {
+                      if (item.codigo_acionamento) {
+                        navigate(`/acionamentos/${encodeURIComponent(item.codigo_acionamento)}#editar`);
+                      }
+                    }}
+                  >
+                    Editar acionamento
+                  </Button>
                 </div>
               </CardContent>
             </Card>
