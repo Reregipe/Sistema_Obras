@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,22 +21,6 @@ interface WorkflowStep {
   delayed?: number;
   status: "pending" | "active" | "completed" | "alert";
 }
-
-type StepQueryConfig = {
-  table: "acionamentos";
-  filters: { type: "eq" | "in" | "is" | "not" | "or"; column: string; value?: any }[];
-};
-const applyFilters = (query: any, filters: StepQueryConfig["filters"]) => {
-  let q = query;
-  filters.forEach((filter) => {
-    if (filter.type === "eq") q = q.eq(filter.column, filter.value);
-    if (filter.type === "in") q = q.in(filter.column, filter.value);
-    if (filter.type === "is") q = q.is(filter.column, filter.value);
-    if (filter.type === "not") q = q.not(filter.column, "is", filter.value);
-    if (filter.type === "or" && typeof filter.value === "string") q = q.or(filter.value);
-  });
-  return q;
-};
 
 const workflowSteps: WorkflowStep[] = [
   {
@@ -158,78 +142,7 @@ export const WorkflowSteps = () => {
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const stepConfigs: Record<number, StepQueryConfig> = useMemo(
-    () => ({
-      // 1. Recebidos
-      1: { table: "acionamentos", filters: [{ type: "eq", column: "status", value: "aberto" }] },
-      // 2. Executando (despachados ou em execucao)
-      2: { table: "acionamentos", filters: [{ type: "in", column: "status", value: ["despachado", "em_execucao"] }] },
-      // 3. Medir servicos executados (acionamentos concluidos aguardando orcamento)
-    3: {
-      table: "acionamentos",
-      filters: [{ type: "eq", column: "status", value: "concluido" }],
-    },
-      // 4. Criar OS no sistema (somente obras que já foram abertas pela Energisa)
-      4: {
-        table: "obras",
-        filters: [
-          { type: "not", column: "os_data_aberta_pela_energisa", value: null },
-          { type: "in", column: "os_status", value: ["gerada", "aberta"] },
-        ],
-      },
-      // 5. Enviar Book / Aguardando Obra (já aberta pela Energisa)
-      5: {
-        table: "obras",
-        filters: [
-          { type: "not", column: "os_data_aberta_pela_energisa", value: null },
-          { type: "in", column: "os_status", value: ["aberta", "enviada"] },
-        ],
-      },
-      // 6. Aprovacao Fiscal (Energisa abriu OS e TCI pendente/nulo)
-      6: {
-        table: "obras",
-        filters: [
-          { type: "not", column: "os_data_aberta_pela_energisa", value: null },
-          { type: "or", column: "tci_status", value: "tci_status.is.null,tci_status.eq.pendente" },
-        ],
-      },
-      // 7. Obra criada (TCI emitido) - já aberta pela Energisa
-      7: {
-        table: "obras",
-        filters: [
-          { type: "not", column: "os_data_aberta_pela_energisa", value: null },
-          { type: "eq", column: "tci_status", value: "emitido" },
-        ],
-      },
-      // 8. Pendente de aprovacao de medicao (gestor) - já aberta pela Energisa
-      8: {
-        table: "obras",
-        filters: [
-          { type: "not", column: "os_data_aberta_pela_energisa", value: null },
-          { type: "eq", column: "gestor_aprovacao_status", value: "aguardando" },
-        ],
-      },
-      // 9. Geracao de lote de pagamento (TCI validado) - já aberta pela Energisa
-      9: {
-        table: "obras",
-        filters: [
-          { type: "not", column: "os_data_aberta_pela_energisa", value: null },
-          { type: "eq", column: "tci_status", value: "validado" },
-        ],
-      },
-      // 10. Emissao de NF (TCI validado, OS aberta pela Energisa, gestor aprovou)
-      10: {
-        table: "obras",
-        filters: [
-          { type: "not", column: "os_data_aberta_pela_energisa", value: null },
-          { type: "eq", column: "tci_status", value: "validado" },
-          { type: "eq", column: "gestor_aprovacao_status", value: "aprovado" },
-        ],
-      },
-    }),
-    []
-  );
+  const [steps, setSteps] = useState<WorkflowStep[]>(workflowSteps);
 
   useEffect(() => {
     if (open && selectedStep) {
@@ -237,17 +150,15 @@ export const WorkflowSteps = () => {
     }
   }, [open, selectedStep]);
 
-  // Conta registros por etapa_atual diretamente no Supabase
   useEffect(() => {
     const fetchCounts = async () => {
       try {
         const updated = await Promise.all(
           steps.map(async (step) => {
-            const config = stepConfigs[step.id];
-            if (!config) return step;
-            let query: any = supabase.from(config.table).select("*", { count: "exact", head: true });
-            query = applyFilters(query, config.filters);
-            const { count, error } = await query;
+            const { count, error } = await supabase
+              .from("acionamentos")
+              .select("id_acionamento", { count: "exact", head: true })
+              .eq("etapa_atual", step.id);
             if (error) throw error;
             return { ...step, count: count || 0 };
           })
@@ -258,176 +169,103 @@ export const WorkflowSteps = () => {
       }
     };
     fetchCounts();
-  }, [stepConfigs]); // stepConfigs é estável por useMemo
-
-  const handleStepClick = (step: WorkflowStep) => {
-    setItems([]);
-    setError(null);
-    setSelectedStep(step);
-    setOpen(true);
-  };
+  }, []);
 
   const loadItems = async (step: WorkflowStep) => {
-    const config = stepConfigs[step.id];
-    if (!config) return;
-
     setLoading(true);
     setError(null);
-
     try {
-      let query: any = supabase
+      const { data, error } = await supabase
         .from("acionamentos")
-        .select("id_acionamento,codigo_acionamento,numero_os,status,prioridade,municipio,modalidade,data_abertura,etapa_atual")
-        .order("data_abertura", { ascending: false })
-        .limit(50);
-
-      for (const filter of config.filters) {
-        if (filter.type === "eq") query = query.eq(filter.column, filter.value);
-        if (filter.type === "in") query = query.in(filter.column, filter.value);
-        if (filter.type === "is") query = query.is(filter.column, filter.value);
-        if (filter.type === "not") query = query.not(filter.column, "is", filter.value);
-        if (filter.type === "or" && typeof filter.value === "string") query = query.or(filter.value);
-      }
-
-      const { data, error } = await query;
+        .select(
+          "id_acionamento,codigo_acionamento,numero_os,status,prioridade,municipio,modalidade,data_abertura,etapa_atual"
+        )
+        .eq("etapa_atual", step.id)
+        .order("data_abertura", { ascending: false });
       if (error) throw error;
       setItems(data || []);
     } catch (err: any) {
-      setError(err.message || "Erro ao carregar dados");
+      setError(err.message || "Erro ao carregar itens da etapa.");
     } finally {
       setLoading(false);
     }
   };
 
-  const formatDate = (value?: string | null) => {
-    if (!value) return "--";
-    return new Date(value).toLocaleDateString("pt-BR");
-  };
-
-  const renderItems = () => {
-    if (!selectedStep) return null;
-    const config = stepConfigs[selectedStep.id];
-    if (!config) return null;
-
-    if (loading) {
-      return (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          Carregando itens da etapa...
-        </div>
-      );
-    }
-
-    if (error) {
-      return <p className="text-sm text-destructive">Erro: {error}</p>;
-    }
-
-    if (!items.length) {
-      return <p className="text-sm text-muted-foreground">Nenhum registro encontrado para esta etapa.</p>;
-    }
-
-    if (config.table === "acionamentos") {
-      return (
-        <div className="space-y-3">
-          {items.map((item) => (
-            <Card key={item.codigo_acionamento}>
-              <CardContent className="p-4 space-y-2">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="font-semibold text-foreground">{item.codigo_acionamento}</div>
-                    {item.numero_os && (
-                      <div className="text-xs text-muted-foreground">OS: {item.numero_os}</div>
-                    )}
-                  </div>
-                  <Badge>{item.status}</Badge>
-                </div>
-                <div className="text-sm text-muted-foreground">
-                  {item.modalidade} - {item.prioridade} - {item.municipio || "Sem municipio"}
-                </div>
-                <div className="text-xs text-muted-foreground">Aberto em {formatDate(item.data_abertura)}</div>
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      if (item.id_acionamento) {
-                        navigate(`/acionamentos/${encodeURIComponent(item.id_acionamento)}/materials`);
-                      }
-                    }}
-                  >
-                    Lista de materiais
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => {
-                      if (item.codigo_acionamento) {
-                        navigate(`/acionamentos/${encodeURIComponent(item.codigo_acionamento)}#editar`);
-                      }
-                    }}
-                  >
-                    Editar acionamento
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      );
-    }
-
-    return (
-      <div className="space-y-3">
-        {items.map((item) => (
-          <Card key={item.numero_os}>
-            <CardContent className="p-4 space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="font-semibold text-foreground">{item.os_numero || item.numero_os || "Obra sem número"}</div>
-                <div className="flex gap-2">
-                  <Badge>{item.os_status || "sem status"}</Badge>
-                  {item.tci_status && <Badge variant="outline">TCI: {item.tci_status}</Badge>}
-                </div>
-              </div>
-              <div className="text-sm text-muted-foreground space-y-1">
-                <div>OS: {item.numero_os || "--"}</div>
-                <div>Código acionamento: {item.codigo_acionamento || "--"}</div>
-                <div>Gestor: {item.gestor_aprovacao_status || "--"}</div>
-              </div>
-              <div className="text-xs text-muted-foreground flex flex-wrap gap-3">
-                <span>Abertura: {formatDate(item.os_data_abertura)}</span>
-                <span>Envio Energisa: {formatDate(item.os_data_envio_energisa)}</span>
-                <span>Aberta pela Energisa: {formatDate(item.os_data_aberta_pela_energisa)}</span>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-    );
+  const handleStepClick = (step: WorkflowStep) => {
+    setSelectedStep(step);
+    setOpen(true);
   };
 
   const getStatusBadge = (step: WorkflowStep) => {
-    if (step.urgent) {
+    const statusMap: Record<WorkflowStep["status"], string> = {
+      pending: "bg-muted text-muted-foreground",
+      active: "bg-primary/10 text-primary border border-primary/20",
+      completed: "bg-emerald-100 text-emerald-700 border border-emerald-200",
+      alert: "bg-destructive/10 text-destructive border border-destructive/20",
+    };
+    return (
+      <Badge variant="outline" className={cn("text-xs", statusMap[step.status])}>
+        {step.status === "completed" ? "Concluído" : step.status === "active" ? "Em andamento" : step.status === "alert" ? "Alerta" : "Pendente"}
+      </Badge>
+    );
+  };
+
+  const renderItems = () => {
+    if (loading) {
       return (
-        <Badge variant="destructive" className="animate-pulse">
-          {step.urgent} Urgente{step.urgent > 1 ? "s" : ""}
-        </Badge>
+        <div className="flex items-center gap-2 text-muted-foreground text-sm">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Carregando itens...
+        </div>
       );
     }
-    if (step.delayed) {
-      return (
-        <Badge className="bg-warning text-warning-foreground">
-          {step.delayed} Atrasado{step.delayed > 1 ? "s" : ""}
-        </Badge>
-      );
+    if (error) {
+      return <div className="text-sm text-destructive">{error}</div>;
     }
-    if (step.status === "completed") {
-      return <Badge className="bg-success text-success-foreground">Concluido</Badge>;
+    if (items.length === 0) {
+      return <div className="text-sm text-muted-foreground">Nenhum item nesta etapa.</div>;
     }
-    return null;
+
+    return items.map((item) => (
+      <div
+        key={item.id_acionamento}
+        className="border border-border rounded-lg p-3 space-y-2 hover:bg-accent transition-colors"
+      >
+        <div className="flex items-center justify-between gap-2">
+          <div className="cursor-pointer" onClick={() => navigate(`/acionamentos/${item.codigo_acionamento || item.id_acionamento}`)}>
+            <div className="font-semibold text-foreground">
+              {item.codigo_acionamento || item.id_acionamento}
+            </div>
+            <div className="text-xs text-muted-foreground">
+              {item.municipio || "--"} • {item.modalidade || "--"}
+            </div>
+          </div>
+          <Badge variant="outline" className="capitalize">
+            {item.status || "--"}
+          </Badge>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => navigate(`/acionamentos/${item.codigo_acionamento || item.id_acionamento}/materials`)}
+          >
+            Lista de materiais
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => navigate(`/acionamentos/${item.codigo_acionamento || item.id_acionamento}`)}
+          >
+            Editar acionamento
+          </Button>
+        </div>
+      </div>
+    ));
   };
 
   return (
-    <Card className="mb-8">
+    <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
           <div>
@@ -450,7 +288,7 @@ export const WorkflowSteps = () => {
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-          {workflowSteps.map((step, index) => {
+          {steps.map((step, index) => {
             const Icon = step.icon;
             const hasAlert = step.urgent || step.delayed;
 
@@ -497,7 +335,7 @@ export const WorkflowSteps = () => {
                   </CardContent>
                 </Card>
 
-                {index < workflowSteps.length - 1 && (
+                {index < steps.length - 1 && (
                   <div className="hidden lg:block absolute top-1/2 -right-2 w-4 h-0.5 bg-border transform -translate-y-1/2 z-10"></div>
                 )}
               </div>
@@ -549,9 +387,7 @@ export const WorkflowSteps = () => {
               Lembrete: ao receber o acionamento, monte a lista de material previa para o almoxarifado disponibilizar a equipe.
             </div>
           )}
-          <div className="max-h-[65vh] overflow-y-auto pr-1 space-y-3">
-            {renderItems()}
-          </div>
+          <div className="max-h-[65vh] overflow-y-auto pr-1 space-y-3">{renderItems()}</div>
           <div className="mt-4">
             <Button
               variant="outline"

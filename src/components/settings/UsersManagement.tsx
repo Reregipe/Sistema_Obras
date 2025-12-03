@@ -1,17 +1,19 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, UserPlus, Shield } from "lucide-react";
+import { Loader2, Shield, UserPlus } from "lucide-react";
 import { UserRoleDialog } from "./UserRoleDialog";
+import { Switch } from "@/components/ui/switch";
 
 interface UserProfile {
   id: string;
   nome: string;
   email: string;
   roles: Array<{ role: string }>;
+  pode_alterar_acionamento?: boolean;
 }
 
 const roleColors: Record<string, string> = {
@@ -40,30 +42,32 @@ export const UsersManagement = () => {
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      // Fetch all profiles
       const { data: profiles, error: profilesError } = await supabase
         .from("profiles")
         .select("id, nome, email")
         .order("nome");
-
       if (profilesError) throw profilesError;
 
-      // Fetch all user roles
-      const { data: rolesData, error: rolesError } = await supabase
-        .from("user_roles")
-        .select("user_id, role");
-
+      const { data: rolesData, error: rolesError } = await supabase.from("user_roles").select("user_id, role");
       if (rolesError) throw rolesError;
 
-      // Combine data
-      const usersWithRoles = profiles?.map((profile) => ({
-        ...profile,
-        roles: rolesData?.filter((r) => r.user_id === profile.id) || [],
-      })) || [];
+      const { data: perms } = await supabase
+        .from("usuarios")
+        .select("id_usuario, pode_alterar_acionamento");
 
-      setUsers(usersWithRoles);
+      const mapped: UserProfile[] =
+        profiles?.map((profile) => {
+          const perm = perms?.find((p: any) => p.id_usuario === profile.id);
+          return {
+            ...profile,
+            roles: rolesData?.filter((r) => r.user_id === profile.id) || [],
+            pode_alterar_acionamento: perm?.pode_alterar_acionamento ?? false,
+          };
+        }) || [];
+
+      setUsers(mapped);
     } catch (error) {
-      console.error("Error fetching users:", error);
+      console.error("Erro ao carregar usuários", error);
       toast({
         title: "Erro ao carregar usuários",
         description: "Não foi possível carregar a lista de usuários.",
@@ -93,6 +97,22 @@ export const UsersManagement = () => {
     handleCloseDialog();
   };
 
+  const togglePermissao = async (user: UserProfile, value: boolean) => {
+    try {
+      const { error } = await supabase
+        .from("usuarios")
+        .update({ pode_alterar_acionamento: value })
+        .eq("id_usuario", user.id);
+      if (error) throw error;
+      setUsers((prev) => prev.map((u) => (u.id === user.id ? { ...u, pode_alterar_acionamento: value } : u)));
+    } catch (err) {
+      toast({
+        description: "Não foi possível atualizar a permissão.",
+        variant: "destructive",
+      });
+    }
+  };
+
   if (loading) {
     return (
       <Card>
@@ -111,9 +131,7 @@ export const UsersManagement = () => {
             <Shield className="h-5 w-5" />
             Gerenciamento de Usuários
           </CardTitle>
-          <CardDescription>
-            Gerencie permissões e funções dos usuários do sistema
-          </CardDescription>
+          <CardDescription>Gerencie permissões e funções dos usuários do sistema</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
@@ -144,14 +162,19 @@ export const UsersManagement = () => {
                     )}
                   </div>
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleOpenDialog(user)}
-                >
-                  <UserPlus className="h-4 w-4 mr-2" />
-                  Gerenciar Permissões
-                </Button>
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground">Pode alterar acionamentos</span>
+                    <Switch
+                      checked={!!user.pode_alterar_acionamento}
+                      onCheckedChange={(checked) => togglePermissao(user, checked)}
+                    />
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => handleOpenDialog(user)}>
+                    <UserPlus className="h-4 w-4 mr-2" />
+                    Gerenciar permissões
+                  </Button>
+                </div>
               </div>
             ))}
           </div>
