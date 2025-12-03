@@ -394,17 +394,6 @@ export const WorkflowSteps = () => {
             </div>
           )}
           <div className="max-h-[65vh] overflow-y-auto pr-1 space-y-3">{renderItems()}</div>
-          <div className="mt-4">
-            <Button
-              variant="outline"
-              onClick={() => {
-                if (selectedStep) navigate(selectedStep.route);
-                setOpen(false);
-              }}
-            >
-              Ir para {selectedStep?.route}
-            </Button>
-          </div>
         </DialogContent>
       </Dialog>
     </Card>
