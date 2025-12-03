@@ -11,15 +11,26 @@ create table if not exists public.acionamento_equipes (
 alter table public.acionamento_equipes enable row level security;
 
 -- Policies básicas para usuários autenticados (ajuste conforme necessidade)
-create policy if not exists acionamento_equipes_select_auth
-  on public.acionamento_equipes
-  for select
-  to authenticated
-  using (true);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND policyname = 'acionamento_equipes_select_auth'
+  ) THEN
+    CREATE POLICY acionamento_equipes_select_auth
+      ON public.acionamento_equipes
+      FOR SELECT
+      TO authenticated
+      USING (true);
+  END IF;
 
-create policy if not exists acionamento_equipes_modify_auth
-  on public.acionamento_equipes
-  for all
-  to authenticated
-  using (true)
-  with check (true);
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND policyname = 'acionamento_equipes_modify_auth'
+  ) THEN
+    CREATE POLICY acionamento_equipes_modify_auth
+      ON public.acionamento_equipes
+      FOR ALL
+      TO authenticated
+      USING (true)
+      WITH CHECK (true);
+  END IF;
+END $$;

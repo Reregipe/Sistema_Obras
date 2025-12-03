@@ -312,7 +312,8 @@ export type Database = {
         Row: {
           codigo_material: string
           descricao_item: string
-          id_lista_aplicacao: string
+          id_acionamento: string | null
+          id_lista_aplicacao: string | null
           id_lista_aplicacao_item: string
           ordem_item: number | null
           quantidade: number
@@ -323,7 +324,8 @@ export type Database = {
         Insert: {
           codigo_material: string
           descricao_item: string
-          id_lista_aplicacao: string
+          id_acionamento?: string | null
+          id_lista_aplicacao?: string | null
           id_lista_aplicacao_item?: string
           ordem_item?: number | null
           quantidade: number
@@ -334,7 +336,8 @@ export type Database = {
         Update: {
           codigo_material?: string
           descricao_item?: string
-          id_lista_aplicacao?: string
+          id_acionamento?: string | null
+          id_lista_aplicacao?: string | null
           id_lista_aplicacao_item?: string
           ordem_item?: number | null
           quantidade?: number
@@ -356,6 +359,91 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "lista_aplicacao_cabecalho"
             referencedColumns: ["id_lista_aplicacao"]
+          },
+          {
+            foreignKeyName: "lista_aplicacao_itens_id_acionamento_fkey"
+            columns: ["id_acionamento"]
+            isOneToOne: false
+            referencedRelation: "acionamentos"
+            referencedColumns: ["id_acionamento"]
+          },
+        ]
+      }
+      pre_lista_itens: {
+        Row: {
+          codigo_material: string
+          criado_em: string | null
+          id: string
+          id_acionamento: string
+          quantidade_prevista: number
+        }
+        Insert: {
+          codigo_material: string
+          criado_em?: string | null
+          id?: string
+          id_acionamento: string
+          quantidade_prevista: number
+        }
+        Update: {
+          codigo_material?: string
+          criado_em?: string | null
+          id?: string
+          id_acionamento?: string
+          quantidade_prevista?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pre_lista_itens_codigo_material_fkey"
+            columns: ["codigo_material"]
+            isOneToOne: false
+            referencedRelation: "materiais"
+            referencedColumns: ["codigo_material"]
+          },
+          {
+            foreignKeyName: "pre_lista_itens_id_acionamento_fkey"
+            columns: ["id_acionamento"]
+            isOneToOne: false
+            referencedRelation: "acionamentos"
+            referencedColumns: ["id_acionamento"]
+          },
+        ]
+      }
+      sucata_itens: {
+        Row: {
+          codigo_material: string
+          criado_em: string | null
+          id: string
+          id_acionamento: string
+          quantidade_retirada: number
+        }
+        Insert: {
+          codigo_material: string
+          criado_em?: string | null
+          id?: string
+          id_acionamento: string
+          quantidade_retirada: number
+        }
+        Update: {
+          codigo_material?: string
+          criado_em?: string | null
+          id?: string
+          id_acionamento?: string
+          quantidade_retirada?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sucata_itens_codigo_material_fkey"
+            columns: ["codigo_material"]
+            isOneToOne: false
+            referencedRelation: "materiais"
+            referencedColumns: ["codigo_material"]
+          },
+          {
+            foreignKeyName: "sucata_itens_id_acionamento_fkey"
+            columns: ["id_acionamento"]
+            isOneToOne: false
+            referencedRelation: "acionamentos"
+            referencedColumns: ["id_acionamento"]
           },
         ]
       }
