@@ -257,7 +257,7 @@ export const WorkflowSteps = () => {
           </Button>
           <Button
             size="sm"
-            variant="ghost"
+            variant="outline"
             onClick={() => {
               navigate(`/acionamentos/${item.codigo_acionamento || item.id_acionamento}`);
               setOpen(false);
