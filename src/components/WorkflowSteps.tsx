@@ -229,7 +229,7 @@ export const WorkflowSteps = () => {
     return items.map((item) => (
       <div
         key={item.id_acionamento}
-        className="border border-border rounded-lg p-3 space-y-2 hover:bg-accent transition-colors"
+        className="border border-border rounded-lg p-3 space-y-2 bg-card text-foreground"
       >
         <div className="flex items-center justify-between gap-2">
           <div className="cursor-pointer" onClick={() => navigate(`/acionamentos/${item.codigo_acionamento || item.id_acionamento}`)}>
