@@ -248,14 +248,20 @@ export const WorkflowSteps = () => {
           <Button
             size="sm"
             variant="outline"
-            onClick={() => navigate(`/acionamentos/${item.codigo_acionamento || item.id_acionamento}/materials`)}
+            onClick={() => {
+              navigate(`/acionamentos/${item.codigo_acionamento || item.id_acionamento}/materials`);
+              setOpen(false);
+            }}
           >
             Lista de materiais
           </Button>
           <Button
             size="sm"
             variant="ghost"
-            onClick={() => navigate(`/acionamentos/${item.codigo_acionamento || item.id_acionamento}`)}
+            onClick={() => {
+              navigate(`/acionamentos/${item.codigo_acionamento || item.id_acionamento}`);
+              setOpen(false);
+            }}
           >
             Editar acionamento
           </Button>
