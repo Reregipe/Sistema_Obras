@@ -61,23 +61,30 @@ export default function AcionamentoMateriais() {
       setLoading(true);
       setError(null);
       try {
-        // carrega acionamento por id ou código
-        const { data: ac } = await supabase
+        // tenta pelo id_acionamento (uuid) e, se não achar, pelo código
+        let acRes = await supabase
           .from("acionamentos")
           .select("id_acionamento,codigo_acionamento,municipio,data_abertura")
-          .or(`id_acionamento.eq.${id},codigo_acionamento.eq.${id}`)
+          .eq("id_acionamento", id)
           .maybeSingle();
-        if (!ac) {
+        if (!acRes.data) {
+          acRes = await supabase
+            .from("acionamentos")
+            .select("id_acionamento,codigo_acionamento,municipio,data_abertura")
+            .eq("codigo_acionamento", id)
+            .maybeSingle();
+        }
+        if (!acRes.data) {
           setError("Acionamento não encontrado.");
           return;
         }
-        setAcionamento(ac as AcionamentoRow);
+        setAcionamento(acRes.data as AcionamentoRow);
 
         // cabeçalho existente
         const { data: cab } = await supabase
           .from("lista_aplicacao_cabecalho")
           .select("*")
-          .eq("id_acionamento", (ac as any).id_acionamento)
+          .eq("id_acionamento", (acRes.data as any).id_acionamento)
           .maybeSingle();
         if (cab) setLista(cab as ListaCabecalho);
 

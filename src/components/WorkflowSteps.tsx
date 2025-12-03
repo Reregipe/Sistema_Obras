@@ -249,7 +249,7 @@ export const WorkflowSteps = () => {
             size="sm"
             variant="outline"
             onClick={() => {
-              navigate(`/acionamentos/${item.codigo_acionamento || item.id_acionamento}/materials`);
+              navigate(`/acionamentos/${item.id_acionamento || item.codigo_acionamento}/materials`);
               setOpen(false);
             }}
           >
