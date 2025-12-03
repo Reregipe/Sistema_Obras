@@ -216,21 +216,39 @@ export default function AcionamentoDetalhe() {
     });
   }, [equipes, form.modalidade]);
 
+  const isMulti = form.modalidade === "LM+LV";
+
   const addEquipeAdicional = (idEquipe: string) => {
     if (!idEquipe) return;
     const eq = equipes.find((e) => e.id_equipe === idEquipe);
     if (!eq) return;
-    if (equipesAdicionais.some((a) => a.id_equipe === idEquipe)) return;
+    // Se for LM+LV e não houver principal, define principal
+    if (isMulti && !form.id_equipe) {
+      onChange("id_equipe", idEquipe);
+      onChange("encarregado", eq.encarregado_nome || "");
+      return;
+    }
+    // evita duplicar principal ou adicionais
+    if (idEquipe === form.id_equipe || equipesAdicionais.some((a) => a.id_equipe === idEquipe)) return;
     setEquipesAdicionais((prev) => [
       ...prev,
       { id_equipe: idEquipe, nome: eq.nome_equipe, encarregado: eq.encarregado_nome || "" },
     ]);
-    if (form.modalidade !== "LM+LV") {
+    if (!isMulti) {
       onChange("modalidade", "LM+LV");
     }
   };
 
   const removeEquipeAdicional = (idEquipe: string) => {
+    if (idEquipe === form.id_equipe) {
+      // removendo a principal: promove a primeira adicional (se existir) como principal
+      const restantes = equipesAdicionais.filter((e) => e.id_equipe !== idEquipe);
+      const novaPrincipal = restantes.shift();
+      onChange("id_equipe", novaPrincipal?.id_equipe || "");
+      onChange("encarregado", novaPrincipal?.encarregado || "");
+      setEquipesAdicionais(restantes);
+      return;
+    }
     setEquipesAdicionais((prev) => prev.filter((e) => e.id_equipe !== idEquipe));
   };
 
@@ -364,10 +382,6 @@ export default function AcionamentoDetalhe() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <div className="md:col-span-1">
-              <Label>Código</Label>
-              <Input value={acionamento.codigo_acionamento || ""} readOnly />
-            </div>
             <div>
               <Label>Modalidade</Label>
               <Select value={form.modalidade} onValueChange={(v) => onChange("modalidade", v)}>
@@ -384,28 +398,32 @@ export default function AcionamentoDetalhe() {
               </Select>
             </div>
             <div>
-              <Label>Status (automático)</Label>
+              <Label>Status</Label>
               <Input value={capitalize(getAutoStatus())} readOnly />
             </div>
-            <div>
-              <Label>Equipe</Label>
-              <Select value={form.id_equipe} onValueChange={(v) => handleEquipeChange(v)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione" />
-                </SelectTrigger>
-                <SelectContent>
-                  {filteredEquipes.map((eq) => (
-                    <SelectItem key={eq.id_equipe} value={eq.id_equipe}>
-                      {eq.nome_equipe}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Encarregado</Label>
-              <Input value={form.encarregado} onChange={(e) => onChange("encarregado", e.target.value)} />
-            </div>
+            {!isMulti && (
+              <>
+                <div>
+                  <Label>Equipe</Label>
+                  <Select value={form.id_equipe} onValueChange={(v) => handleEquipeChange(v)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {filteredEquipes.map((eq) => (
+                        <SelectItem key={eq.id_equipe} value={eq.id_equipe}>
+                          {eq.nome_equipe}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Encarregado</Label>
+                  <Input value={form.encarregado} onChange={(e) => onChange("encarregado", e.target.value)} />
+                </div>
+              </>
+            )}
             <div>
               <Label>Município</Label>
               <Input value={form.municipio} onChange={(e) => onChange("municipio", e.target.value)} />
@@ -462,9 +480,9 @@ export default function AcionamentoDetalhe() {
             </div>
           </div>
 
-          {form.modalidade === "LM+LV" && (
+          {isMulti && (
             <div className="space-y-2">
-              <Label>Equipes adicionais (LM + LV)</Label>
+              <Label>Equipes (LM + LV)</Label>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                 <Select onValueChange={(v) => addEquipeAdicional(v)}>
                   <SelectTrigger>
@@ -472,7 +490,7 @@ export default function AcionamentoDetalhe() {
                   </SelectTrigger>
                   <SelectContent>
                     {equipesAddDisponiveis
-                      .filter((eq) => eq.id_equipe !== form.id_equipe)
+                      .filter((eq) => eq.id_equipe !== form.id_equipe && !equipesAdicionais.some((a) => a.id_equipe === eq.id_equipe))
                       .map((eq) => (
                         <SelectItem key={eq.id_equipe} value={eq.id_equipe}>
                           {eq.nome_equipe}
@@ -482,6 +500,18 @@ export default function AcionamentoDetalhe() {
                 </Select>
               </div>
               <div className="flex flex-wrap gap-2">
+                {form.id_equipe && (
+                  <span className="inline-flex items-center rounded-full bg-muted px-3 py-1 text-sm">
+                    {equipes.find((e) => e.id_equipe === form.id_equipe)?.nome_equipe || form.id_equipe}
+                    <button
+                      type="button"
+                      className="ml-2 text-muted-foreground hover:text-destructive"
+                      onClick={() => removeEquipeAdicional(form.id_equipe)}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                )}
                 {equipesAdicionais.map((eq) => (
                   <span
                     key={eq.id_equipe}
