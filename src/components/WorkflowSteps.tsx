@@ -174,12 +174,45 @@ export const WorkflowSteps = () => {
   const [consumoQtd, setConsumoQtd] = useState<number>(1);
   const [consumoSugestoes, setConsumoSugestoes] = useState<any[]>([]);
   const [loadingSugestoesConsumo, setLoadingSugestoesConsumo] = useState(false);
+  const [currentUserName, setCurrentUserName] = useState<string>("");
+  const [encarregadoNome, setEncarregadoNome] = useState<string>("");
+
+  const makeId = () => {
+    if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
+    return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  };
+
+  const getUserDisplayName = (user: any) => {
+    const meta = (user?.user_metadata as any) || {};
+    return (
+      meta.full_name ||
+      meta.name ||
+      meta.nome ||
+      meta.display_name ||
+      meta.preferred_username ||
+      ""
+    );
+  };
 
   useEffect(() => {
     if (open && selectedStep) {
       loadItems(selectedStep);
     }
   }, [open, selectedStep]);
+
+  useEffect(() => {
+    const loadUser = async () => {
+      const { data } = await supabase.auth.getUser();
+      const user = data?.user;
+      const name =
+        getUserDisplayName(user) ||
+        (user?.email ? user.email.split("@")[0] : "") ||
+        user?.id ||
+        "";
+      setCurrentUserName(name);
+    };
+    loadUser();
+  }, []);
 
   useEffect(() => {
     const fetchCounts = async () => {
@@ -232,6 +265,25 @@ export const WorkflowSteps = () => {
       .order("descricao")
       .limit(8);
     return data || [];
+  };
+
+  const enrichPreLista = async (lista: any[]) => {
+    let enriched = lista || [];
+    if (enriched.length === 0) return enriched;
+    const codigos = enriched.map((p: any) => p.codigo_material).filter(Boolean);
+    const { data: mats } = await supabase
+      .from("materiais")
+      .select("codigo_material,descricao,unidade_medida")
+      .in("codigo_material", codigos);
+    const matMap = new Map((mats || []).map((m: any) => [m.codigo_material, m]));
+    return enriched.map((p: any) => {
+      const found = matMap.get(p.codigo_material) || {};
+      return {
+        ...p,
+        descricao_item: found.descricao || "",
+        unidade_medida: found.unidade_medida || "",
+      };
+    });
   };
 
   useEffect(() => {
@@ -287,13 +339,29 @@ export const WorkflowSteps = () => {
     setPreLista([]);
     setConsumo([]);
     setSucata([]);
+    setEncarregadoNome("");
     try {
       const { data: pre } = await supabase
         .from("pre_lista_itens")
         .select("id,codigo_material,quantidade_prevista,criado_em")
         .eq("id_acionamento", item.id_acionamento)
         .order("criado_em", { ascending: false });
-      setPreLista(pre || []);
+
+      const enrichedPre = await enrichPreLista(pre || []);
+      setPreLista(enrichedPre);
+
+      try {
+        const { data: extra } = await supabase
+          .from("acionamentos")
+          .select("encarregado_nome, encarregado_equipe, encarregado")
+          .eq("id_acionamento", item.id_acionamento)
+          .single();
+        setEncarregadoNome(
+          extra?.encarregado_nome || extra?.encarregado_equipe || extra?.encarregado || ""
+        );
+      } catch {
+        setEncarregadoNome("");
+      }
 
       if (selectedStep?.id && selectedStep.id > 1) {
         const { data: consumoList } = await supabase
@@ -347,7 +415,12 @@ export const WorkflowSteps = () => {
       setPreLista((prev) =>
         prev.map((p) =>
           p.codigo_material === preMatEncontrado.codigo_material
-            ? { ...p, quantidade_prevista: Number(p.quantidade_prevista || 0) + preQtd }
+            ? {
+                ...p,
+                quantidade_prevista: Number(p.quantidade_prevista || 0) + preQtd,
+                descricao_item: p.descricao_item || preMatEncontrado.descricao || "",
+                unidade_medida: p.unidade_medida || preMatEncontrado.unidade_medida || "",
+              }
             : p
         )
       );
@@ -355,8 +428,10 @@ export const WorkflowSteps = () => {
       setPreLista((prev) => [
         ...prev,
         {
-          id: crypto.randomUUID(),
+          id: makeId(),
           codigo_material: preMatEncontrado.codigo_material,
+          descricao_item: preMatEncontrado.descricao || "",
+          unidade_medida: preMatEncontrado.unidade_medida || "",
           quantidade_prevista: preQtd,
         },
       ]);
@@ -438,9 +513,17 @@ export const WorkflowSteps = () => {
         const { error } = await supabase.from("pre_lista_itens").insert(payload);
         if (error) throw error;
       }
-      setMaterialInfo("Pré-lista salva.");
+      const { data: preReload, error: preReloadError } = await supabase
+        .from("pre_lista_itens")
+        .select("id,codigo_material,quantidade_prevista,criado_em")
+        .eq("id_acionamento", selectedItem.id_acionamento)
+        .order("criado_em", { ascending: false });
+      if (preReloadError) throw preReloadError;
+      const enriched = await enrichPreLista(preReload || []);
+      setPreLista(enriched);
+      setMaterialInfo("Pre-lista salva.");
     } catch (err: any) {
-      setMaterialError(err.message || "Erro ao salvar pré-lista.");
+      setMaterialError(err.message || "Erro ao Salvar pre-lista.");
     } finally {
       setSavingPre(false);
     }
@@ -449,25 +532,70 @@ export const WorkflowSteps = () => {
   const exportPreListaPdf = () => {
     if (!selectedItem) return;
     if (preLista.length === 0) {
-      setMaterialError("Nenhum item na prǸ-lista para gerar PDF.");
+      setMaterialError("Nenhum item na pre-lista para gerar PDF.");
       return;
     }
 
     const doc = new jsPDF();
-    const titulo = `PrǸ-lista do acionamento ${selectedItem.codigo_acionamento || selectedItem.id_acionamento || ""}`;
+    const width = doc.internal.pageSize.getWidth();
+    const titulo = `Acionamento ${selectedItem.codigo_acionamento || selectedItem.id_acionamento || "--"} - ${
+      selectedItem.municipio || "--"
+    } - ${getDataTitulo()}`;
 
-    doc.setFontSize(16);
-    doc.text(titulo.trim(), 14, 18);
+    doc.setFillColor(220, 220, 220);
+    doc.rect(10, 10, width - 20, 14, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(13);
+    doc.setTextColor(60);
+    doc.text(titulo, width / 2, 19, { align: "center" });
+    doc.setTextColor(0);
 
     autoTable(doc, {
-      head: [["Codigo", "Quantidade"]],
-      body: preLista.map((p) => [p.codigo_material, p.quantidade_prevista]),
-      startY: 26,
+      startY: 32,
+      head: [["Codigo", "Descricao", "Unidade", "Quantidade"]],
+      body: preLista.map((p) => [
+        p.codigo_material,
+        p.descricao_item || "",
+        p.unidade_medida || "",
+        p.quantidade_prevista,
+      ]),
       styles: { fontSize: 10 },
+      headStyles: { fillColor: [220, 53, 69], textColor: 255 },
+      alternateRowStyles: { fillColor: [245, 245, 245] },
+      theme: "striped",
     });
+
+    const finalY = (doc as any).lastAutoTable?.finalY || 32;
+    const lineY = finalY + 20;
+    const labelY = lineY + 5;
+    const lineWidth = (width - 60) / 2;
+
+    const printedBy = currentUserName || "________________";
+    const encarregado = encarregadoNome || "________________";
+
+    // Assinatura de quem imprimiu
+    doc.setLineWidth(0.2);
+    doc.line(30, lineY, 30 + lineWidth, lineY);
+    doc.setFontSize(9);
+    doc.text(printedBy, 30, labelY);
+
+    // Assinatura do encarregado
+    const rightStart = width - 30 - lineWidth;
+    doc.line(rightStart, lineY, rightStart + lineWidth, lineY);
+    doc.text(encarregado, rightStart, labelY);
 
     const fileName = `pre-lista-${selectedItem.codigo_acionamento || selectedItem.id_acionamento || "acionamento"}.pdf`;
     doc.save(fileName);
+  };
+
+  const handleUpdatePreQuantidade = (codigo: string, valor: number) => {
+    setPreLista((prev) =>
+      prev.map((p) =>
+        p.codigo_material === codigo
+          ? { ...p, quantidade_prevista: valor >= 0 ? valor : 0 }
+          : p
+      )
+    );
   };
 
   const handleAddConsumoItem = () => {
@@ -814,7 +942,7 @@ export const WorkflowSteps = () => {
         </div>
       </CardContent>
 
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={open} onOpenChange={setOpen} modal>
         <DialogContent className="max-w-4xl max-h-[85vh] overflow-hidden">
           <DialogHeader>
             <DialogTitle>{selectedStep?.title || "Etapa"}</DialogTitle>
@@ -829,19 +957,16 @@ export const WorkflowSteps = () => {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={materialsOpen} onOpenChange={setMaterialsOpen}>
+      <Dialog open={materialsOpen} onOpenChange={setMaterialsOpen} modal>
         <DialogContent className="w-[95vw] max-w-[1400px] h-[90vh] overflow-y-auto px-3 sm:px-6">
           <DialogHeader className="text-center space-y-1 items-center">
             <DialogTitle className="text-xl font-bold">
               {`Acionamento ${selectedItem?.codigo_acionamento || selectedItem?.id_acionamento || "--"} - ${selectedItem?.municipio || "--"} - ${getDataTitulo()}`}
             </DialogTitle>
-            <DialogDescription className="text-base">
-              {selectedStep?.id === 1 ? "Pré-lista de Materiais" : "Materiais da Execução"}
-            </DialogDescription>
+            {selectedStep?.id !== 1 && (
+              <DialogDescription className="text-base">Materiais da Execucao</DialogDescription>
+            )}
           </DialogHeader>
-
-          {materialError && <div className="text-sm text-destructive text-center">{materialError}</div>}
-          {materialInfo && <div className="text-sm text-emerald-600 text-center">{materialInfo}</div>}
 
           {materialsLoading ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -849,112 +974,119 @@ export const WorkflowSteps = () => {
             </div>
           ) : selectedStep?.id === 1 ? (
             <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end mt-4">
-                    <div className="md:col-span-3">
-                      <Label>Codigo ou descricao</Label>
-                      <Input
-                        value={preCodigo}
-                        onChange={(e) => setPreCodigo(e.target.value)}
-                        placeholder="Ex.: MAT-001 ou parte da descricao"
-                      />
-                      {loadingSugestoesPre && (
-                        <p className="text-xs text-muted-foreground mt-1">Buscando...</p>
-                      )}
-                      {preSugestoes.length > 0 && (
-                        <div className="mt-1 rounded-md border bg-background shadow-sm max-h-40 overflow-y-auto">
-                          {preSugestoes.map((m: any) => (
-                            <button
-                              key={m.codigo_material}
-                              type="button"
-                              className="w-full text-left px-3 py-2 text-sm hover:bg-muted"
-                              onClick={() => handleSelectPreSugestao(m)}
-                            >
-                              {m.codigo_material} - {m.descricao} ({m.unidade_medida})
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                    <div>
-                      <Label>Quantidade</Label>
-                      <Input
-                        type="number"
-                        min={0}
-                        step={0.01}
-                        value={preQtd}
-                        onChange={(e) => setPreQtd(Number(e.target.value))}
-                      />
-                    </div>
-                    <div className="flex items-end gap-2">
-                      <Button variant="outline" onClick={buscarPreMaterial}>
-                        Buscar
-                      </Button>
-                      <Button onClick={handleAddPreItem} disabled={!preMatEncontrado}>
-                        <Plus className="h-4 w-4 mr-2" /> Adicionar
-                      </Button>
-                    </div>
+              <div className="rounded-xl border border-border/60 bg-card/80 p-3 sm:p-4 shadow-sm">
+                <h4 className="text-sm font-semibold mb-3">Adicionar material</h4>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+                  <div className="md:col-span-3">
+                    <Label>Codigo ou descricao</Label>
+                    <Input
+                      value={preCodigo}
+                      onChange={(e) => setPreCodigo(e.target.value)}
+                      placeholder="Ex.: MAT-001 ou parte da descricao"
+                    />
+                    {loadingSugestoesPre && <p className="text-xs text-muted-foreground mt-1">Buscando...</p>}
+                    {preSugestoes.length > 0 && (
+                      <div className="mt-1 rounded-md border bg-background shadow-sm max-h-40 overflow-y-auto">
+                        {preSugestoes.map((m: any) => (
+                          <button
+                            key={m.codigo_material}
+                            type="button"
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-muted"
+                            onClick={() => handleSelectPreSugestao(m)}
+                          >
+                            {m.codigo_material} - {m.descricao} ({m.unidade_medida})
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  {preMatEncontrado && (
-                    <p className="text-xs text-muted-foreground">
-                      {preMatEncontrado.codigo_material} - {preMatEncontrado.descricao} ({preMatEncontrado.unidade_medida})
-                    </p>
-                  )}
-
-              <div className="space-y-2">
-                <h4 className="text-sm font-semibold">Pré-lista</h4>
-                {preLista.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Nenhum item na pré-lista.</p>
-                ) : (
-                  <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Codigo</TableHead>
-                        <TableHead>Quantidade</TableHead>
-                        <TableHead className="text-right"></TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {preLista.map((p) => (
-                        <TableRow key={p.codigo_material}>
-                          <TableCell>{p.codigo_material}</TableCell>
-                          <TableCell>{p.quantidade_prevista}</TableCell>
-                          <TableCell className="text-right">
-                            <Button variant="ghost" size="sm" onClick={() => handleRemovePreItem(p.codigo_material)}>
-                              Remover
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                  <div className="flex items-end gap-2">
+                    <Button onClick={handleAddPreItem} disabled={!preMatEncontrado}>
+                      <Plus className="h-4 w-4 mr-2" /> Adicionar
+                    </Button>
                   </div>
+                </div>
+                {preMatEncontrado && (
+                  <p className="text-xs text-muted-foreground mt-2">
+                    {preMatEncontrado.codigo_material} - {preMatEncontrado.descricao} ({preMatEncontrado.unidade_medida})
+                  </p>
                 )}
               </div>
 
-              <div className="flex flex-col sm:flex-row sm:justify-end gap-2">
-                <Button variant="outline" onClick={exportPreListaPdf} disabled={preLista.length === 0}>
-                  <FileDown className="h-4 w-4 mr-2" />
-                  Exportar PDF
-                </Button>
-                <Button onClick={savePreLista} disabled={savingPre}>
-                  {savingPre ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
-                  Salvar pr?-lista
-                </Button>
+              <div className="rounded-xl border border-border/60 bg-card/80 p-3 sm:p-4 shadow-sm space-y-2">
+                <div className="flex items-center justify-end">
+                  {preLista.length > 0 && (
+                    <span className="text-xs text-muted-foreground">{preLista.length} item(s)</span>
+                  )}
+                </div>
+                {preLista.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Nenhum item na pre-lista.</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Codigo</TableHead>
+                          <TableHead>Descricao</TableHead>
+                          <TableHead>Unidade</TableHead>
+                          <TableHead>Quantidade</TableHead>
+                          <TableHead className="text-right"></TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {preLista.map((p) => (
+                          <TableRow key={p.codigo_material}>
+                            <TableCell>{p.codigo_material}</TableCell>
+                            <TableCell>{p.descricao_item || "-"}</TableCell>
+                            <TableCell>{p.unidade_medida || "-"}</TableCell>
+                            <TableCell className="max-w-[140px]">
+                              <Input
+                                type="number"
+                                min={0}
+                                step={0.01}
+                                value={p.quantidade_prevista}
+                                onChange={(e) =>
+                                  handleUpdatePreQuantidade(p.codigo_material, Number(e.target.value))
+                                }
+                              />
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <Button variant="ghost" size="sm" onClick={() => handleRemovePreItem(p.codigo_material)}>
+                                Remover
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+                <div className="flex flex-col sm:flex-row sm:justify-end gap-2 pt-2">
+                  <Button variant="outline" onClick={exportPreListaPdf} disabled={preLista.length === 0}>
+                    <FileDown className="h-4 w-4 mr-2" />
+                    Exportar PDF
+                  </Button>
+                  <Button onClick={savePreLista} disabled={savingPre}>
+                    {savingPre ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+                    Salvar
+                  </Button>
+                </div>
               </div>
             </div>
           ) : (
             <div className="space-y-6">
               <div>
-                <h4 className="text-sm font-semibold mb-2">Pré-lista (referência)</h4>
+                <h4 className="text-sm font-semibold mb-2">Pre-lista (referencia)</h4>
                 {preLista.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Nenhuma pré-lista encontrada.</p>
+                  <p className="text-sm text-muted-foreground">Nenhuma pre-lista encontrada.</p>
                 ) : (
                   <div className="overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
                         <TableHead>Codigo</TableHead>
+                        <TableHead>Descricao</TableHead>
+                        <TableHead>Unidade</TableHead>
                         <TableHead>Qtd prevista</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -962,7 +1094,19 @@ export const WorkflowSteps = () => {
                       {preLista.map((p) => (
                         <TableRow key={p.codigo_material}>
                           <TableCell>{p.codigo_material}</TableCell>
-                          <TableCell>{p.quantidade_prevista}</TableCell>
+                          <TableCell>{p.descricao_item || "-"}</TableCell>
+                          <TableCell>{p.unidade_medida || "-"}</TableCell>
+                          <TableCell className="max-w-[140px]">
+                            <Input
+                              type="number"
+                              min={0}
+                              step={0.01}
+                              value={p.quantidade_prevista}
+                              onChange={(e) =>
+                                handleUpdatePreQuantidade(p.codigo_material, Number(e.target.value))
+                              }
+                            />
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -1164,8 +1308,18 @@ export const WorkflowSteps = () => {
               </div>
             </div>
           )}
+
+          {(materialError || materialInfo) && (
+            <div className="pt-4 text-center text-sm">
+              {materialError && <div className="text-destructive">{materialError}</div>}
+              {materialInfo && <div className="text-emerald-600">{materialInfo}</div>}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </Card>
   );
 };
+
+
+
