@@ -1,13 +1,13 @@
-import { 
-  Home, 
-  AlertCircle, 
-  Wrench, 
-  FileText, 
+import {
+  Home,
+  AlertCircle,
+  Wrench,
+  FileText,
   TrendingUp,
   Package,
   Users,
   Settings,
-  BarChart3
+  BarChart3,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
@@ -22,6 +22,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 const mainItems = [
   { title: "Dashboard", url: "/", icon: Home },
@@ -42,11 +43,12 @@ export function AppSidebar() {
   const { open } = useSidebar();
   const location = useLocation();
   const currentPath = location.pathname;
+  const isMobile = useIsMobile();
 
   const isActive = (path: string) => currentPath === path;
 
   return (
-    <Sidebar collapsible="icon" className="border-r border-border">
+    <Sidebar collapsible={isMobile ? "offcanvas" : "icon"} className="border-r border-border">
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupLabel>Menu Principal</SidebarGroupLabel>

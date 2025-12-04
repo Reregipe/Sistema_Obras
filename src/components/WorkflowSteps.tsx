@@ -830,7 +830,7 @@ export const WorkflowSteps = () => {
       </Dialog>
 
       <Dialog open={materialsOpen} onOpenChange={setMaterialsOpen}>
-        <DialogContent className="w-[95vw] max-w-[1400px] h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[95vw] max-w-[1400px] h-[90vh] overflow-y-auto px-3 sm:px-6">
           <DialogHeader className="text-center space-y-1 items-center">
             <DialogTitle className="text-xl font-bold">
               {`Acionamento ${selectedItem?.codigo_acionamento || selectedItem?.id_acionamento || "--"} - ${selectedItem?.municipio || "--"} - ${getDataTitulo()}`}
@@ -905,6 +905,7 @@ export const WorkflowSteps = () => {
                 {preLista.length === 0 ? (
                   <p className="text-sm text-muted-foreground">Nenhum item na pré-lista.</p>
                 ) : (
+                  <div className="overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -927,10 +928,11 @@ export const WorkflowSteps = () => {
                       ))}
                     </TableBody>
                   </Table>
+                  </div>
                 )}
               </div>
 
-              <div className="flex justify-end gap-2">
+              <div className="flex flex-col sm:flex-row sm:justify-end gap-2">
                 <Button variant="outline" onClick={exportPreListaPdf} disabled={preLista.length === 0}>
                   <FileDown className="h-4 w-4 mr-2" />
                   Exportar PDF
@@ -948,6 +950,7 @@ export const WorkflowSteps = () => {
                 {preLista.length === 0 ? (
                   <p className="text-sm text-muted-foreground">Nenhuma pré-lista encontrada.</p>
                 ) : (
+                  <div className="overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -964,6 +967,7 @@ export const WorkflowSteps = () => {
                       ))}
                     </TableBody>
                   </Table>
+                  </div>
                 )}
               </div>
 
@@ -1057,7 +1061,7 @@ export const WorkflowSteps = () => {
                     </TableBody>
                   </Table>
                 )}
-                <div className="flex justify-end">
+                <div className="flex flex-col sm:flex-row sm:justify-end gap-2">
                   <Button onClick={saveConsumo} disabled={savingConsumo}>
                     {savingConsumo ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
                     Salvar consumo
@@ -1151,7 +1155,7 @@ export const WorkflowSteps = () => {
                     </TableBody>
                   </Table>
                 )}
-                <div className="flex justify-end">
+                <div className="flex flex-col sm:flex-row sm:justify-end gap-2">
                   <Button variant="destructive" onClick={saveSucata} disabled={savingSucata}>
                     {savingSucata ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
                     Salvar sucata
