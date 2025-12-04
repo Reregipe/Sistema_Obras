@@ -3,13 +3,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { CheckCircle2, Clock, AlertCircle, FileText, Wrench, TrendingUp, ArrowRight, Loader2, Plus, Save } from "lucide-react";
+import { CheckCircle2, Clock, AlertCircle, FileText, Wrench, TrendingUp, ArrowRight, Loader2, Plus, Save, FileDown } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 interface WorkflowStep {
   id: number;
@@ -170,6 +172,8 @@ export const WorkflowSteps = () => {
   const [consumoCodigo, setConsumoCodigo] = useState("");
   const [consumoMatEncontrado, setConsumoMatEncontrado] = useState<any | null>(null);
   const [consumoQtd, setConsumoQtd] = useState<number>(1);
+  const [consumoSugestoes, setConsumoSugestoes] = useState<any[]>([]);
+  const [loadingSugestoesConsumo, setLoadingSugestoesConsumo] = useState(false);
 
   useEffect(() => {
     if (open && selectedStep) {
@@ -229,6 +233,51 @@ export const WorkflowSteps = () => {
       .limit(8);
     return data || [];
   };
+
+  useEffect(() => {
+    const handler = setTimeout(async () => {
+      const term = preCodigo.trim();
+      if (!term || term.length < 2) {
+        setPreSugestoes([]);
+        return;
+      }
+      setLoadingSugestoesPre(true);
+      const data = await searchMaterial(term);
+      setPreSugestoes(data || []);
+      setLoadingSugestoesPre(false);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [preCodigo]);
+
+  useEffect(() => {
+    const handler = setTimeout(async () => {
+      const term = consumoCodigo.trim();
+      if (!term || term.length < 2) {
+        setConsumoSugestoes([]);
+        return;
+      }
+      setLoadingSugestoesConsumo(true);
+      const data = await searchMaterial(term);
+      setConsumoSugestoes(data || []);
+      setLoadingSugestoesConsumo(false);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [consumoCodigo]);
+
+  useEffect(() => {
+    const handler = setTimeout(async () => {
+      const term = sucataCodigo.trim();
+      if (!term || term.length < 2) {
+        setSucataSugestoes([]);
+        return;
+      }
+      setLoadingSugestoesSucata(true);
+      const data = await searchMaterial(term);
+      setSucataSugestoes(data || []);
+      setLoadingSugestoesSucata(false);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [sucataCodigo]);
 
   const openMaterialsModal = async (item: any) => {
     setMaterialsOpen(true);
@@ -355,6 +404,24 @@ export const WorkflowSteps = () => {
     setPreLista((prev) => prev.filter((p) => p.codigo_material !== codigo));
   };
 
+  const handleSelectPreSugestao = (mat: any) => {
+    setPreMatEncontrado(mat);
+    setPreCodigo(mat.codigo_material);
+    setPreSugestoes([]);
+  };
+
+  const handleSelectConsumoSugestao = (mat: any) => {
+    setConsumoMatEncontrado(mat);
+    setConsumoCodigo(mat.codigo_material);
+    setConsumoSugestoes([]);
+  };
+
+  const handleSelectSucataSugestao = (mat: any) => {
+    setSucataMatEncontrado(mat);
+    setSucataCodigo(mat.codigo_material);
+    setSucataSugestoes([]);
+  };
+
   const savePreLista = async () => {
     if (!selectedItem) return;
     setSavingPre(true);
@@ -377,6 +444,30 @@ export const WorkflowSteps = () => {
     } finally {
       setSavingPre(false);
     }
+  };
+
+  const exportPreListaPdf = () => {
+    if (!selectedItem) return;
+    if (preLista.length === 0) {
+      setMaterialError("Nenhum item na prǸ-lista para gerar PDF.");
+      return;
+    }
+
+    const doc = new jsPDF();
+    const titulo = `PrǸ-lista do acionamento ${selectedItem.codigo_acionamento || selectedItem.id_acionamento || ""}`;
+
+    doc.setFontSize(16);
+    doc.text(titulo.trim(), 14, 18);
+
+    autoTable(doc, {
+      head: [["Codigo", "Quantidade"]],
+      body: preLista.map((p) => [p.codigo_material, p.quantidade_prevista]),
+      startY: 26,
+      styles: { fontSize: 10 },
+    });
+
+    const fileName = `pre-lista-${selectedItem.codigo_acionamento || selectedItem.id_acionamento || "acionamento"}.pdf`;
+    doc.save(fileName);
   };
 
   const handleAddConsumoItem = () => {
@@ -413,6 +504,40 @@ export const WorkflowSteps = () => {
 
   const handleRemoveConsumo = (codigo: string) => {
     setConsumo((prev) => prev.filter((c) => c.codigo_material !== codigo));
+  };
+
+  const handleAddSucataItem = () => {
+    if (!sucataMatEncontrado) {
+      setMaterialError("Selecione um material para sucata.");
+      return;
+    }
+    if (!sucataQtd || sucataQtd < 0) {
+      setMaterialError("Informe quantidade vǭlida para sucata.");
+      return;
+    }
+    setMaterialError(null);
+    setSucata((prev) =>
+      prev.some((i) => i.codigo_material === sucataMatEncontrado.codigo_material)
+        ? prev.map((i) =>
+            i.codigo_material === sucataMatEncontrado.codigo_material
+              ? { ...i, quantidade: i.quantidade + sucataQtd }
+              : i
+          )
+        : [
+            ...prev,
+            {
+              codigo_material: sucataMatEncontrado.codigo_material,
+              quantidade: sucataQtd,
+            },
+          ]
+    );
+    setSucataCodigo("");
+    setSucataMatEncontrado(null);
+    setSucataQtd(1);
+  };
+
+  const handleRemoveSucata = (codigo: string) => {
+    setSucata((prev) => prev.filter((s) => s.codigo_material !== codigo));
   };
 
   const handleUpdateConsumoQuantidade = (codigo: string, valor: number) => {
@@ -487,6 +612,20 @@ export const WorkflowSteps = () => {
   const handleStepClick = (step: WorkflowStep) => {
     setSelectedStep(step);
     setOpen(true);
+  };
+
+  const formatDateBr = (date?: string | null) => {
+    if (!date) return "--";
+    const d = new Date(date);
+    return isNaN(d.getTime()) ? "--" : d.toLocaleDateString("pt-BR");
+  };
+
+  const getDataTitulo = () => {
+    const dataLista =
+      preLista?.[0]?.criado_em ||
+      selectedItem?.data_abertura ||
+      new Date().toISOString();
+    return formatDateBr(dataLista);
   };
 
   const getStatusBadge = (step: WorkflowStep) => {
@@ -691,14 +830,18 @@ export const WorkflowSteps = () => {
       </Dialog>
 
       <Dialog open={materialsOpen} onOpenChange={setMaterialsOpen}>
-        <DialogContent className="sm:max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Lista de Materiais {selectedStep?.id === 1 ? "(Pré-lista)" : "(Execução)"}</DialogTitle>
-            <DialogDescription>{selectedItem?.codigo_acionamento || selectedItem?.id_acionamento || "--"}</DialogDescription>
+        <DialogContent className="w-[95vw] max-w-[1400px] h-[90vh] overflow-y-auto">
+          <DialogHeader className="text-center space-y-1 items-center">
+            <DialogTitle className="text-xl font-bold">
+              {`Acionamento ${selectedItem?.codigo_acionamento || selectedItem?.id_acionamento || "--"} - ${selectedItem?.municipio || "--"} - ${getDataTitulo()}`}
+            </DialogTitle>
+            <DialogDescription className="text-base">
+              {selectedStep?.id === 1 ? "Pré-lista de Materiais" : "Materiais da Execução"}
+            </DialogDescription>
           </DialogHeader>
 
-          {materialError && <div className="text-sm text-destructive">{materialError}</div>}
-          {materialInfo && <div className="text-sm text-emerald-600">{materialInfo}</div>}
+          {materialError && <div className="text-sm text-destructive text-center">{materialError}</div>}
+          {materialInfo && <div className="text-sm text-emerald-600 text-center">{materialInfo}</div>}
 
           {materialsLoading ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -706,35 +849,56 @@ export const WorkflowSteps = () => {
             </div>
           ) : selectedStep?.id === 1 ? (
             <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
-                <div className="md:col-span-3">
-                  <Label>Codigo do material</Label>
-                  <Input value={preCodigo} onChange={(e) => setPreCodigo(e.target.value)} placeholder="Ex.: MAT-001" />
-                </div>
-                <div>
-                  <Label>Quantidade</Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    step={0.01}
-                    value={preQtd}
-                    onChange={(e) => setPreQtd(Number(e.target.value))}
-                  />
-                </div>
-                <div className="flex items-end gap-2">
-                  <Button variant="outline" onClick={buscarPreMaterial}>
-                    Buscar
-                  </Button>
-                  <Button onClick={handleAddPreItem} disabled={!preMatEncontrado}>
-                    <Plus className="h-4 w-4 mr-2" /> Adicionar
-                  </Button>
-                </div>
-              </div>
-              {preMatEncontrado && (
-                <p className="text-xs text-muted-foreground">
-                  {preMatEncontrado.codigo_material} - {preMatEncontrado.descricao} ({preMatEncontrado.unidade_medida})
-                </p>
-              )}
+                  <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end mt-4">
+                    <div className="md:col-span-3">
+                      <Label>Codigo ou descricao</Label>
+                      <Input
+                        value={preCodigo}
+                        onChange={(e) => setPreCodigo(e.target.value)}
+                        placeholder="Ex.: MAT-001 ou parte da descricao"
+                      />
+                      {loadingSugestoesPre && (
+                        <p className="text-xs text-muted-foreground mt-1">Buscando...</p>
+                      )}
+                      {preSugestoes.length > 0 && (
+                        <div className="mt-1 rounded-md border bg-background shadow-sm max-h-40 overflow-y-auto">
+                          {preSugestoes.map((m: any) => (
+                            <button
+                              key={m.codigo_material}
+                              type="button"
+                              className="w-full text-left px-3 py-2 text-sm hover:bg-muted"
+                              onClick={() => handleSelectPreSugestao(m)}
+                            >
+                              {m.codigo_material} - {m.descricao} ({m.unidade_medida})
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <Label>Quantidade</Label>
+                      <Input
+                        type="number"
+                        min={0}
+                        step={0.01}
+                        value={preQtd}
+                        onChange={(e) => setPreQtd(Number(e.target.value))}
+                      />
+                    </div>
+                    <div className="flex items-end gap-2">
+                      <Button variant="outline" onClick={buscarPreMaterial}>
+                        Buscar
+                      </Button>
+                      <Button onClick={handleAddPreItem} disabled={!preMatEncontrado}>
+                        <Plus className="h-4 w-4 mr-2" /> Adicionar
+                      </Button>
+                    </div>
+                  </div>
+                  {preMatEncontrado && (
+                    <p className="text-xs text-muted-foreground">
+                      {preMatEncontrado.codigo_material} - {preMatEncontrado.descricao} ({preMatEncontrado.unidade_medida})
+                    </p>
+                  )}
 
               <div className="space-y-2">
                 <h4 className="text-sm font-semibold">Pré-lista</h4>
@@ -766,10 +930,14 @@ export const WorkflowSteps = () => {
                 )}
               </div>
 
-              <div className="flex justify-end">
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={exportPreListaPdf} disabled={preLista.length === 0}>
+                  <FileDown className="h-4 w-4 mr-2" />
+                  Exportar PDF
+                </Button>
                 <Button onClick={savePreLista} disabled={savingPre}>
                   {savingPre ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
-                  Salvar pré-lista
+                  Salvar pr?-lista
                 </Button>
               </div>
             </div>
@@ -799,21 +967,38 @@ export const WorkflowSteps = () => {
                 )}
               </div>
 
-              <div className="space-y-3">
-                <h4 className="text-sm font-semibold">Materiais utilizados (consumo real)</h4>
-                <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
-                  <div className="md:col-span-3">
-                    <Label>Codigo do material</Label>
-                    <Input
-                      value={consumoCodigo}
-                      onChange={(e) => setConsumoCodigo(e.target.value)}
-                      placeholder="Ex.: MAT-001"
-                    />
-                  </div>
-                  <div>
-                    <Label>Quantidade</Label>
-                    <Input
-                      type="number"
+                  <div className="space-y-3">
+                    <h4 className="text-sm font-semibold">Materiais utilizados (consumo real)</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end mt-4">
+                      <div className="md:col-span-3">
+                        <Label>Codigo ou descricao</Label>
+                        <Input
+                          value={consumoCodigo}
+                          onChange={(e) => setConsumoCodigo(e.target.value)}
+                          placeholder="Ex.: MAT-001 ou parte da descricao"
+                        />
+                        {loadingSugestoesConsumo && (
+                          <p className="text-xs text-muted-foreground mt-1">Buscando...</p>
+                        )}
+                        {consumoSugestoes.length > 0 && (
+                          <div className="mt-1 rounded-md border bg-background shadow-sm max-h-40 overflow-y-auto">
+                            {consumoSugestoes.map((m: any) => (
+                              <button
+                                key={m.codigo_material}
+                                type="button"
+                                className="w-full text-left px-3 py-2 text-sm hover:bg-muted"
+                                onClick={() => handleSelectConsumoSugestao(m)}
+                              >
+                                {m.codigo_material} - {m.descricao} ({m.unidade_medida})
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <div>
+                        <Label>Quantidade</Label>
+                        <Input
+                          type="number"
                       min={0}
                       step={0.01}
                       value={consumoQtd}
@@ -880,21 +1065,38 @@ export const WorkflowSteps = () => {
                 </div>
               </div>
 
-              <div className="space-y-3">
-                <h4 className="text-sm font-semibold">Materiais retirados (sucata)</h4>
-                <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
-                  <div className="md:col-span-3">
-                    <Label>Codigo do material</Label>
-                    <Input
-                      value={sucataCodigo}
-                      onChange={(e) => setSucataCodigo(e.target.value)}
-                      placeholder="Ex.: MAT-001"
-                    />
-                  </div>
-                  <div>
-                    <Label>Quantidade</Label>
-                    <Input
-                      type="number"
+                    <div className="space-y-3">
+                      <h4 className="text-sm font-semibold">Materiais retirados (sucata)</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end mt-4">
+                        <div className="md:col-span-3">
+                        <Label>Codigo ou descricao</Label>
+                        <Input
+                          value={sucataCodigo}
+                          onChange={(e) => setSucataCodigo(e.target.value)}
+                          placeholder="Ex.: MAT-001 ou parte da descricao"
+                        />
+                        {loadingSugestoesSucata && (
+                          <p className="text-xs text-muted-foreground mt-1">Buscando...</p>
+                        )}
+                        {sucataSugestoes.length > 0 && (
+                          <div className="mt-1 rounded-md border bg-background shadow-sm max-h-40 overflow-y-auto">
+                            {sucataSugestoes.map((m: any) => (
+                              <button
+                                key={m.codigo_material}
+                                type="button"
+                                className="w-full text-left px-3 py-2 text-sm hover:bg-muted"
+                                onClick={() => handleSelectSucataSugestao(m)}
+                              >
+                                {m.codigo_material} - {m.descricao} ({m.unidade_medida})
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        </div>
+                        <div>
+                          <Label>Quantidade</Label>
+                          <Input
+                            type="number"
                       min={0}
                       step={0.01}
                       value={sucataQtd}
