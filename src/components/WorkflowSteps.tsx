@@ -177,6 +177,7 @@ export const WorkflowSteps = () => {
   const [currentUserName, setCurrentUserName] = useState<string>("");
   const [encarregadoNome, setEncarregadoNome] = useState<string>("");
   const [encarregadoSelecionado, setEncarregadoSelecionado] = useState<string>("");
+  const [almoxConferido, setAlmoxConferido] = useState<boolean>(false);
 
   const makeId = () => {
     if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
@@ -217,6 +218,39 @@ export const WorkflowSteps = () => {
 
   const uniqueEncarregados = (nomes: string) => {
     return Array.from(new Set(splitEncarregados(nomes)));
+  };
+
+  const shouldAdvanceEtapa1 = (item: any, preCount: number, almoxFlag: boolean) => {
+    if (!item) return false;
+    if (!selectedStep || selectedStep.id !== 1) return false;
+    const statusDesp = (item.status || "").toLowerCase().includes("despach");
+    return preCount > 0 && statusDesp && item.data_despacho && almoxFlag;
+  };
+
+  const attemptAutoAdvanceEtapa1 = async (item: any, preCount: number, almoxFlag: boolean) => {
+    if (!shouldAdvanceEtapa1(item, preCount, almoxFlag)) return;
+    try {
+      const payload: any = { etapa_atual: 2 };
+      if (!almoxFlag) {
+        payload.almox_conferido_em = new Date().toISOString();
+      }
+      const { error } = await supabase
+        .from("acionamentos")
+        .update(payload)
+        .eq("id_acionamento", item.id_acionamento);
+      if (error) throw error;
+      setSelectedItem((prev: any) =>
+        prev
+          ? {
+              ...prev,
+              ...payload,
+            }
+          : prev
+      );
+      setMaterialInfo("Avançado automaticamente para a Etapa 2.");
+    } catch (err: any) {
+      setMaterialError(err.message || "Erro ao avançar etapa.");
+    }
   };
 
   useEffect(() => {
@@ -271,7 +305,7 @@ export const WorkflowSteps = () => {
       const { data, error } = await supabase
         .from("acionamentos")
         .select(
-          "id_acionamento,codigo_acionamento,numero_os,status,prioridade,municipio,modalidade,data_abertura,etapa_atual,encarregado"
+          "id_acionamento,codigo_acionamento,numero_os,status,prioridade,municipio,modalidade,data_abertura,data_despacho,etapa_atual,encarregado,almox_conferido_em"
         )
         .eq("etapa_atual", step.id)
         .order("data_abertura", { ascending: false });
@@ -360,17 +394,76 @@ export const WorkflowSteps = () => {
     return () => clearTimeout(handler);
   }, [sucataCodigo]);
 
+  useEffect(() => {
+    const encRaw = encarregadoNome || selectedItem?.encarregado || "";
+    const lista = uniqueEncarregados(encRaw);
+    if (lista.length === 1) {
+      setEncarregadoSelecionado(lista[0]);
+    }
+  }, [encarregadoNome, selectedItem]);
+
+  const handleToggleAlmox = async (checked: boolean) => {
+    if (!selectedItem) return;
+    setMaterialError(null);
+    setMaterialInfo(null);
+    try {
+      const podeAvancarEtapa1 =
+        checked &&
+        selectedStep?.id === 1 &&
+        preLista.length > 0 &&
+        selectedItem.status?.toLowerCase().includes("despach") &&
+        selectedItem.data_despacho;
+
+      const payload: any = {
+        almox_conferido_em: checked ? new Date().toISOString() : null,
+        ...(podeAvancarEtapa1 ? { etapa_atual: 2 } : {}),
+      };
+      const { error } = await supabase
+        .from("acionamentos")
+        .update(payload)
+        .eq("id_acionamento", selectedItem.id_acionamento);
+      if (error) throw error;
+      setAlmoxConferido(checked);
+      if (podeAvancarEtapa1) {
+        setMaterialInfo("Conferido pelo almox e avançado para Etapa 2.");
+        setSelectedStep((prev) => (prev && prev.id === 1 ? { ...prev, id: 2 } : prev));
+        setSelectedItem((prev: any) =>
+          prev
+            ? {
+                ...prev,
+                almox_conferido_em: payload.almox_conferido_em,
+                etapa_atual: 2,
+              }
+            : prev
+        );
+      } else {
+        setMaterialInfo(checked ? "Conferido pelo almox." : "Marcação removida.");
+        setSelectedItem((prev: any) =>
+          prev
+            ? {
+                ...prev,
+                almox_conferido_em: payload.almox_conferido_em,
+              }
+            : prev
+        );
+      }
+    } catch (err: any) {
+      setMaterialError(err.message || "Erro ao marcar conferência do almox.");
+    }
+  };
+
   const openMaterialsModal = async (item: any) => {
     setMaterialsOpen(true);
     setMaterialsLoading(true);
     setMaterialError(null);
     setMaterialInfo(null);
     setPreLista([]);
-      setConsumo([]);
-      setSucata([]);
-      setEncarregadoNome("");
-      try {
-        const { data: pre } = await supabase
+    setConsumo([]);
+    setSucata([]);
+    setEncarregadoNome("");
+    setAlmoxConferido(false);
+    try {
+      const { data: pre } = await supabase
         .from("pre_lista_itens")
         .select("id,codigo_material,quantidade_prevista,criado_em")
         .eq("id_acionamento", item.id_acionamento)
@@ -382,7 +475,7 @@ export const WorkflowSteps = () => {
       try {
         const { data: extra } = await supabase
           .from("acionamentos")
-          .select("encarregado")
+          .select("encarregado, almox_conferido_em, data_despacho, status, etapa_atual")
           .eq("id_acionamento", item.id_acionamento)
           .single();
 
@@ -395,18 +488,24 @@ export const WorkflowSteps = () => {
           resolveEncarregadoNome(extra),
           resolveEncarregadoNome(item),
           ...(encEqp || []).map((e: any) => e.encarregado_nome || ""),
-        ]
-          .filter(Boolean);
+        ].filter(Boolean);
 
         const lista = uniqueEncarregados(nomes.join(" / "));
         const nomeEncBruto = lista.join(" / ");
         setEncarregadoNome(nomeEncBruto);
         setEncarregadoSelecionado(lista.length === 1 ? lista[0] : "");
+        setAlmoxConferido(!!extra?.almox_conferido_em);
+        await attemptAutoAdvanceEtapa1(
+          { ...item, ...extra },
+          enrichedPre.length,
+          !!extra?.almox_conferido_em
+        );
       } catch {
         const nomeEncBruto = resolveEncarregadoNome(item);
         const lista = uniqueEncarregados(nomeEncBruto);
         setEncarregadoNome(lista.join(" / "));
         setEncarregadoSelecionado(lista.length === 1 ? lista[0] : "");
+        setAlmoxConferido(false);
       }
 
       if (selectedStep?.id && selectedStep.id > 1) {
@@ -1119,11 +1218,23 @@ export const WorkflowSteps = () => {
                     </Table>
                   </div>
                 )}
-                  <div className="flex flex-col sm:flex-row sm:justify-end gap-2 pt-2">
-                    <div className="flex-1 flex items-center gap-2">
-                      {(() => {
-                        const encList = uniqueEncarregados(encarregadoNome || selectedItem?.encarregado || "");
-                        if (encList.length > 0) {
+                <div className="flex items-center gap-2 pt-1">
+                  <input
+                    type="checkbox"
+                    id="almox-conferido"
+                    checked={almoxConferido}
+                    disabled={preLista.length === 0}
+                    onChange={(e) => handleToggleAlmox(e.target.checked)}
+                  />
+                  <Label htmlFor="almox-conferido" className="text-sm">
+                    Conferido pelo almox
+                  </Label>
+                </div>
+                <div className="flex flex-col sm:flex-row sm:justify-end gap-2 pt-2">
+                  <div className="flex-1 flex items-center gap-2">
+                    {(() => {
+                      const encList = uniqueEncarregados(encarregadoNome || selectedItem?.encarregado || "");
+                      if (encList.length > 0) {
                           return (
                             <div className="flex items-center gap-2">
                               <Label className="text-xs text-muted-foreground">Encarregado:</Label>
