@@ -115,7 +115,7 @@ export default function AcionamentoDetalhe() {
     return equipes.filter((e) => !e.linha || e.linha === form.modalidade);
   }, [equipes, form.modalidade]);
 
-  const loadEquipes = async () => {
+  const loadEquipes = async (): Promise<EquipeOption[]> => {
     try {
       const { data, error } = await supabase
         .from("equipes")
@@ -123,13 +123,16 @@ export default function AcionamentoDetalhe() {
       if (error) throw error;
       const ativos = (data || []).filter((e) => e.ativo !== "N");
       setEquipes(ativos as EquipeOption[]);
+      return ativos as EquipeOption[];
     } catch (err) {
       console.error("Erro ao carregar equipes", err);
+      return [];
     }
   };
 
-  const loadAdicionais = async (idAcionamento: string) => {
+  const loadAdicionais = async (idAcionamento: string, eqList?: EquipeOption[]) => {
     try {
+      const lookup = (eqList || equipes) as EquipeOption[];
       const { data } = await supabase
         .from("acionamento_equipes")
         .select("id_equipe, encarregado_nome")
@@ -137,7 +140,7 @@ export default function AcionamentoDetalhe() {
       const mapped: Adicional[] =
         data?.map((item) => ({
           id_equipe: item.id_equipe,
-          nome: "",
+          nome: lookup.find((e) => e.id_equipe === item.id_equipe)?.nome_equipe || item.id_equipe,
           encarregado: item.encarregado_nome || "",
         })) || [];
       setEquipesAdicionais(mapped);
@@ -152,7 +155,7 @@ export default function AcionamentoDetalhe() {
       setLoading(true);
       setErro(null);
       try {
-        await loadEquipes();
+        const eqs = await loadEquipes();
         const { data, error } = await supabase
           .from("acionamentos")
           .select("*")
@@ -186,7 +189,7 @@ export default function AcionamentoDetalhe() {
           nf_emitida_em: rec.nf_emitida_em || "",
           nf_numero: rec.nf_numero || "",
         });
-        await loadAdicionais(rec.id_acionamento);
+        await loadAdicionais(rec.id_acionamento, eqs);
       } catch (err: any) {
         setErro(err.message || "Erro ao carregar acionamento.");
       } finally {
@@ -218,6 +221,17 @@ export default function AcionamentoDetalhe() {
 
   const isMulti = form.modalidade === "LM+LV";
 
+  const encarregadosDisponiveis = useMemo(() => {
+    const list: string[] = [];
+    const principal = equipes.find((e) => e.id_equipe === form.id_equipe);
+    if (principal?.encarregado_nome) list.push(principal.encarregado_nome);
+    equipesAdicionais.forEach((e) => {
+      if (e.encarregado) list.push(e.encarregado);
+    });
+    if (form.encarregado) list.push(form.encarregado);
+    return Array.from(new Set(list.filter(Boolean)));
+  }, [equipes, form.id_equipe, equipesAdicionais, form.encarregado]);
+
   const addEquipeAdicional = (idEquipe: string) => {
     if (!idEquipe) return;
     const eq = equipes.find((e) => e.id_equipe === idEquipe);
@@ -225,7 +239,6 @@ export default function AcionamentoDetalhe() {
     // Se for LM+LV e não houver principal, define principal
     if (isMulti && !form.id_equipe) {
       onChange("id_equipe", idEquipe);
-      onChange("encarregado", eq.encarregado_nome || "");
       return;
     }
     // evita duplicar principal ou adicionais
@@ -528,9 +541,9 @@ export default function AcionamentoDetalhe() {
                   </span>
                 ))}
               </div>
-              {encarregadosSelecionados.length > 0 && (
+              {encarregadosDisponiveis.length > 0 && (
                 <div className="text-sm text-muted-foreground">
-                  Encarregados das equipes: {encarregadosSelecionados.join(", ")}
+                  Encarregados das equipes: {encarregadosDisponiveis.join(", ")}
                 </div>
               )}
             </div>

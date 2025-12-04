@@ -176,6 +176,7 @@ export const WorkflowSteps = () => {
   const [loadingSugestoesConsumo, setLoadingSugestoesConsumo] = useState(false);
   const [currentUserName, setCurrentUserName] = useState<string>("");
   const [encarregadoNome, setEncarregadoNome] = useState<string>("");
+  const [encarregadoSelecionado, setEncarregadoSelecionado] = useState<string>("");
 
   const makeId = () => {
     if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
@@ -194,6 +195,30 @@ export const WorkflowSteps = () => {
     );
   };
 
+  const resolveEncarregadoNome = (data: any) => {
+    if (!data) return "";
+    const nomesBrutos =
+      data.encarregado_nome ||
+      data.encarregado ||
+      data.encarregado_equipe ||
+      data.responsavel_nome ||
+      data.responsavel ||
+      data.equipe_nome ||
+      "";
+    return nomesBrutos;
+  };
+
+  const splitEncarregados = (nomes: string) => {
+    return (nomes || "")
+      .split(/[/,;]+/)
+      .map((n) => n.trim())
+      .filter(Boolean);
+  };
+
+  const uniqueEncarregados = (nomes: string) => {
+    return Array.from(new Set(splitEncarregados(nomes)));
+  };
+
   useEffect(() => {
     if (open && selectedStep) {
       loadItems(selectedStep);
@@ -204,15 +229,19 @@ export const WorkflowSteps = () => {
     const loadUser = async () => {
       const { data } = await supabase.auth.getUser();
       const user = data?.user;
-      const name =
-        getUserDisplayName(user) ||
-        (user?.email ? user.email.split("@")[0] : "") ||
-        user?.id ||
-        "";
+      const name = getUserDisplayName(user) || "";
       setCurrentUserName(name);
     };
     loadUser();
   }, []);
+
+  useEffect(() => {
+    const encRaw = encarregadoNome || selectedItem?.encarregado || "";
+    const lista = uniqueEncarregados(encRaw);
+    if (lista.length === 1) {
+      setEncarregadoSelecionado(lista[0]);
+    }
+  }, [encarregadoNome, selectedItem]);
 
   useEffect(() => {
     const fetchCounts = async () => {
@@ -242,7 +271,7 @@ export const WorkflowSteps = () => {
       const { data, error } = await supabase
         .from("acionamentos")
         .select(
-          "id_acionamento,codigo_acionamento,numero_os,status,prioridade,municipio,modalidade,data_abertura,etapa_atual"
+          "id_acionamento,codigo_acionamento,numero_os,status,prioridade,municipio,modalidade,data_abertura,etapa_atual,encarregado"
         )
         .eq("etapa_atual", step.id)
         .order("data_abertura", { ascending: false });
@@ -337,11 +366,11 @@ export const WorkflowSteps = () => {
     setMaterialError(null);
     setMaterialInfo(null);
     setPreLista([]);
-    setConsumo([]);
-    setSucata([]);
-    setEncarregadoNome("");
-    try {
-      const { data: pre } = await supabase
+      setConsumo([]);
+      setSucata([]);
+      setEncarregadoNome("");
+      try {
+        const { data: pre } = await supabase
         .from("pre_lista_itens")
         .select("id,codigo_material,quantidade_prevista,criado_em")
         .eq("id_acionamento", item.id_acionamento)
@@ -353,14 +382,31 @@ export const WorkflowSteps = () => {
       try {
         const { data: extra } = await supabase
           .from("acionamentos")
-          .select("encarregado_nome, encarregado_equipe, encarregado")
+          .select("encarregado")
           .eq("id_acionamento", item.id_acionamento)
           .single();
-        setEncarregadoNome(
-          extra?.encarregado_nome || extra?.encarregado_equipe || extra?.encarregado || ""
-        );
+
+        const { data: encEqp } = await supabase
+          .from("acionamento_equipes")
+          .select("encarregado_nome")
+          .eq("id_acionamento", item.id_acionamento);
+
+        const nomes = [
+          resolveEncarregadoNome(extra),
+          resolveEncarregadoNome(item),
+          ...(encEqp || []).map((e: any) => e.encarregado_nome || ""),
+        ]
+          .filter(Boolean);
+
+        const lista = uniqueEncarregados(nomes.join(" / "));
+        const nomeEncBruto = lista.join(" / ");
+        setEncarregadoNome(nomeEncBruto);
+        setEncarregadoSelecionado(lista.length === 1 ? lista[0] : "");
       } catch {
-        setEncarregadoNome("");
+        const nomeEncBruto = resolveEncarregadoNome(item);
+        const lista = uniqueEncarregados(nomeEncBruto);
+        setEncarregadoNome(lista.join(" / "));
+        setEncarregadoSelecionado(lista.length === 1 ? lista[0] : "");
       }
 
       if (selectedStep?.id && selectedStep.id > 1) {
@@ -536,22 +582,29 @@ export const WorkflowSteps = () => {
       return;
     }
 
+    const encBaseTodos = uniqueEncarregados(
+      encarregadoNome || selectedItem?.encarregado || ""
+    );
+    const precisaEscolher = encBaseTodos.length > 1 && !encarregadoSelecionado;
+    if (precisaEscolher) {
+      setMaterialError("Selecione um encarregado antes de gerar o PDF.");
+      return;
+    }
+
     const doc = new jsPDF();
     const width = doc.internal.pageSize.getWidth();
     const titulo = `Acionamento ${selectedItem.codigo_acionamento || selectedItem.id_acionamento || "--"} - ${
       selectedItem.municipio || "--"
     } - ${getDataTitulo()}`;
 
-    doc.setFillColor(220, 220, 220);
-    doc.rect(10, 10, width - 20, 14, "F");
     doc.setFont("helvetica", "bold");
     doc.setFontSize(13);
-    doc.setTextColor(60);
-    doc.text(titulo, width / 2, 19, { align: "center" });
+    doc.setTextColor(40);
+    doc.text(titulo, width / 2, 16, { align: "center" });
     doc.setTextColor(0);
 
     autoTable(doc, {
-      startY: 32,
+      startY: 24,
       head: [["Codigo", "Descricao", "Unidade", "Quantidade"]],
       body: preLista.map((p) => [
         p.codigo_material,
@@ -565,24 +618,29 @@ export const WorkflowSteps = () => {
       theme: "striped",
     });
 
-    const finalY = (doc as any).lastAutoTable?.finalY || 32;
-    const lineY = finalY + 20;
+    const finalY = (doc as any).lastAutoTable?.finalY || 24;
+
+    // Lista de encarregados em formato selecionável
+    const encarregadoRaw = encarregadoSelecionado || encarregadoNome || selectedItem?.encarregado || "";
+    const encarregadoAss = (uniqueEncarregados(encarregadoRaw)[0]) || "________________";
+
+    // Assinaturas lado a lado
+    const lineY = finalY + 28;
     const labelY = lineY + 5;
     const lineWidth = (width - 60) / 2;
 
     const printedBy = currentUserName || "________________";
-    const encarregado = encarregadoNome || "________________";
 
     // Assinatura de quem imprimiu
     doc.setLineWidth(0.2);
     doc.line(30, lineY, 30 + lineWidth, lineY);
     doc.setFontSize(9);
-    doc.text(printedBy, 30, labelY);
+    doc.text(printedBy, 30 + lineWidth / 2, labelY, { align: "center" });
 
     // Assinatura do encarregado
     const rightStart = width - 30 - lineWidth;
     doc.line(rightStart, lineY, rightStart + lineWidth, lineY);
-    doc.text(encarregado, rightStart, labelY);
+    doc.text(encarregadoAss, rightStart + lineWidth / 2, labelY, { align: "center" });
 
     const fileName = `pre-lista-${selectedItem.codigo_acionamento || selectedItem.id_acionamento || "acionamento"}.pdf`;
     doc.save(fileName);
@@ -1061,17 +1119,65 @@ export const WorkflowSteps = () => {
                     </Table>
                   </div>
                 )}
-                <div className="flex flex-col sm:flex-row sm:justify-end gap-2 pt-2">
-                  <Button variant="outline" onClick={exportPreListaPdf} disabled={preLista.length === 0}>
-                    <FileDown className="h-4 w-4 mr-2" />
-                    Exportar PDF
-                  </Button>
-                  <Button onClick={savePreLista} disabled={savingPre}>
-                    {savingPre ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
-                    Salvar
-                  </Button>
+                  <div className="flex flex-col sm:flex-row sm:justify-end gap-2 pt-2">
+                    <div className="flex-1 flex items-center gap-2">
+                      {(() => {
+                        const encList = uniqueEncarregados(encarregadoNome || selectedItem?.encarregado || "");
+                        if (encList.length > 0) {
+                          return (
+                            <div className="flex items-center gap-2">
+                              <Label className="text-xs text-muted-foreground">Encarregado:</Label>
+                              <select
+                                className="border rounded-md px-2 py-1 text-sm"
+                                value={encarregadoSelecionado}
+                                onChange={(e) => setEncarregadoSelecionado(e.target.value)}
+                              >
+                                <option value="">Selecione</option>
+                                {encList.map((n) => (
+                                  <option key={n} value={n}>
+                                    {n}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          );
+                        }
+                        return (
+                          <div className="flex items-center gap-2">
+                            <Label className="text-xs text-muted-foreground">Encarregado:</Label>
+                            <input
+                              className="border rounded-md px-2 py-1 text-sm"
+                              placeholder="Digite o encarregado"
+                              value={encarregadoSelecionado}
+                              onChange={(e) => setEncarregadoSelecionado(e.target.value)}
+                            />
+                          </div>
+                        );
+                      })()}
+                    </div>
+                    {(() => {
+                      const encList = uniqueEncarregados(encarregadoNome || selectedItem?.encarregado || "");
+                      const precisaEscolher =
+                        (encList.length > 1 && !encarregadoSelecionado) ||
+                        (encList.length === 0 && !encarregadoSelecionado);
+                      return (
+                        <Button
+                          variant="outline"
+                          onClick={exportPreListaPdf}
+                          disabled={preLista.length === 0 || precisaEscolher}
+                          title={precisaEscolher ? "Selecione um encarregado para gerar o PDF" : ""}
+                        >
+                          <FileDown className="h-4 w-4 mr-2" />
+                          Exportar PDF
+                        </Button>
+                      );
+                    })()}
+                    <Button onClick={savePreLista} disabled={savingPre}>
+                      {savingPre ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+                      Salvar
+                    </Button>
+                  </div>
                 </div>
-              </div>
             </div>
           ) : (
             <div className="space-y-6">
