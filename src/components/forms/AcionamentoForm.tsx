@@ -21,17 +21,18 @@ type EquipeOption = {
 };
 
 const schema = z.object({
-  codigo_acionamento: z.string().min(1, "Código é obrigatório"),
+  codigo_acionamento: z.string().min(1, "C�digo � obrigat�rio"),
   prioridade: z.enum(["emergencia", "programado"]),
   prioridade_nivel: z.enum(["normal", "media", "alta"]).optional(),
   modalidade: z.enum(["LM", "LV", "LM+LV"]),
-  id_equipe: z.string().min(1, "Equipe é obrigatória"),
-  encarregado: z.string().min(1, "Encarregado é obrigatório"),
+  id_equipe: z.string().min(1, "Equipe � obrigat�ria"),
+  encarregado: z.string().min(1, "Encarregado � obrigat�rio"),
   municipio: z.string().optional(),
   endereco: z.string().optional(),
   status: z.enum(["aberto", "despachado", "em_execucao", "concluido"]),
-  data_abertura: z.string().min(1, "Data de abertura é obrigatória"),
+  data_abertura: z.string().min(1, "Data de abertura � obrigat�ria"),
   observacao: z.string().optional(),
+  origem: z.string().optional(),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -62,6 +63,7 @@ export const AcionamentoForm = ({ onSuccess, onCancel }: Props) => {
       status: "aberto",
       data_abertura: "",
       observacao: "",
+      origem: "web",
     },
   });
 
@@ -83,7 +85,7 @@ export const AcionamentoForm = ({ onSuccess, onCancel }: Props) => {
         const ativos = (data || []).filter((e) => e.ativo !== "N");
         setEquipes(ativos as EquipeOption[]);
       } catch (err) {
-        toast({ description: "Não foi possível carregar as equipes.", variant: "destructive" });
+        toast({ description: "No foi possvel carregar as equipes.", variant: "destructive" });
       } finally {
         setLoadingEq(false);
       }
@@ -116,6 +118,8 @@ export const AcionamentoForm = ({ onSuccess, onCancel }: Props) => {
           status: data.status,
           data_abertura: data.data_abertura,
           observacao: data.observacao || null,
+          origem: data.origem || "web",
+          etapa_atual: 1, // novos acionamentos comeam na etapa 1
         },
       ]);
       if (error) throw error;
@@ -136,7 +140,7 @@ export const AcionamentoForm = ({ onSuccess, onCancel }: Props) => {
             name="codigo_acionamento"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Código</FormLabel>
+                <FormLabel>Cdigo</FormLabel>
                 <FormControl>
                   <Input placeholder="Ex.: 105" {...field} />
                 </FormControl>
@@ -198,7 +202,7 @@ export const AcionamentoForm = ({ onSuccess, onCancel }: Props) => {
               <FormItem>
                 <FormLabel>Encarregado</FormLabel>
                 <FormControl>
-                  <Input {...field} placeholder={encarregadoAuto ? `Sugestão: ${encarregadoAuto}` : ""} />
+                  <Input {...field} placeholder={encarregadoAuto ? `Sugesto: ${encarregadoAuto}` : ""} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -216,7 +220,7 @@ export const AcionamentoForm = ({ onSuccess, onCancel }: Props) => {
                     <SelectValue placeholder="Selecione" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="emergencia">Emergência</SelectItem>
+                    <SelectItem value="emergencia">Emergncia</SelectItem>
                     <SelectItem value="programado">Programado</SelectItem>
                   </SelectContent>
                 </Select>
@@ -230,14 +234,14 @@ export const AcionamentoForm = ({ onSuccess, onCancel }: Props) => {
             name="prioridade_nivel"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Nível</FormLabel>
+                <FormLabel>Nvel</FormLabel>
                 <Select value={field.value} onValueChange={field.onChange}>
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="normal">Normal</SelectItem>
-                    <SelectItem value="media">Média</SelectItem>
+                    <SelectItem value="media">Mdia</SelectItem>
                     <SelectItem value="alta">Alta</SelectItem>
                   </SelectContent>
                 </Select>
@@ -259,8 +263,8 @@ export const AcionamentoForm = ({ onSuccess, onCancel }: Props) => {
                   <SelectContent>
                     <SelectItem value="aberto">Aberto</SelectItem>
                     <SelectItem value="despachado">Despachado</SelectItem>
-                    <SelectItem value="em_execucao">Em execução</SelectItem>
-                    <SelectItem value="concluido">Concluído</SelectItem>
+                    <SelectItem value="em_execucao">Em execuo</SelectItem>
+                    <SelectItem value="concluido">Concludo</SelectItem>
                   </SelectContent>
                 </Select>
                 <FormMessage />
@@ -273,7 +277,7 @@ export const AcionamentoForm = ({ onSuccess, onCancel }: Props) => {
             name="municipio"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Município</FormLabel>
+                <FormLabel>Municpio</FormLabel>
                 <FormControl>
                   <Input {...field} />
                 </FormControl>
@@ -287,7 +291,7 @@ export const AcionamentoForm = ({ onSuccess, onCancel }: Props) => {
             name="endereco"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Endereço</FormLabel>
+                <FormLabel>Endereo</FormLabel>
                 <FormControl>
                   <Input {...field} />
                 </FormControl>
@@ -316,7 +320,7 @@ export const AcionamentoForm = ({ onSuccess, onCancel }: Props) => {
           name="observacao"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Observação</FormLabel>
+              <FormLabel>Observao</FormLabel>
               <FormControl>
                 <Textarea {...field} />
               </FormControl>

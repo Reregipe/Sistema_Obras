@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CheckCircle2, Clock, AlertCircle, FileText, Wrench, TrendingUp, ArrowRight, Loader2, Plus, Save, FileDown } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -42,7 +42,7 @@ const workflowSteps: WorkflowStep[] = [
   {
     id: 2,
     title: "Acionamentos executados",
-    description: "Servico em execucao ou despachado",
+    description: "Servico em execução ou despachado",
     icon: Wrench,
     color: "text-green-600",
     bgColor: "bg-green-50",
@@ -53,7 +53,7 @@ const workflowSteps: WorkflowStep[] = [
   {
     id: 3,
     title: "Medir servicos executados",
-    description: "Valorizar MO, ajustar materiais e registrar horario (orcamento)",
+    description: "Valorizar MO, ajustar materiais e registrar horario (orçamento)",
     icon: TrendingUp,
     color: "text-orange-600",
     bgColor: "bg-orange-50",
@@ -181,6 +181,50 @@ export const WorkflowSteps = () => {
   const [encarregadoNome, setEncarregadoNome] = useState<string>("");
   const [encarregadoSelecionado, setEncarregadoSelecionado] = useState<string>("");
   const [almoxConferido, setAlmoxConferido] = useState<boolean>(false);
+  const [execModalOpen, setExecModalOpen] = useState(false);
+  const [execLoading, setExecLoading] = useState(false);
+  const [execError, setExecError] = useState<string | null>(null);
+  const [execInfo, setExecInfo] = useState<string | null>(null);
+  const [execReadonly, setExecReadonly] = useState(false);
+  const emptyExec = {
+    km_inicial: "",
+    km_final: "",
+    km_total: "",
+    saida_base: "",
+    inicio_servico: "",
+    retorno_servico: "",
+    retorno_base: "",
+    troca_transformador: false,
+    trafo_ret_potencia: "",
+    trafo_ret_marca: "",
+    trafo_ret_ano: "",
+    trafo_ret_tensao_secundaria: "",
+    trafo_ret_tensao_primaria: "",
+    trafo_ret_numero_serie: "",
+    trafo_ret_patrimonio: "",
+    trafo_inst_potencia: "",
+    trafo_inst_marca: "",
+    trafo_inst_ano: "",
+    trafo_inst_tensao_secundaria: "",
+    trafo_inst_tensao_primaria: "",
+    trafo_inst_numero_serie: "",
+    trafo_inst_patrimonio: "",
+    tensao_an: "",
+    tensao_bn: "",
+    tensao_cn: "",
+    tensao_ab: "",
+    tensao_bc: "",
+    tensao_ca: "",
+    alimentador: "",
+    subestacao: "",
+    numero_transformador: "",
+    id_poste: "",
+    os_tablet: "",
+    ss_nota: "",
+    numero_intervencao: "",
+    observacoes: "",
+  };
+  const [execForm, setExecForm] = useState<any>(emptyExec);
 
   const makeId = () => {
     if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
@@ -250,9 +294,9 @@ export const WorkflowSteps = () => {
             }
           : prev
       );
-      setMaterialInfo("Avançado automaticamente para a Etapa 2.");
+      setMaterialInfo("Avanado automaticamente para a Etapa 2.");
     } catch (err: any) {
-      setMaterialError(err.message || "Erro ao avançar etapa.");
+      setMaterialError(err.message || "Erro ao avanar etapa.");
     }
   };
 
@@ -448,7 +492,7 @@ export const WorkflowSteps = () => {
       if (error) throw error;
       setAlmoxConferido(checked);
       if (podeAvancarEtapa1) {
-        setMaterialInfo("Conferido pelo almox e avançado para Etapa 2.");
+        setMaterialInfo("Conferido pelo almox e avanado para Etapa 2.");
         setSelectedStep((prev) => (prev && prev.id === 1 ? { ...prev, id: 2 } : prev));
         setSelectedItem((prev: any) =>
           prev
@@ -460,7 +504,7 @@ export const WorkflowSteps = () => {
             : prev
         );
       } else {
-        setMaterialInfo(checked ? "Conferido pelo almox." : "Marcação removida.");
+        setMaterialInfo(checked ? "Conferido pelo almox." : "Marcao removida.");
         setSelectedItem((prev: any) =>
           prev
             ? {
@@ -471,7 +515,135 @@ export const WorkflowSteps = () => {
         );
       }
     } catch (err: any) {
-      setMaterialError(err.message || "Erro ao marcar conferência do almox.");
+      setMaterialError(err.message || "Erro ao marcar conferncia do almox.");
+    }
+  };
+
+  const openExecModal = async (item: any) => {
+    setSelectedItem(item);
+    setExecModalOpen(true);
+    setExecLoading(true);
+    setExecError(null);
+    setExecInfo(null);
+    setExecReadonly(!!selectedStep && selectedStep.id >= 3);
+    setExecForm(emptyExec);
+    try {
+      const { data } = await supabase
+        .from("acionamento_execu??o")
+        .select("*")
+        .eq("id_acionamento", item.id_acionamento)
+        .maybeSingle();
+      if (data) {
+        setExecForm({
+          ...emptyExec,
+          ...data,
+          km_inicial: data.km_inicial ?? "",
+          km_final: data.km_final ?? "",
+          km_total: data.km_total ?? "",
+        });
+      }
+    } catch (err: any) {
+      setExecError(err.message || "Erro ao carregar dados da execuo.");
+    } finally {
+      setExecLoading(false);
+    }
+  };
+
+  const handleExecChange = (field: string, value: any) => {
+    setExecForm((prev: any) => {
+      const next = { ...prev, [field]: value };
+      if (field === "km_inicial" || field === "km_final") {
+        const ini = Number(field === "km_inicial" ? value : next.km_inicial);
+        const fin = Number(field === "km_final" ? value : next.km_final);
+        if (!isNaN(ini) && !isNaN(fin)) {
+          next.km_total = fin - ini;
+        }
+      }
+      return next;
+    });
+  };
+
+  const validateExecForm = () => {
+    const f = execForm || {};
+    const requiredBase = [
+      "km_inicial",
+      "km_final",
+      "saida_base",
+      "inicio_servico",
+      "retorno_servico",
+      "retorno_base",
+      "alimentador",
+      "subestacao",
+      "numero_transformador",
+      "id_poste",
+      "os_tablet",
+      "ss_nota",
+      "numero_intervencao",
+    ];
+    for (const key of requiredBase) {
+      if (!f[key] && f[key] !== 0) {
+        return "Preencha todos os campos obrigatrios da execuo.";
+      }
+    }
+    if (f.troca_transformador) {
+      const trafoFields = [
+        "trafo_ret_potencia",
+        "trafo_ret_marca",
+        "trafo_ret_ano",
+        "trafo_ret_tensao_secundaria",
+        "trafo_ret_tensao_primaria",
+        "trafo_ret_numero_serie",
+        "trafo_ret_patrimonio",
+        "trafo_inst_potencia",
+        "trafo_inst_marca",
+        "trafo_inst_ano",
+        "trafo_inst_tensao_secundaria",
+        "trafo_inst_tensao_primaria",
+        "trafo_inst_numero_serie",
+        "trafo_inst_patrimonio",
+        "tensao_an",
+        "tensao_bn",
+        "tensao_cn",
+        "tensao_ab",
+        "tensao_bc",
+        "tensao_ca",
+      ];
+      for (const key of trafoFields) {
+        if (!f[key] && f[key] !== 0) {
+          return "Preencha todos os dados do transformador e tenses.";
+        }
+      }
+    }
+    return null;
+  };
+
+  const saveExec = async () => {
+    if (!selectedItem) return;
+    setExecLoading(true);
+    setExecError(null);
+    setExecInfo(null);
+    const validation = validateExecForm();
+    if (validation) {
+      setExecError(validation);
+      setExecLoading(false);
+      return;
+    }
+    try {
+      const payload = {
+        ...execForm,
+        id_acionamento: selectedItem.id_acionamento,
+      };
+      await supabase.from("acionamento_execu??o").upsert(payload, { onConflict: "id_acionamento" });
+      await supabase
+        .from("acionamentos")
+        .update({ etapa_atual: 3 })
+        .eq("id_acionamento", selectedItem.id_acionamento);
+      setExecInfo("Dados da execuo salvos e etapa liberada.");
+      setExecReadonly(true);
+    } catch (err: any) {
+      setExecError(err.message || "Erro ao salvar dados da execuo.");
+    } finally {
+      setExecLoading(false);
     }
   };
 
@@ -485,6 +657,7 @@ export const WorkflowSteps = () => {
     setSucata([]);
     setEncarregadoNome("");
     setAlmoxConferido(false);
+    setExecModalOpen(false);
     try {
       const { data: pre } = await supabase
         .from("pre_lista_itens")
@@ -547,7 +720,7 @@ export const WorkflowSteps = () => {
           }))
         );
 
-        // Se não houver consumo salvo, usa pré-lista como base
+        // Se no houver consumo salvo, usa pr-lista como base
         if ((consumoList || []).length === 0 && enrichedPre.length > 0) {
           setConsumo(
             enrichedPre.map((p) => ({
@@ -627,7 +800,7 @@ export const WorkflowSteps = () => {
   const buscarPreMaterial = async () => {
     const data = await searchMaterial(preCodigo);
     if (!data || data.length === 0) {
-      setMaterialError("Material não encontrado para pré-lista.");
+      setMaterialError("Material no encontrado para pr-lista.");
       setPreMatEncontrado(null);
     } else {
       setMaterialError(null);
@@ -638,7 +811,7 @@ export const WorkflowSteps = () => {
   const buscarSucataMaterial = async () => {
     const data = await searchMaterial(sucataCodigo);
     if (!data || data.length === 0) {
-      setMaterialError("Material não encontrado para sucata.");
+      setMaterialError("Material no encontrado para sucata.");
       setSucataMatEncontrado(null);
     } else {
       setMaterialError(null);
@@ -649,7 +822,7 @@ export const WorkflowSteps = () => {
   const buscarConsumoMaterial = async () => {
     const data = await searchMaterial(consumoCodigo);
     if (!data || data.length === 0) {
-      setMaterialError("Material não encontrado para consumo.");
+      setMaterialError("Material no encontrado para consumo.");
       setConsumoMatEncontrado(null);
     } else {
       setMaterialError(null);
@@ -756,7 +929,7 @@ export const WorkflowSteps = () => {
 
     const finalY = (doc as any).lastAutoTable?.finalY || 24;
 
-    // Lista de encarregados em formato selecionável
+    // Lista de encarregados em formato selecionvel
     const encarregadoRaw = encarregadoSelecionado || encarregadoNome || selectedItem?.encarregado || "";
     const encarregadoAss = (uniqueEncarregados(encarregadoRaw)[0]) || "________________";
 
@@ -798,7 +971,7 @@ export const WorkflowSteps = () => {
       return;
     }
     if (!consumoQtd || consumoQtd < 0) {
-      setMaterialError("Informe quantidade válida para consumo.");
+      setMaterialError("Informe quantidade vlida para consumo.");
       return;
     }
     setMaterialError(null);
@@ -834,11 +1007,11 @@ export const WorkflowSteps = () => {
       return;
     }
     if (!sucataQtd || sucataQtd < 0) {
-      setMaterialError("Informe quantidade vǭlida para sucata.");
+      setMaterialError("Informe quantidade vlida para sucata.");
       return;
     }
     if (!sucataClassificacao) {
-      setMaterialError("Informe a classificação da sucata.");
+      setMaterialError("Informe a classificao da sucata.");
       return;
     }
     setMaterialError(null);
@@ -936,7 +1109,7 @@ export const WorkflowSteps = () => {
     setMaterialInfo(null);
     try {
       if (sucata.some((s) => !s.classificacao)) {
-        throw new Error("Defina a classificação para todos os itens de sucata.");
+        throw new Error("Defina a classificao para todos os itens de sucata.");
       }
       await supabase.from("sucata_itens").delete().eq("id_acionamento", selectedItem.id_acionamento);
       if (sucata.length > 0) {
@@ -985,7 +1158,7 @@ export const WorkflowSteps = () => {
     };
     return (
       <Badge variant="outline" className={cn("text-xs", statusMap[step.status])}>
-        {step.status === "completed" ? "Concluído" : step.status === "active" ? "Em andamento" : step.status === "alert" ? "Alerta" : "Pendente"}
+        {step.status === "completed" ? "Concludo" : step.status === "active" ? "Em andamento" : step.status === "alert" ? "Alerta" : "Pendente"}
       </Badge>
     );
   };
@@ -1017,7 +1190,7 @@ export const WorkflowSteps = () => {
               {item.codigo_acionamento || item.id_acionamento}
             </div>
             <div className="text-xs text-muted-foreground">
-              {item.municipio || "--"} • {item.modalidade || "--"}
+              {item.municipio || "--"}  {item.modalidade || "--"}
             </div>
           </div>
           <Badge variant="outline" className="capitalize">
@@ -1039,8 +1212,12 @@ export const WorkflowSteps = () => {
             size="sm"
             variant="outline"
             onClick={() => {
-              navigate(`/acionamentos/${item.codigo_acionamento || item.id_acionamento}`);
-              setOpen(false);
+              if (selectedStep?.id === 2) {
+                openExecModal(item);
+              } else {
+                navigate(`/acionamentos/${item.codigo_acionamento || item.id_acionamento}`);
+                setOpen(false);
+              }
             }}
           >
             Editar acionamento
@@ -1174,6 +1351,136 @@ export const WorkflowSteps = () => {
             </div>
           )}
           <div className="max-h-[65vh] overflow-y-auto pr-1 space-y-3">{renderItems()}</div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={execModalOpen} onOpenChange={setExecModalOpen} modal>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader className="text-center space-y-1 items-center">
+            <DialogTitle className="text-xl font-bold">{"Dados da Execu\u00e7\u00e3o do Acionamento"}</DialogTitle>
+            <DialogDescription>{"Preencha os dados de execu\u00e7\u00e3o. Edit\u00e1vel apenas na Etapa 2."}</DialogDescription>
+          </DialogHeader>
+
+          {execError && <div className="text-sm text-destructive">{execError}</div>}
+          {execInfo && <div className="text-sm text-emerald-600">{execInfo}</div>}
+
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div>
+                <Label>KM inicial</Label>
+                <Input type="number" value={execForm.km_inicial} disabled={execReadonly} onChange={(e) => handleExecChange('km_inicial', e.target.value)} />
+              </div>
+              <div>
+                <Label>KM final</Label>
+                <Input type="number" value={execForm.km_final} disabled={execReadonly} onChange={(e) => handleExecChange('km_final', e.target.value)} />
+              </div>
+              <div>
+                <Label>KM total</Label>
+                <Input type="number" value={execForm.km_total} disabled readOnly />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <Label>Sa?da da base</Label>
+                <Input type="datetime-local" value={execForm.saida_base} disabled={execReadonly} onChange={(e) => handleExecChange('saida_base', e.target.value)} />
+              </div>
+              <div>
+                <Label>In?cio do servi?o</Label>
+                <Input type="datetime-local" value={execForm.inicio_servico} disabled={execReadonly} onChange={(e) => handleExecChange('inicio_servico', e.target.value)} />
+              </div>
+              <div>
+                <Label>Retorno do servi?o</Label>
+                <Input type="datetime-local" value={execForm.retorno_servico} disabled={execReadonly} onChange={(e) => handleExecChange('retorno_servico', e.target.value)} />
+              </div>
+              <div>
+                <Label>Retorno ? base</Label>
+                <Input type="datetime-local" value={execForm.retorno_base} disabled={execReadonly} onChange={(e) => handleExecChange('retorno_base', e.target.value)} />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Houve troca de transformador?</Label>
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-1 text-sm">
+                  <input type="radio" name="trocaTrafo" checked={!!execForm.troca_transformador} disabled={execReadonly} onChange={() => handleExecChange('troca_transformador', true)} /> Sim
+                </label>
+                <label className="flex items-center gap-1 text-sm">
+                  <input type="radio" name="trocaTrafo" checked={!execForm.troca_transformador} disabled={execReadonly} onChange={() => handleExecChange('troca_transformador', false)} /> N?o
+                </label>
+              </div>
+            </div>
+
+            {execForm.troca_transformador && (
+              <div className="space-y-4">
+                <div className="rounded-md border p-3 space-y-2">
+                  <h4 className="font-semibold text-sm">Transformador retirado</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div><Label>Pot?ncia</Label><Input value={execForm.trafo_ret_potencia} disabled={execReadonly} onChange={(e) => handleExecChange('trafo_ret_potencia', e.target.value)} /></div>
+                    <div><Label>Marca</Label><Input value={execForm.trafo_ret_marca} disabled={execReadonly} onChange={(e) => handleExecChange('trafo_ret_marca', e.target.value)} /></div>
+                    <div><Label>Ano</Label><Input value={execForm.trafo_ret_ano} disabled={execReadonly} onChange={(e) => handleExecChange('trafo_ret_ano', e.target.value)} /></div>
+                    <div><Label>Tens?o secund\u00c3\u00a1ria</Label><Input value={execForm.trafo_ret_tensao_secundaria} disabled={execReadonly} onChange={(e) => handleExecChange('trafo_ret_tensao_secundaria', e.target.value)} /></div>
+                    <div><Label>Tens?o prim\u00c3\u00a1ria</Label><Input value={execForm.trafo_ret_tensao_primaria} disabled={execReadonly} onChange={(e) => handleExecChange('trafo_ret_tensao_primaria', e.target.value)} /></div>
+                    <div><Label>N\u00c3\u00bamero de s\u00c3\u00a9rie</Label><Input value={execForm.trafo_ret_numero_serie} disabled={execReadonly} onChange={(e) => handleExecChange('trafo_ret_numero_serie', e.target.value)} /></div>
+                    <div><Label>Patrim?nio</Label><Input value={execForm.trafo_ret_patrimonio} disabled={execReadonly} onChange={(e) => handleExecChange('trafo_ret_patrimonio', e.target.value)} /></div>
+                  </div>
+                </div>
+
+                <div className="rounded-md border p-3 space-y-2">
+                  <h4 className="font-semibold text-sm">Transformador instalado</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div><Label>Pot?ncia</Label><Input value={execForm.trafo_inst_potencia} disabled={execReadonly} onChange={(e) => handleExecChange('trafo_inst_potencia', e.target.value)} /></div>
+                    <div><Label>Marca</Label><Input value={execForm.trafo_inst_marca} disabled={execReadonly} onChange={(e) => handleExecChange('trafo_inst_marca', e.target.value)} /></div>
+                    <div><Label>Ano</Label><Input value={execForm.trafo_inst_ano} disabled={execReadonly} onChange={(e) => handleExecChange('trafo_inst_ano', e.target.value)} /></div>
+                    <div><Label>Tens?o secund\u00c3\u00a1ria</Label><Input value={execForm.trafo_inst_tensao_secundaria} disabled={execReadonly} onChange={(e) => handleExecChange('trafo_inst_tensao_secundaria', e.target.value)} /></div>
+                    <div><Label>Tens?o prim\u00c3\u00a1ria</Label><Input value={execForm.trafo_inst_tensao_primaria} disabled={execReadonly} onChange={(e) => handleExecChange('trafo_inst_tensao_primaria', e.target.value)} /></div>
+                    <div><Label>N\u00c3\u00bamero de s\u00c3\u00a9rie</Label><Input value={execForm.trafo_inst_numero_serie} disabled={execReadonly} onChange={(e) => handleExecChange('trafo_inst_numero_serie', e.target.value)} /></div>
+                    <div><Label>Patrim?nio</Label><Input value={execForm.trafo_inst_patrimonio} disabled={execReadonly} onChange={(e) => handleExecChange('trafo_inst_patrimonio', e.target.value)} /></div>
+                  </div>
+                </div>
+
+                <div className="rounded-md border p-3 space-y-2">
+                  <h4 className="font-semibold text-sm">Tens?es</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div><Label>A\u00e2\u20ac\u201cN</Label><Input value={execForm.tensao_an} disabled={execReadonly} onChange={(e) => handleExecChange('tensao_an', e.target.value)} /></div>
+                    <div><Label>B\u00e2\u20ac\u201cN</Label><Input value={execForm.tensao_bn} disabled={execReadonly} onChange={(e) => handleExecChange('tensao_bn', e.target.value)} /></div>
+                    <div><Label>C\u00e2\u20ac\u201cN</Label><Input value={execForm.tensao_cn} disabled={execReadonly} onChange={(e) => handleExecChange('tensao_cn', e.target.value)} /></div>
+                    <div><Label>A\u00e2\u20ac\u201cB</Label><Input value={execForm.tensao_ab} disabled={execReadonly} onChange={(e) => handleExecChange('tensao_ab', e.target.value)} /></div>
+                    <div><Label>B\u00e2\u20ac\u201cC</Label><Input value={execForm.tensao_bc} disabled={execReadonly} onChange={(e) => handleExecChange('tensao_bc', e.target.value)} /></div>
+                    <div><Label>C\u00e2\u20ac\u201cA</Label><Input value={execForm.tensao_ca} disabled={execReadonly} onChange={(e) => handleExecChange('tensao_ca', e.target.value)} /></div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div><Label>Alimentador</Label><Input value={execForm.alimentador} disabled={execReadonly} onChange={(e) => handleExecChange('alimentador', e.target.value)} /></div>
+              <div><Label>Subesta??o</Label><Input value={execForm.subestacao} disabled={execReadonly} onChange={(e) => handleExecChange('subestacao', e.target.value)} /></div>
+              <div><Label>N? do transformador</Label><Input value={execForm.numero_transformador} disabled={execReadonly} onChange={(e) => handleExecChange('numero_transformador', e.target.value)} /></div>
+              <div><Label>ID do poste</Label><Input value={execForm.id_poste} disabled={execReadonly} onChange={(e) => handleExecChange('id_poste', e.target.value)} /></div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div><Label>OS tablet</Label><Input value={execForm.os_tablet} disabled={execReadonly} onChange={(e) => handleExecChange('os_tablet', e.target.value)} /></div>
+              <div><Label>SS (Nota)</Label><Input value={execForm.ss_nota} disabled={execReadonly} onChange={(e) => handleExecChange('ss_nota', e.target.value)} /></div>
+              <div><Label>N? da interven\u00c3\u00a7\u00c3\u00a3o</Label><Input value={execForm.numero_intervencao} disabled={execReadonly} onChange={(e) => handleExecChange('numero_intervencao', e.target.value)} /></div>
+            </div>
+
+            <div>
+              <Label>Observa??es gerais</Label>
+              <textarea className="w-full border rounded-md px-3 py-2 text-sm min-h-[90px]" value={execForm.observacoes} disabled={execReadonly} onChange={(e) => handleExecChange('observacoes', e.target.value)} />
+            </div>
+          </div>
+
+          <DialogFooter className="flex gap-2 justify-end">
+            <Button variant="outline" onClick={() => setExecModalOpen(false)} disabled={execLoading}>Fechar</Button>
+            {execReadonly ? null : (
+              <Button onClick={saveExec} disabled={execLoading}>
+                {execLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+                Salvar
+              </Button>
+            )}
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
