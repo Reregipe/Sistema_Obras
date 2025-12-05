@@ -140,6 +140,8 @@ const workflowSteps: WorkflowStep[] = [
   },
 ];
 
+const CLASSIFICACOES_SUCATA = ["sucata", "reforma", "bom", "descarte"];
+
 export const WorkflowSteps = () => {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
@@ -166,6 +168,7 @@ export const WorkflowSteps = () => {
   const [loadingSugestoesPre, setLoadingSugestoesPre] = useState(false);
   const [sucataCodigo, setSucataCodigo] = useState("");
   const [sucataQtd, setSucataQtd] = useState<number>(1);
+  const [sucataClassificacao, setSucataClassificacao] = useState<string>(CLASSIFICACOES_SUCATA[0]);
   const [sucataSugestoes, setSucataSugestoes] = useState<any[]>([]);
   const [sucataMatEncontrado, setSucataMatEncontrado] = useState<any | null>(null);
   const [loadingSugestoesSucata, setLoadingSugestoesSucata] = useState(false);
@@ -343,8 +346,28 @@ export const WorkflowSteps = () => {
       const found = matMap.get(p.codigo_material) || {};
       return {
         ...p,
-        descricao_item: found.descricao || "",
-        unidade_medida: found.unidade_medida || "",
+        descricao_item: p.descricao_item || found.descricao || "",
+        unidade_medida: p.unidade_medida || found.unidade_medida || "",
+      };
+    });
+  };
+
+  const enrichMateriais = async (lista: any[]) => {
+    if (!lista || lista.length === 0) return [];
+    const codigos = Array.from(new Set(lista.map((p: any) => p.codigo_material).filter(Boolean)));
+    if (codigos.length === 0) return lista;
+    const { data: mats } = await supabase
+      .from("materiais")
+      .select("codigo_material,descricao,unidade_medida")
+      .in("codigo_material", codigos);
+    const matMap = new Map((mats || []).map((m: any) => [m.codigo_material, m]));
+    return (lista || []).map((p: any) => {
+      const found = matMap.get(p.codigo_material) || {};
+      return {
+        ...p,
+        descricao_item: p.descricao_item || found.descricao || "",
+        unidade_medida: p.unidade_medida || found.unidade_medida || "",
+        descricao: p.descricao || found.descricao || "",
       };
     });
   };
@@ -524,18 +547,32 @@ export const WorkflowSteps = () => {
           }))
         );
 
+        // Se não houver consumo salvo, usa pré-lista como base
+        if ((consumoList || []).length === 0 && enrichedPre.length > 0) {
+          setConsumo(
+            enrichedPre.map((p) => ({
+              codigo_material: p.codigo_material,
+              descricao_item: p.descricao_item || "",
+              unidade_medida: p.unidade_medida || "",
+              quantidade: Number(p.quantidade_prevista || 0),
+            }))
+          );
+        }
+
         const { data: sucataList } = await supabase
           .from("sucata_itens")
-          .select("id,codigo_material,quantidade_retirada,criado_em")
+          .select("id,codigo_material,quantidade_retirada,criado_em,classificacao")
           .eq("id_acionamento", item.id_acionamento)
           .order("criado_em", { ascending: false });
-        setSucata(
+        const enrichedSucata = await enrichMateriais(
           (sucataList || []).map((s) => ({
             id: s.id,
             codigo_material: s.codigo_material,
             quantidade: Number(s.quantidade_retirada || 0),
+            classificacao: s.classificacao || "",
           }))
         );
+        setSucata(enrichedSucata);
       }
     } catch (err: any) {
       setMaterialError(err.message || "Erro ao carregar listas.");
@@ -800,12 +837,22 @@ export const WorkflowSteps = () => {
       setMaterialError("Informe quantidade vǭlida para sucata.");
       return;
     }
+    if (!sucataClassificacao) {
+      setMaterialError("Informe a classificação da sucata.");
+      return;
+    }
     setMaterialError(null);
     setSucata((prev) =>
       prev.some((i) => i.codigo_material === sucataMatEncontrado.codigo_material)
         ? prev.map((i) =>
             i.codigo_material === sucataMatEncontrado.codigo_material
-              ? { ...i, quantidade: i.quantidade + sucataQtd }
+              ? {
+                  ...i,
+                  quantidade: i.quantidade + sucataQtd,
+                  classificacao: sucataClassificacao,
+                  descricao_item: i.descricao_item || sucataMatEncontrado.descricao || "",
+                  unidade_medida: i.unidade_medida || sucataMatEncontrado.unidade_medida || "",
+                }
               : i
           )
         : [
@@ -813,12 +860,16 @@ export const WorkflowSteps = () => {
             {
               codigo_material: sucataMatEncontrado.codigo_material,
               quantidade: sucataQtd,
+              classificacao: sucataClassificacao,
+              descricao_item: sucataMatEncontrado.descricao || "",
+              unidade_medida: sucataMatEncontrado.unidade_medida || "",
             },
           ]
     );
     setSucataCodigo("");
     setSucataMatEncontrado(null);
     setSucataQtd(1);
+    setSucataClassificacao(CLASSIFICACOES_SUCATA[0]);
   };
 
   const handleRemoveSucata = (codigo: string) => {
@@ -837,6 +888,14 @@ export const WorkflowSteps = () => {
     setSucata((prev) =>
       prev.map((c) =>
         c.codigo_material === codigo ? { ...c, quantidade: valor >= 0 ? valor : 0 } : c
+      )
+    );
+  };
+
+  const handleUpdateSucataClassificacao = (codigo: string, cls: string) => {
+    setSucata((prev) =>
+      prev.map((c) =>
+        c.codigo_material === codigo ? { ...c, classificacao: cls } : c
       )
     );
   };
@@ -876,12 +935,16 @@ export const WorkflowSteps = () => {
     setMaterialError(null);
     setMaterialInfo(null);
     try {
+      if (sucata.some((s) => !s.classificacao)) {
+        throw new Error("Defina a classificação para todos os itens de sucata.");
+      }
       await supabase.from("sucata_itens").delete().eq("id_acionamento", selectedItem.id_acionamento);
       if (sucata.length > 0) {
         const payload = sucata.map((s) => ({
           id_acionamento: selectedItem.id_acionamento,
           codigo_material: s.codigo_material,
           quantidade_retirada: s.quantidade,
+          classificacao: s.classificacao || null,
         }));
         const { error } = await supabase.from("sucata_itens").insert(payload);
         if (error) throw error;
@@ -1291,89 +1354,46 @@ export const WorkflowSteps = () => {
                 </div>
             </div>
           ) : (
-            <div className="space-y-6">
-              <div>
-                <h4 className="text-sm font-semibold mb-2">Pre-lista (referencia)</h4>
-                {preLista.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Nenhuma pre-lista encontrada.</p>
-                ) : (
-                  <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Codigo</TableHead>
-                        <TableHead>Descricao</TableHead>
-                        <TableHead>Unidade</TableHead>
-                        <TableHead>Qtd prevista</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {preLista.map((p) => (
-                        <TableRow key={p.codigo_material}>
-                          <TableCell>{p.codigo_material}</TableCell>
-                          <TableCell>{p.descricao_item || "-"}</TableCell>
-                          <TableCell>{p.unidade_medida || "-"}</TableCell>
-                          <TableCell className="max-w-[140px]">
-                            <Input
-                              type="number"
-                              min={0}
-                              step={0.01}
-                              value={p.quantidade_prevista}
-                              onChange={(e) =>
-                                handleUpdatePreQuantidade(p.codigo_material, Number(e.target.value))
-                              }
-                            />
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                  </div>
-                )}
-              </div>
-
-                  <div className="space-y-3">
-                    <h4 className="text-sm font-semibold">Materiais utilizados (consumo real)</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end mt-4">
-                      <div className="md:col-span-3">
-                        <Label>Codigo ou descricao</Label>
-                        <Input
-                          value={consumoCodigo}
-                          onChange={(e) => setConsumoCodigo(e.target.value)}
-                          placeholder="Ex.: MAT-001 ou parte da descricao"
-                        />
-                        {loadingSugestoesConsumo && (
-                          <p className="text-xs text-muted-foreground mt-1">Buscando...</p>
-                        )}
-                        {consumoSugestoes.length > 0 && (
-                          <div className="mt-1 rounded-md border bg-background shadow-sm max-h-40 overflow-y-auto">
-                            {consumoSugestoes.map((m: any) => (
-                              <button
-                                key={m.codigo_material}
-                                type="button"
-                                className="w-full text-left px-3 py-2 text-sm hover:bg-muted"
-                                onClick={() => handleSelectConsumoSugestao(m)}
-                              >
-                                {m.codigo_material} - {m.descricao} ({m.unidade_medida})
-                              </button>
-                            ))}
-                          </div>
-                        )}
+            <div className="space-y-4">
+              <div className="rounded-xl border bg-card shadow-sm p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-semibold">Material aplicado (consumo real)</h4>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+                  <div className="md:col-span-3">
+                    <Label>Codigo ou descricao</Label>
+                    <Input
+                      value={consumoCodigo}
+                      onChange={(e) => setConsumoCodigo(e.target.value)}
+                      placeholder="Ex.: MAT-001 ou parte da descricao"
+                    />
+                    {loadingSugestoesConsumo && <p className="text-xs text-muted-foreground mt-1">Buscando...</p>}
+                    {consumoSugestoes.length > 0 && (
+                      <div className="mt-1 rounded-md border bg-background shadow-sm max-h-40 overflow-y-auto">
+                        {consumoSugestoes.map((m: any) => (
+                          <button
+                            key={m.codigo_material}
+                            type="button"
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-muted"
+                            onClick={() => handleSelectConsumoSugestao(m)}
+                          >
+                            {m.codigo_material} - {m.descricao} ({m.unidade_medida})
+                          </button>
+                        ))}
                       </div>
-                      <div>
-                        <Label>Quantidade</Label>
-                        <Input
-                          type="number"
+                    )}
+                  </div>
+                  <div>
+                    <Label>Quantidade</Label>
+                    <Input
+                      type="number"
                       min={0}
                       step={0.01}
                       value={consumoQtd}
                       onChange={(e) => setConsumoQtd(Number(e.target.value))}
                     />
                   </div>
-                  <div className="flex items-end gap-2">
-                    <Button variant="outline" onClick={buscarConsumoMaterial}>
-                      Buscar
-                    </Button>
+                  <div className="flex items-end">
                     <Button onClick={handleAddConsumoItem} disabled={!consumoMatEncontrado}>
                       <Plus className="h-4 w-4 mr-2" /> Adicionar
                     </Button>
@@ -1387,91 +1407,102 @@ export const WorkflowSteps = () => {
                 {consumo.length === 0 ? (
                   <p className="text-sm text-muted-foreground">Nenhum item de consumo.</p>
                 ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Codigo</TableHead>
-                        <TableHead>Descricao</TableHead>
-                        <TableHead>Unidade</TableHead>
-                        <TableHead>Quantidade</TableHead>
-                        <TableHead className="text-right"></TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {consumo.map((c) => (
-                        <TableRow key={c.codigo_material}>
-                          <TableCell>{c.codigo_material}</TableCell>
-                          <TableCell>{c.descricao_item}</TableCell>
-                          <TableCell>{c.unidade_medida}</TableCell>
-                          <TableCell>
-                            <Input
-                              type="number"
-                              min={0}
-                              step={0.01}
-                              value={c.quantidade}
-                              onChange={(e) => handleUpdateConsumoQuantidade(c.codigo_material, Number(e.target.value))}
-                            />
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Button variant="ghost" size="sm" onClick={() => handleRemoveConsumo(c.codigo_material)}>
-                              Remover
-                            </Button>
-                          </TableCell>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Codigo</TableHead>
+                          <TableHead>Descricao</TableHead>
+                          <TableHead>Unidade</TableHead>
+                          <TableHead>Quantidade</TableHead>
+                          <TableHead className="text-right"></TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {consumo.map((c) => (
+                          <TableRow key={c.codigo_material}>
+                            <TableCell>{c.codigo_material}</TableCell>
+                            <TableCell>{c.descricao_item}</TableCell>
+                            <TableCell>{c.unidade_medida}</TableCell>
+                            <TableCell>
+                              <Input
+                                type="number"
+                                min={0}
+                                step={0.01}
+                                value={c.quantidade}
+                                onChange={(e) => handleUpdateConsumoQuantidade(c.codigo_material, Number(e.target.value))}
+                              />
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <Button variant="ghost" size="sm" onClick={() => handleRemoveConsumo(c.codigo_material)}>
+                                Remover
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                 )}
                 <div className="flex flex-col sm:flex-row sm:justify-end gap-2">
                   <Button onClick={saveConsumo} disabled={savingConsumo}>
                     {savingConsumo ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
-                    Salvar consumo
+                    Salvar
                   </Button>
                 </div>
               </div>
 
-                    <div className="space-y-3">
-                      <h4 className="text-sm font-semibold">Materiais retirados (sucata)</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end mt-4">
-                        <div className="md:col-span-3">
-                        <Label>Codigo ou descricao</Label>
-                        <Input
-                          value={sucataCodigo}
-                          onChange={(e) => setSucataCodigo(e.target.value)}
-                          placeholder="Ex.: MAT-001 ou parte da descricao"
-                        />
-                        {loadingSugestoesSucata && (
-                          <p className="text-xs text-muted-foreground mt-1">Buscando...</p>
-                        )}
-                        {sucataSugestoes.length > 0 && (
-                          <div className="mt-1 rounded-md border bg-background shadow-sm max-h-40 overflow-y-auto">
-                            {sucataSugestoes.map((m: any) => (
-                              <button
-                                key={m.codigo_material}
-                                type="button"
-                                className="w-full text-left px-3 py-2 text-sm hover:bg-muted"
-                                onClick={() => handleSelectSucataSugestao(m)}
-                              >
-                                {m.codigo_material} - {m.descricao} ({m.unidade_medida})
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                        </div>
-                        <div>
-                          <Label>Quantidade</Label>
-                          <Input
-                            type="number"
+              <div className="rounded-xl border bg-card shadow-sm p-4 space-y-3">
+                <h4 className="text-sm font-semibold">Materiais retirados (sucata)</h4>
+                <div className="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
+                  <div className="md:col-span-3">
+                    <Label>Codigo ou descricao</Label>
+                    <Input
+                      value={sucataCodigo}
+                      onChange={(e) => setSucataCodigo(e.target.value)}
+                      placeholder="Ex.: MAT-001 ou parte da descricao"
+                    />
+                    {loadingSugestoesSucata && <p className="text-xs text-muted-foreground mt-1">Buscando...</p>}
+                    {sucataSugestoes.length > 0 && (
+                      <div className="mt-1 rounded-md border bg-background shadow-sm max-h-40 overflow-y-auto">
+                        {sucataSugestoes.map((m: any) => (
+                          <button
+                            key={m.codigo_material}
+                            type="button"
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-muted"
+                            onClick={() => handleSelectSucataSugestao(m)}
+                          >
+                            {m.codigo_material} - {m.descricao} ({m.unidade_medida})
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <Label>Quantidade</Label>
+                    <Input
+                      type="number"
                       min={0}
                       step={0.01}
                       value={sucataQtd}
                       onChange={(e) => setSucataQtd(Number(e.target.value))}
                     />
                   </div>
-                  <div className="flex items-end gap-2">
-                    <Button variant="outline" onClick={buscarSucataMaterial}>
-                      Buscar
-                    </Button>
+                  <div>
+                    <Label>Classificacao</Label>
+                    <select
+                      className="border rounded-md px-3 py-2 text-sm w-full"
+                      value={sucataClassificacao}
+                      onChange={(e) => setSucataClassificacao(e.target.value)}
+                    >
+                      {CLASSIFICACOES_SUCATA.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex items-end">
                     <Button variant="destructive" onClick={handleAddSucataItem} disabled={!sucataMatEncontrado}>
                       <Plus className="h-4 w-4 mr-2" /> Adicionar sucata
                     </Button>
@@ -1485,41 +1516,62 @@ export const WorkflowSteps = () => {
                 {sucata.length === 0 ? (
                   <p className="text-sm text-muted-foreground">Nenhum item de sucata.</p>
                 ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Codigo</TableHead>
-                        <TableHead>Quantidade</TableHead>
-                        <TableHead className="text-right"></TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {sucata.map((s) => (
-                        <TableRow key={s.codigo_material}>
-                          <TableCell>{s.codigo_material}</TableCell>
-                          <TableCell>
-                            <Input
-                              type="number"
-                              min={0}
-                              step={0.01}
-                              value={s.quantidade}
-                              onChange={(e) => handleUpdateSucataQuantidade(s.codigo_material, Number(e.target.value))}
-                            />
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Button variant="ghost" size="sm" onClick={() => handleRemoveSucata(s.codigo_material)}>
-                              Remover
-                            </Button>
-                          </TableCell>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Codigo</TableHead>
+                          <TableHead>Descricao</TableHead>
+                          <TableHead>Unidade</TableHead>
+                          <TableHead>Quantidade</TableHead>
+                          <TableHead>Classificacao</TableHead>
+                          <TableHead className="text-right"></TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {sucata.map((s) => (
+                          <TableRow key={`${s.codigo_material}-${s.classificacao ?? ""}`}>
+                            <TableCell>{s.codigo_material}</TableCell>
+                            <TableCell>{s.descricao_item || s.descricao || "-"}</TableCell>
+                            <TableCell>{s.unidade_medida || "-"}</TableCell>
+                            <TableCell>
+                              <Input
+                                type="number"
+                                min={0}
+                                step={0.01}
+                                value={s.quantidade}
+                                onChange={(e) => handleUpdateSucataQuantidade(s.codigo_material, Number(e.target.value))}
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <select
+                                className="border rounded-md px-2 py-1 text-sm w-full"
+                                value={s.classificacao || ""}
+                                onChange={(e) => handleUpdateSucataClassificacao(s.codigo_material, e.target.value)}
+                              >
+                                <option value="">Selecione</option>
+                                {CLASSIFICACOES_SUCATA.map((c) => (
+                                  <option key={c} value={c}>
+                                    {c}
+                                  </option>
+                                ))}
+                              </select>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <Button variant="ghost" size="sm" onClick={() => handleRemoveSucata(s.codigo_material)}>
+                                Remover
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                 )}
                 <div className="flex flex-col sm:flex-row sm:justify-end gap-2">
                   <Button variant="destructive" onClick={saveSucata} disabled={savingSucata}>
                     {savingSucata ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
-                    Salvar sucata
+                    Salvar
                   </Button>
                 </div>
               </div>
