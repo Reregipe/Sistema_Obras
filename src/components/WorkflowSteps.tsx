@@ -452,6 +452,14 @@ export const WorkflowSteps = () => {
 
   const [execForm, setExecForm] = useState<any>(emptyExec);
 
+  const toInputDateTime = (value?: string | null) => {
+    if (!value) return "";
+    const d = new Date(value);
+    if (isNaN(d.getTime())) return "";
+    // datetime-local expects yyyy-MM-ddTHH:mm
+    return d.toISOString().slice(0, 16);
+  };
+
 
 
   const makeId = () => {
@@ -1077,6 +1085,14 @@ export const WorkflowSteps = () => {
           km_final: data.km_final ?? "",
 
           km_total: data.km_total ?? "",
+
+          saida_base: toInputDateTime(data.saida_base),
+
+          inicio_servico: toInputDateTime(data.inicio_servico),
+
+          retorno_servico: toInputDateTime(data.retorno_servico),
+
+          retorno_base: toInputDateTime(data.retorno_base),
 
         });
 
