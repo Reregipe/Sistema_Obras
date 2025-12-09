@@ -1059,13 +1059,9 @@ export const WorkflowSteps = () => {
     try {
 
       const { data } = await supabase
-
-        .from("acionamento_execu??o")
-
+        .from("acionamento_execucao")
         .select("*")
-
         .eq("id_acionamento", item.id_acionamento)
-
         .maybeSingle();
 
       if (data) {
@@ -1088,7 +1084,7 @@ export const WorkflowSteps = () => {
 
     } catch (err: any) {
 
-      setExecError(err.message || "Erro ao carregar dados da execuo.");
+      setExecError(err.message || "Erro ao carregar dados da execução.");
 
     } finally {
 
