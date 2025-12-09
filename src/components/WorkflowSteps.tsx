@@ -1251,14 +1251,15 @@ export const WorkflowSteps = () => {
     try {
 
       const payload = {
-
         ...execForm,
-
+        os_tablet: execForm.os_tablet || null,
+        ss_nota: execForm.ss_nota || null,
+        numero_intervencao: execForm.numero_intervencao || null,
+        observacoes: execForm.observacoes || null,
         id_acionamento: selectedItem.id_acionamento,
-
       };
 
-      await supabase.from("acionamento_execu??o").upsert(payload, { onConflict: "id_acionamento" });
+      await supabase.from("acionamento_execucao").upsert(payload, { onConflict: "id_acionamento" });
 
       await supabase
 
@@ -1268,13 +1269,13 @@ export const WorkflowSteps = () => {
 
         .eq("id_acionamento", selectedItem.id_acionamento);
 
-      setExecInfo("Dados da execuo salvos e etapa liberada.");
+      setExecInfo("Dados da execução salvos e etapa liberada.");
 
       setExecReadonly(true);
 
     } catch (err: any) {
 
-      setExecError(err.message || "Erro ao salvar dados da execuo.");
+      setExecError(err.message || "Erro ao salvar dados da execução.");
 
     } finally {
 
