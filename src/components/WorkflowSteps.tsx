@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -374,6 +374,20 @@ export const WorkflowSteps = () => {
 
   const [execReadonly, setExecReadonly] = useState(false);
 
+  // Etapa 3 - Medição / Orçamento (sem persistência)
+  const [medicaoModalOpen, setMedicaoModalOpen] = useState(false);
+  const [medicaoTab, setMedicaoTab] = useState<"LM" | "LV">("LM");
+  const [medicaoCatalogo, setMedicaoCatalogo] = useState<any[]>([]);
+  const [medicaoBusca, setMedicaoBusca] = useState("");
+  const [medicaoForaHC, setMedicaoForaHC] = useState(false);
+  const [medicaoAdicional, setMedicaoAdicional] = useState<number>(0);
+  const [medicaoValorUpsLM, setMedicaoValorUpsLM] = useState<number>(119.62);
+  const [medicaoValorUpsLV, setMedicaoValorUpsLV] = useState<number>(357.78);
+  const [medicaoItens, setMedicaoItens] = useState<Record<"LM" | "LV", any[]>>({
+    LM: [],
+    LV: [],
+  });
+
   const emptyExec = {
 
     km_inicial: "",
@@ -458,6 +472,440 @@ export const WorkflowSteps = () => {
     if (isNaN(d.getTime())) return "";
     // datetime-local expects yyyy-MM-ddTHH:mm
     return d.toISOString().slice(0, 16);
+  };
+
+  // ---------- Medição / Orçamento (Etapa 3 - sem persistência) ----------
+  const loadCatalogoMO = useCallback(async () => {
+    try {
+      const { data } = await supabase
+        .from("codigos_mao_de_obra")
+        .select("codigo_mao_de_obra,descricao,unidade,ups,tipo,operacao,ativo")
+        .order("codigo_mao_de_obra");
+      const ativos = (data || []).filter((m: any) => (m.ativo || "S") !== "N");
+      setMedicaoCatalogo(ativos as any[]);
+    } catch {
+      // falha silenciosa para não travar o modal
+      setMedicaoCatalogo([]);
+    }
+  }, []);
+
+  const openMedicaoModal = async (item: any) => {
+    setSelectedItem(item);
+    const mod = (item.modalidade || "LM").toUpperCase();
+    const initialTab: "LM" | "LV" = mod === "LM+LV" ? "LM" : (mod as "LM" | "LV");
+    setMedicaoTab(initialTab);
+    setMedicaoModalOpen(true);
+    // Carrega valores UPS em reais das configurações
+    try {
+      const { data: configs } = await supabase
+        .from("system_settings")
+        .select("chave, valor")
+        .in("chave", ["ups_valor_lm", "ups_valor_lv"]);
+      if (configs) {
+        const lmConfig = configs.find((c) => c.chave === "ups_valor_lm");
+        const lvConfig = configs.find((c) => c.chave === "ups_valor_lv");
+        if (lmConfig) setMedicaoValorUpsLM(Number(lmConfig.valor) || 119.62);
+        if (lvConfig) setMedicaoValorUpsLV(Number(lvConfig.valor) || 357.78);
+      }
+    } catch {
+      // Usa valores padrão em caso de erro
+    }
+    await loadCatalogoMO();
+  };
+
+  const handleAddMedicaoItem = (mo: any) => {
+    const codigo = mo.codigo_mao_de_obra;
+    const jaExiste = medicaoItens[medicaoTab]?.some((i: any) => i.codigo === codigo);
+    if (jaExiste) {
+      setMaterialError(`Código ${codigo} já foi adicionado à medição.`);
+      return;
+    }
+    const upsValue = Number(mo.ups) || 0;
+    const novo = {
+      codigo,
+      descricao: mo.descricao || "",
+      unidade: mo.unidade || mo.tipo || "",
+      fracao: upsValue,
+      valorUps: upsValue,
+      quantidade: 1,
+    };
+    setMedicaoItens((prev) => ({
+      ...prev,
+      [medicaoTab]: [...prev[medicaoTab], novo],
+    }));
+    setMaterialError(null);
+  };
+
+  const handleQtdMedicao = (codigo: string, qtd: number) => {
+    setMedicaoItens((prev) => ({
+      ...prev,
+      [medicaoTab]: prev[medicaoTab].map((i) =>
+        i.codigo === codigo ? { ...i, quantidade: qtd } : i
+      ),
+    }));
+  };
+
+  const handleFracaoMedicao = (codigo: string, fr: number) => {
+    setMedicaoItens((prev) => ({
+      ...prev,
+      [medicaoTab]: prev[medicaoTab].map((i) =>
+        i.codigo === codigo ? { ...i, fracao: fr } : i
+      ),
+    }));
+  };
+
+  const handleRemoveMedicao = (codigo: string) => {
+    setMedicaoItens((prev) => ({
+      ...prev,
+      [medicaoTab]: prev[medicaoTab].filter((i) => i.codigo !== codigo),
+    }));
+  };
+
+  const subtotalMedicao = (i: any) => {
+    const valorUpsConfig = medicaoTab === "LM" ? medicaoValorUpsLM : medicaoValorUpsLV;
+    const base = (Number(i.quantidade) || 0) * (Number(i.valorUps) || 0) * valorUpsConfig;
+    // Aplica adicional em todos os itens
+    if (medicaoForaHC) {
+      return base * 1.30; // +30% fora HC
+    }
+    // Horário comercial: +12%
+    return base * 1.12;
+  };
+
+  const totalAbaMedicao = (tabKey: "LM" | "LV") => {
+    const soma = (medicaoItens[tabKey] || []).reduce((acc, i) => acc + subtotalMedicao(i), 0);
+    return medicaoForaHC ? soma * (1 + (medicaoAdicional || 0) / 100) : soma;
+  };
+
+  const materiaisReferencia = consumo || [];
+
+  const gerarOrcamento = async () => {
+    if (!selectedItem) return;
+    
+    // Busca dados de execução para incluir informações de transformador
+    let dadosExec: any = null;
+    try {
+      const { data } = await supabase
+        .from("acionamento_execucao")
+        .select("*")
+        .eq("id_acionamento", selectedItem.id_acionamento)
+        .maybeSingle();
+      dadosExec = data;
+    } catch {
+      // Se não houver dados, continua sem
+    }
+    
+    const doc = new jsPDF("landscape");
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const orangeColor = [255, 200, 150]; // Cor laranja clara #FFC896
+    
+    // ==================== CABEÇALHO ====================
+    // Fundo laranja
+    doc.setFillColor(orangeColor[0], orangeColor[1], orangeColor[2]);
+    doc.rect(0, 0, pageWidth, 35, "F");
+    
+    doc.setTextColor(0);
+    doc.setFont("helvetica", "bold");
+    
+    // Linha 1: Labels
+    doc.setFontSize(7);
+    doc.text("EQUIPE/S:", 10, 8);
+    doc.text("ACIONAMENTO:", 70, 8);
+    doc.text("CÓDIGO CLIENTE:", 130, 8);
+    doc.text("DATA MEDIÇÃO:", 180, 8);
+    doc.text("SERVIÇO:", 230, 8);
+    
+    // Linha 1: Valores
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.text(encarregadoNome || selectedItem.encarregado || "", 10, 12);
+    doc.text(selectedItem.codigo_acionamento || "", 70, 12);
+    doc.text("", 130, 12); // código cliente vazio
+    doc.text(formatDateBr(selectedItem.data_abertura), 180, 12);
+    doc.text(selectedItem.tipo_servico || "", 230, 12);
+    
+    // Linha 2: Endereço da obra
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7);
+    doc.text("OBRA NOME =>", 10, 18);
+    doc.setFont("helvetica", "normal");
+    doc.text(selectedItem.endereco || "", 35, 18);
+    
+    // Linha 3: Retorno base e início
+    doc.setFont("helvetica", "bold");
+    doc.text("RETORNO BASE =>", 10, 23);
+    doc.text("INÍCIO DA OBRA =>", 10, 28);
+    doc.setFont("helvetica", "normal");
+    const retornoBase = dadosExec?.retorno_base ? formatDateBr(dadosExec.retorno_base) : "";
+    const inicioObra = dadosExec?.inicio_servico ? formatDateBr(dadosExec.inicio_servico) : formatDateBr(selectedItem.data_abertura);
+    doc.text(retornoBase, 40, 23);
+    doc.text(inicioObra, 40, 28);
+    
+    // Coluna direita do cabeçalho
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7);
+    doc.text("DATA DE RETORNO:", 180, 23);
+    doc.text("SITUAÇÃO:", 180, 28);
+    doc.text("TÉCNICO BASE:", 180, 33);
+    doc.text("HORÁRIO:", 230, 33);
+    
+    doc.setFont("helvetica", "normal");
+    const dataRetorno = dadosExec?.retorno_servico ? formatDateBr(dadosExec.retorno_servico) : "";
+    doc.text(dataRetorno, 215, 23);
+    doc.text(selectedItem.status || "", 205, 28);
+    doc.text("", 210, 33); // vazio
+    doc.text(medicaoForaHC ? "FORA HC" : "HORÁRIO COMERCIAL", 245, 33);
+    
+    // NR grande no canto direito
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(16);
+    doc.text("NR", pageWidth - 25, 12);
+    doc.setFontSize(14);
+    doc.text(selectedItem.numero_os || "400", pageWidth - 25, 20);
+    doc.setFontSize(12);
+    doc.text(selectedItem.modalidade || "EM", pageWidth - 25, 27);
+    
+    let yPos = 40;
+    
+    // ==================== MÃO DE OBRA ====================
+    doc.setFillColor(orangeColor[0], orangeColor[1], orangeColor[2]);
+    doc.rect(0, yPos, pageWidth, 7, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.setTextColor(0);
+    doc.text("MÃO DE OBRA", 10, yPos + 5);
+    yPos += 7;
+
+    const itensMO = medicaoItens[medicaoTab] || [];
+    if (itensMO.length > 0) {
+      const bodyMO = itensMO.map((item, idx) => {
+        const valorUni = (Number(item.valorUps) || 0) * (medicaoTab === "LM" ? medicaoValorUpsLM : medicaoValorUpsLV);
+        const subtotal = subtotalMedicao(item);
+        return [
+          idx + 1,
+          item.codigo,
+          item.descricao,
+          item.unidade,
+          Number(item.quantidade).toFixed(2),
+          Number(item.valorUps || 0).toFixed(3),
+          `R$ ${valorUni.toFixed(2)}`,
+          `R$ ${subtotal.toFixed(2)}`
+        ];
+      });
+      
+      autoTable(doc, {
+        startY: yPos,
+        head: [["ITEM", "CÓDIGO", "DESCRIÇÃO", "UN", "QUANT", "UPS", "VALOR UNI", "TOTAL"]],
+        body: bodyMO,
+        styles: { 
+          fontSize: 7, 
+          cellPadding: 2,
+          lineColor: [0, 0, 0],
+          lineWidth: 0.1
+        },
+        headStyles: { 
+          fillColor: orangeColor, 
+          textColor: 0, 
+          fontStyle: "bold",
+          halign: "center"
+        },
+        columnStyles: {
+          0: { cellWidth: 12, halign: "center" },
+          1: { cellWidth: 20, halign: "center" },
+          2: { cellWidth: 110, halign: "left" },
+          3: { cellWidth: 15, halign: "center" },
+          4: { cellWidth: 20, halign: "center" },
+          5: { cellWidth: 20, halign: "center" },
+          6: { cellWidth: 25, halign: "right" },
+          7: { cellWidth: 28, halign: "right" }
+        },
+        theme: "grid",
+      });
+      yPos = (doc as any).lastAutoTable.finalY + 3;
+    }
+
+    // Total MO com fundo laranja
+    const totalMO = totalAbaMedicao(medicaoTab);
+    doc.setFillColor(orangeColor[0], orangeColor[1], orangeColor[2]);
+    doc.rect(pageWidth - 60, yPos, 55, 7, "F");
+    doc.setDrawColor(0);
+    doc.rect(pageWidth - 60, yPos, 55, 7, "S");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.text(`TOTAL MÃO DE OBRA: R$ ${totalMO.toFixed(2)}`, pageWidth - 57, yPos + 5);
+    yPos += 10;
+
+    // ==================== TRANSFORMADOR ====================
+    doc.setFillColor(orangeColor[0], orangeColor[1], orangeColor[2]);
+    doc.rect(0, yPos, pageWidth / 2 - 2, 7, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.text("TRANSFORMADOR INSTALADO - POTÊNCIA:", 10, yPos + 5);
+    
+    doc.rect(pageWidth / 2 + 2, yPos, pageWidth / 2 - 2, 7, "F");
+    doc.text("TRANSFORMADOR RETIRADO:", pageWidth / 2 + 10, yPos + 5);
+    yPos += 7;
+    
+    // Dados dos transformadores (da etapa de execução)
+    doc.setDrawColor(0);
+    doc.rect(0, yPos, pageWidth / 2 - 2, 20, "S");
+    doc.rect(pageWidth / 2 + 2, yPos, pageWidth / 2 - 2, 20, "S");
+    
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    
+    // Transformador Instalado
+    if (dadosExec?.trafo_inst_potencia || dadosExec?.trafo_inst_marca) {
+      let yInst = yPos + 4;
+      doc.text(`Potência: ${dadosExec.trafo_inst_potencia || ""}`, 10, yInst);
+      doc.text(`Marca: ${dadosExec.trafo_inst_marca || ""}`, 10, yInst + 4);
+      doc.text(`Ano: ${dadosExec.trafo_inst_ano || ""}`, 10, yInst + 8);
+      doc.text(`Nº Série: ${dadosExec.trafo_inst_numero_serie || ""}`, 10, yInst + 12);
+    }
+    
+    // Transformador Retirado
+    if (dadosExec?.trafo_ret_potencia || dadosExec?.trafo_ret_marca) {
+      let yRet = yPos + 4;
+      doc.text(`Potência: ${dadosExec.trafo_ret_potencia || ""}`, pageWidth / 2 + 10, yRet);
+      doc.text(`Marca: ${dadosExec.trafo_ret_marca || ""}`, pageWidth / 2 + 10, yRet + 4);
+      doc.text(`Ano: ${dadosExec.trafo_ret_ano || ""}`, pageWidth / 2 + 10, yRet + 8);
+      doc.text(`Nº Série: ${dadosExec.trafo_ret_numero_serie || ""}`, pageWidth / 2 + 10, yRet + 12);
+    }
+    
+    yPos += 22;
+
+    // ==================== MATERIAL APLICADO ====================
+    if (consumo.length > 0) {
+      doc.setFillColor(orangeColor[0], orangeColor[1], orangeColor[2]);
+      doc.rect(0, yPos, pageWidth, 7, "F");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8);
+      doc.text("MATERIAL APLICADO", 10, yPos + 5);
+      yPos += 7;
+
+      const bodyConsumo = consumo.map((c, idx) => [
+        idx + 1,
+        c.codigo_material,
+        c.descricao_item || "",
+        c.unidade_medida || "",
+        Number(c.quantidade).toFixed(2)
+      ]);
+
+      autoTable(doc, {
+        startY: yPos,
+        head: [["ITEM", "CÓDIGO", "DESCRIÇÃO", "UN", "QUANT"]],
+        body: bodyConsumo,
+        styles: { 
+          fontSize: 7, 
+          cellPadding: 2,
+          lineColor: [0, 0, 0],
+          lineWidth: 0.1
+        },
+        headStyles: { 
+          fillColor: orangeColor, 
+          textColor: 0, 
+          fontStyle: "bold",
+          halign: "center"
+        },
+        columnStyles: {
+          0: { cellWidth: 12, halign: "center" },
+          1: { cellWidth: 25, halign: "center" },
+          2: { cellWidth: 150, halign: "left" },
+          3: { cellWidth: 15, halign: "center" },
+          4: { cellWidth: 20, halign: "center" }
+        },
+        theme: "grid",
+      });
+      yPos = (doc as any).lastAutoTable.finalY + 5;
+    }
+
+    // ==================== MATERIAL RETIRADO (SUCATA) ====================
+    if (sucata.length > 0) {
+      if (yPos > pageHeight - 70) {
+        doc.addPage("landscape");
+        yPos = 15;
+      }
+      
+      doc.setFillColor(orangeColor[0], orangeColor[1], orangeColor[2]);
+      doc.rect(0, yPos, pageWidth, 7, "F");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8);
+      doc.text("MATERIAL RETIRADO (SUCATA)", 10, yPos + 5);
+      yPos += 7;
+
+      const bodySucata = sucata.map((s, idx) => [
+        idx + 1,
+        s.codigo_material,
+        s.descricao_item || "",
+        s.unidade_medida || "",
+        Number(s.quantidade).toFixed(2),
+        s.classificacao || ""
+      ]);
+
+      autoTable(doc, {
+        startY: yPos,
+        head: [["ITEM", "CÓDIGO", "DESCRIÇÃO", "UN", "QUANT", "CLASSIFICAÇÃO"]],
+        body: bodySucata,
+        styles: { 
+          fontSize: 7, 
+          cellPadding: 2,
+          lineColor: [0, 0, 0],
+          lineWidth: 0.1
+        },
+        headStyles: { 
+          fillColor: orangeColor, 
+          textColor: 0, 
+          fontStyle: "bold",
+          halign: "center"
+        },
+        columnStyles: {
+          0: { cellWidth: 12, halign: "center" },
+          1: { cellWidth: 25, halign: "center" },
+          2: { cellWidth: 120, halign: "left" },
+          3: { cellWidth: 15, halign: "center" },
+          4: { cellWidth: 20, halign: "center" },
+          5: { cellWidth: 30, halign: "center" }
+        },
+        theme: "grid",
+      });
+      yPos = (doc as any).lastAutoTable.finalY + 5;
+    }
+
+    // ==================== ASSINATURAS ====================
+    if (yPos > pageHeight - 45) {
+      doc.addPage("landscape");
+      yPos = 15;
+    }
+    
+    yPos = pageHeight - 40;
+    
+    const colWidth = pageWidth / 3 - 5;
+    
+    // Líder equipe
+    doc.setDrawColor(0);
+    doc.line(10, yPos + 15, 10 + colWidth, yPos + 15);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7);
+    doc.text("LÍDER DE EQUIPE", 10 + colWidth / 2, yPos + 20, { align: "center" });
+    
+    // Fiscal
+    doc.line(10 + colWidth + 5, yPos + 15, 10 + 2 * colWidth + 5, yPos + 15);
+    doc.text("FISCAL", 10 + 1.5 * colWidth + 5, yPos + 20, { align: "center" });
+    
+    // Cliente
+    doc.line(10 + 2 * colWidth + 10, yPos + 15, 10 + 3 * colWidth + 10, yPos + 15);
+    doc.text("CLIENTE / RESPONSÁVEL", 10 + 2.5 * colWidth + 10, yPos + 20, { align: "center" });
+
+    // ==================== RODAPÉ ====================
+    doc.setFontSize(6);
+    doc.setFont("helvetica", "italic");
+    doc.setTextColor(100);
+    const rodape = `Orçamento gerado em ${new Date().toLocaleString("pt-BR")} | Tipo: ${medicaoTab} | ${medicaoForaHC ? "Fora de Horário Comercial (+30%)" : "Horário Comercial (+12%)"}`;
+    doc.text(rodape, pageWidth / 2, pageHeight - 5, { align: "center" });
+
+    doc.save(`Orcamento_${selectedItem.codigo_acionamento || "acionamento"}_${medicaoTab}.pdf`);
+    setMaterialInfo("Orçamento gerado com sucesso.");
   };
 
 
@@ -1277,7 +1725,13 @@ export const WorkflowSteps = () => {
 
         .from("acionamentos")
 
-        .update({ etapa_atual: 3 })
+        .update({ 
+
+          etapa_atual: 3,
+
+          execucao_finalizada_em: new Date().toISOString()
+
+        })
 
         .eq("id_acionamento", selectedItem.id_acionamento);
 
@@ -1762,6 +2216,16 @@ export const WorkflowSteps = () => {
 
       }
 
+      // Atualiza carimbo de validação da pré-lista
+
+      await supabase
+
+        .from("acionamentos")
+
+        .update({ pre_lista_validada_em: new Date().toISOString() })
+
+        .eq("id_acionamento", selectedItem.id_acionamento);
+
       const { data: preReload, error: preReloadError } = await supabase
 
         .from("pre_lista_itens")
@@ -2214,6 +2678,16 @@ export const WorkflowSteps = () => {
 
       }
 
+      // Atualiza carimbo de consumo de materiais
+
+      await supabase
+
+        .from("acionamentos")
+
+        .update({ materiais_consumidos_em: new Date().toISOString() })
+
+        .eq("id_acionamento", selectedItem.id_acionamento);
+
       setMaterialInfo("Consumo salvo.");
 
     } catch (err: any) {
@@ -2269,6 +2743,16 @@ export const WorkflowSteps = () => {
         if (error) throw error;
 
       }
+
+      // Atualiza carimbo de envio de sucata
+
+      await supabase
+
+        .from("acionamentos")
+
+        .update({ sucatas_enviadas_em: new Date().toISOString() })
+
+        .eq("id_acionamento", selectedItem.id_acionamento);
 
       setMaterialInfo("Sucata salva.");
 
@@ -2441,6 +2925,16 @@ export const WorkflowSteps = () => {
             Lista de materiais
 
           </Button>
+
+          {selectedStep?.id === 3 && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => openMedicaoModal(item)}
+            >
+              Medição / Orçamento
+            </Button>
+          )}
 
           <Button
 
@@ -2953,8 +3447,124 @@ export const WorkflowSteps = () => {
 
           </DialogFooter>
 
-        </DialogContent>
+      </DialogContent>
 
+    </Dialog>
+
+      <Dialog open={medicaoModalOpen} onOpenChange={setMedicaoModalOpen} modal>
+        <DialogContent className="max-w-5xl h-[90vh] overflow-y-auto">
+          <DialogHeader className="text-center space-y-1">
+            <DialogTitle className="text-xl font-bold">Medição / Orçamento</DialogTitle>
+            <DialogDescription>Monte o orçamento de mão de obra. Nada é salvo; apenas cálculo/PDF.</DialogDescription>
+          </DialogHeader>
+
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex gap-2">
+              {selectedItem?.modalidade?.toUpperCase() === "LM+LV" ? (
+                <>
+                  <Button variant={medicaoTab === "LM" ? "default" : "outline"} size="sm" onClick={() => setMedicaoTab("LM")}>LM</Button>
+                  <Button variant={medicaoTab === "LV" ? "default" : "outline"} size="sm" onClick={() => setMedicaoTab("LV")}>LV</Button>
+                </>
+              ) : (
+                <span className="text-sm font-medium px-3 py-1.5 rounded-md bg-muted">Modalidade: {selectedItem?.modalidade || "LM"}</span>
+              )}
+            </div>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={medicaoForaHC} onChange={(e) => setMedicaoForaHC(e.target.checked)} className="w-4 h-4" />
+              Fora do horário comercial
+            </label>
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Input placeholder="Buscar MO por código ou descrição" value={medicaoBusca} onChange={(e) => setMedicaoBusca(e.target.value)} />
+              <div className="text-xs text-muted-foreground">Catálogo: {medicaoCatalogo.length}</div>
+            </div>
+            <div className="max-h-40 overflow-y-auto border rounded-md">
+              {medicaoCatalogo
+                .filter((m) => {
+                  const buscaMatch = 
+                    (m.codigo_mao_de_obra || "").toLowerCase().includes(medicaoBusca.toLowerCase()) ||
+                    (m.descricao || "").toLowerCase().includes(medicaoBusca.toLowerCase());
+                  const tipoMatch = (m.tipo || "").toUpperCase() === medicaoTab;
+                  const naoEhAjusteHC = !["26376", "92525"].includes(m.codigo_mao_de_obra);
+                  return buscaMatch && tipoMatch && naoEhAjusteHC;
+                })
+                .map((m) => (
+                  <button
+                    key={`${m.codigo_mao_de_obra}-${m.operacao}-${m.tipo}`}
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-muted"
+                    onClick={() => handleAddMedicaoItem(m)}
+                  >
+                    {m.codigo_mao_de_obra} - {m.descricao} (fração {m.operacao || 1}, UPS {m.ups || 0})
+                  </button>
+                ))}
+            </div>
+
+            <div className="rounded-md border p-3 space-y-2">
+              <h4 className="font-semibold text-sm">Itens {medicaoTab}</h4>
+              {(medicaoItens[medicaoTab] || []).length === 0 ? (
+                <p className="text-sm text-muted-foreground">Nenhum item adicionado.</p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Código</TableHead>
+                      <TableHead>Descrição</TableHead>
+                      <TableHead>Unidade</TableHead>
+                      <TableHead>Qtd</TableHead>
+                      <TableHead>Valor UPS</TableHead>
+                      <TableHead>Subtotal</TableHead>
+                      <TableHead></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(medicaoItens[medicaoTab] || []).map((i) => (
+                      <TableRow key={i.codigo}>
+                        <TableCell>{i.codigo}</TableCell>
+                        <TableCell>{i.descricao}</TableCell>
+                        <TableCell>{i.unidade}</TableCell>
+                        <TableCell className="max-w-[120px]">
+                          <Input type="number" min={0} value={i.quantidade} onChange={(e) => handleQtdMedicao(i.codigo, Number(e.target.value))} />
+                        </TableCell>
+                        <TableCell>{Number(i.valorUps || 0).toFixed(2)}</TableCell>
+                        <TableCell>
+                          {subtotalMedicao(i).toFixed(2)}
+                        </TableCell>
+                        <TableCell>
+                          <Button variant="ghost" size="sm" onClick={() => handleRemoveMedicao(i.codigo)}>Remover</Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+              <div className="text-right font-semibold">
+                Total {medicaoTab}: {totalAbaMedicao(medicaoTab).toFixed(2)}
+              </div>
+            </div>
+
+            <div className="rounded-md border p-3 space-y-2">
+              <h4 className="font-semibold text-sm">Materiais (referência)</h4>
+              {materiaisReferencia.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Nenhum material aplicado.</p>
+              ) : (
+                <ul className="text-sm space-y-1">
+                  {materiaisReferencia.map((m: any) => (
+                    <li key={m.codigo_material}>
+                      {m.codigo_material} - {m.descricao_item} ({m.unidade_medida}) — {m.quantidade}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter className="flex gap-2 justify-end">
+            <Button variant="outline" onClick={() => setMedicaoModalOpen(false)}>Fechar</Button>
+            <Button onClick={gerarOrcamento}>Gerar orçamento (PDF)</Button>
+          </DialogFooter>
+        </DialogContent>
       </Dialog>
 
       <Dialog open={materialsOpen} onOpenChange={setMaterialsOpen} modal>
