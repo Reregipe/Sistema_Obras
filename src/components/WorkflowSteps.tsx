@@ -1147,26 +1147,16 @@ export const WorkflowSteps = () => {
       "retorno_base",
 
       "alimentador",
-
       "subestacao",
-
       "numero_transformador",
-
       "id_poste",
-
-      "os_tablet",
-
-      "ss_nota",
-
-      "numero_intervencao",
-
     ];
 
     for (const key of requiredBase) {
 
       if (!f[key] && f[key] !== 0) {
 
-        return "Preencha todos os campos obrigatrios da execuo.";
+        return "Preencha todos os campos obrigatórios da execução.";
 
       }
 
