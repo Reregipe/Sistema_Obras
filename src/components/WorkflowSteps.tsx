@@ -495,6 +495,7 @@ export const WorkflowSteps = () => {
     const initialTab: "LM" | "LV" = mod === "LM+LV" ? "LM" : (mod as "LM" | "LV");
     setMedicaoTab(initialTab);
     setMedicaoModalOpen(true);
+    
     // Carrega valores UPS em reais das configurações
     try {
       const { data: configs } = await supabase
@@ -510,19 +511,75 @@ export const WorkflowSteps = () => {
     } catch {
       // Usa valores padrão em caso de erro
     }
+    
+    // Carrega consumo e sucata para incluir no PDF
+    try {
+      const { data: consumoList } = await supabase
+        .from("lista_aplicacao_itens")
+        .select("id_lista_aplicacao_item,codigo_material,descricao_item,unidade_medida,quantidade,id_acionamento")
+        .eq("id_acionamento", item.id_acionamento)
+        .order("ordem_item");
+      
+      if (consumoList && consumoList.length > 0) {
+        setConsumo(
+          consumoList.map((c) => ({
+            id: c.id_lista_aplicacao_item,
+            codigo_material: c.codigo_material,
+            descricao_item: c.descricao_item || "",
+            unidade_medida: c.unidade_medida || "",
+            quantidade: Number(c.quantidade || 0),
+          }))
+        );
+      } else {
+        setConsumo([]);
+      }
+      
+      const { data: sucataList } = await supabase
+        .from("sucata_itens")
+        .select("id,codigo_material,quantidade_retirada,criado_em,classificacao")
+        .eq("id_acionamento", item.id_acionamento)
+        .order("criado_em", { ascending: false });
+      
+      if (sucataList && sucataList.length > 0) {
+        const enrichedSucata = await enrichMateriais(
+          sucataList.map((s) => ({
+            id: s.id,
+            codigo_material: s.codigo_material,
+            quantidade: Number(s.quantidade_retirada || 0),
+            classificacao: s.classificacao || "",
+          }))
+        );
+        setSucata(enrichedSucata);
+      } else {
+        setSucata([]);
+      }
+    } catch {
+      // Se falhar, continua sem materiais no PDF
+      setConsumo([]);
+      setSucata([]);
+    }
+    
     await loadCatalogoMO();
   };
 
   const handleAddMedicaoItem = (mo: any) => {
     const codigo = mo.codigo_mao_de_obra;
-    const jaExiste = medicaoItens[medicaoTab]?.some((i: any) => i.codigo === codigo);
+    const operacao = mo.operacao || "";
+    
+    // Verifica duplicata por código + operação
+    const jaExiste = medicaoItens[medicaoTab]?.some(
+      (i: any) => i.codigo === codigo && i.operacao === operacao
+    );
+    
     if (jaExiste) {
-      setMaterialError(`Código ${codigo} já foi adicionado à medição.`);
+      setMaterialError(`Código ${codigo} (${operacao}) já foi adicionado à medição.`);
       return;
     }
+    
     const upsValue = Number(mo.ups) || 0;
     const novo = {
       codigo,
+      operacao,
       descricao: mo.descricao || "",
       unidade: mo.unidade || mo.tipo || "",
       fracao: upsValue,
@@ -536,28 +593,28 @@ export const WorkflowSteps = () => {
     setMaterialError(null);
   };
 
-  const handleQtdMedicao = (codigo: string, qtd: number) => {
+  const handleQtdMedicao = (codigo: string, operacao: string, qtd: number) => {
     setMedicaoItens((prev) => ({
       ...prev,
       [medicaoTab]: prev[medicaoTab].map((i) =>
-        i.codigo === codigo ? { ...i, quantidade: qtd } : i
+        i.codigo === codigo && i.operacao === operacao ? { ...i, quantidade: qtd } : i
       ),
     }));
   };
 
-  const handleFracaoMedicao = (codigo: string, fr: number) => {
+  const handleFracaoMedicao = (codigo: string, operacao: string, fr: number) => {
     setMedicaoItens((prev) => ({
       ...prev,
       [medicaoTab]: prev[medicaoTab].map((i) =>
-        i.codigo === codigo ? { ...i, fracao: fr } : i
+        i.codigo === codigo && i.operacao === operacao ? { ...i, fracao: fr } : i
       ),
     }));
   };
 
-  const handleRemoveMedicao = (codigo: string) => {
+  const handleRemoveMedicao = (codigo: string, operacao: string) => {
     setMedicaoItens((prev) => ({
       ...prev,
-      [medicaoTab]: prev[medicaoTab].filter((i) => i.codigo !== codigo),
+      [medicaoTab]: prev[medicaoTab].filter((i) => !(i.codigo === codigo && i.operacao === operacao)),
     }));
   };
 
@@ -674,7 +731,7 @@ export const WorkflowSteps = () => {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(8);
     doc.setTextColor(0);
-    doc.text("MÃO DE OBRA", 10, yPos + 5);
+    doc.text(`MÃO DE OBRA - ${medicaoTab}`, 10, yPos + 5);
     yPos += 7;
 
     const itensMO = medicaoItens[medicaoTab] || [];
@@ -685,6 +742,7 @@ export const WorkflowSteps = () => {
         return [
           idx + 1,
           item.codigo,
+          item.operacao || "",
           item.descricao,
           item.unidade,
           Number(item.quantidade).toFixed(2),
@@ -696,7 +754,7 @@ export const WorkflowSteps = () => {
       
       autoTable(doc, {
         startY: yPos,
-        head: [["ITEM", "CÓDIGO", "DESCRIÇÃO", "UN", "QUANT", "UPS", "VALOR UNI", "TOTAL"]],
+        head: [["ITEM", "CÓDIGO", "OPERAÇÃO", "DESCRIÇÃO", "UN", "QUANT", "UPS", "VALOR UNI", "TOTAL"]],
         body: bodyMO,
         styles: { 
           fontSize: 7, 
@@ -711,14 +769,15 @@ export const WorkflowSteps = () => {
           halign: "center"
         },
         columnStyles: {
-          0: { cellWidth: 12, halign: "center" },
-          1: { cellWidth: 20, halign: "center" },
-          2: { cellWidth: 110, halign: "left" },
-          3: { cellWidth: 15, halign: "center" },
-          4: { cellWidth: 20, halign: "center" },
-          5: { cellWidth: 20, halign: "center" },
-          6: { cellWidth: 25, halign: "right" },
-          7: { cellWidth: 28, halign: "right" }
+          0: { cellWidth: 10, halign: "center" },
+          1: { cellWidth: 18, halign: "center" },
+          2: { cellWidth: 18, halign: "center" },
+          3: { cellWidth: 95, halign: "left" },
+          4: { cellWidth: 12, halign: "center" },
+          5: { cellWidth: 18, halign: "center" },
+          6: { cellWidth: 18, halign: "center" },
+          7: { cellWidth: 23, halign: "right" },
+          8: { cellWidth: 25, halign: "right" }
         },
         theme: "grid",
       });
@@ -737,43 +796,49 @@ export const WorkflowSteps = () => {
     yPos += 10;
 
     // ==================== TRANSFORMADOR ====================
-    doc.setFillColor(orangeColor[0], orangeColor[1], orangeColor[2]);
-    doc.rect(0, yPos, pageWidth / 2 - 2, 7, "F");
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(8);
-    doc.text("TRANSFORMADOR INSTALADO - POTÊNCIA:", 10, yPos + 5);
+    // Só inclui se houver dados de transformador
+    const temTrafoInst = dadosExec?.trafo_inst_potencia || dadosExec?.trafo_inst_marca || dadosExec?.trafo_inst_ano || dadosExec?.trafo_inst_numero_serie;
+    const temTrafoRet = dadosExec?.trafo_ret_potencia || dadosExec?.trafo_ret_marca || dadosExec?.trafo_ret_ano || dadosExec?.trafo_ret_numero_serie;
     
-    doc.rect(pageWidth / 2 + 2, yPos, pageWidth / 2 - 2, 7, "F");
-    doc.text("TRANSFORMADOR RETIRADO:", pageWidth / 2 + 10, yPos + 5);
-    yPos += 7;
-    
-    // Dados dos transformadores (da etapa de execução)
-    doc.setDrawColor(0);
-    doc.rect(0, yPos, pageWidth / 2 - 2, 20, "S");
-    doc.rect(pageWidth / 2 + 2, yPos, pageWidth / 2 - 2, 20, "S");
-    
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(7);
-    
-    // Transformador Instalado
-    if (dadosExec?.trafo_inst_potencia || dadosExec?.trafo_inst_marca) {
-      let yInst = yPos + 4;
-      doc.text(`Potência: ${dadosExec.trafo_inst_potencia || ""}`, 10, yInst);
-      doc.text(`Marca: ${dadosExec.trafo_inst_marca || ""}`, 10, yInst + 4);
-      doc.text(`Ano: ${dadosExec.trafo_inst_ano || ""}`, 10, yInst + 8);
-      doc.text(`Nº Série: ${dadosExec.trafo_inst_numero_serie || ""}`, 10, yInst + 12);
+    if (temTrafoInst || temTrafoRet) {
+      doc.setFillColor(orangeColor[0], orangeColor[1], orangeColor[2]);
+      doc.rect(0, yPos, pageWidth / 2 - 2, 7, "F");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8);
+      doc.text("TRANSFORMADOR INSTALADO - POTÊNCIA:", 10, yPos + 5);
+      
+      doc.rect(pageWidth / 2 + 2, yPos, pageWidth / 2 - 2, 7, "F");
+      doc.text("TRANSFORMADOR RETIRADO:", pageWidth / 2 + 10, yPos + 5);
+      yPos += 7;
+      
+      // Dados dos transformadores (da etapa de execução)
+      doc.setDrawColor(0);
+      doc.rect(0, yPos, pageWidth / 2 - 2, 20, "S");
+      doc.rect(pageWidth / 2 + 2, yPos, pageWidth / 2 - 2, 20, "S");
+      
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7);
+      
+      // Transformador Instalado
+      if (temTrafoInst) {
+        let yInst = yPos + 4;
+        doc.text(`Potência: ${dadosExec.trafo_inst_potencia || ""}`, 10, yInst);
+        doc.text(`Marca: ${dadosExec.trafo_inst_marca || ""}`, 10, yInst + 4);
+        doc.text(`Ano: ${dadosExec.trafo_inst_ano || ""}`, 10, yInst + 8);
+        doc.text(`Nº Série: ${dadosExec.trafo_inst_numero_serie || ""}`, 10, yInst + 12);
+      }
+      
+      // Transformador Retirado
+      if (temTrafoRet) {
+        let yRet = yPos + 4;
+        doc.text(`Potência: ${dadosExec.trafo_ret_potencia || ""}`, pageWidth / 2 + 10, yRet);
+        doc.text(`Marca: ${dadosExec.trafo_ret_marca || ""}`, pageWidth / 2 + 10, yRet + 4);
+        doc.text(`Ano: ${dadosExec.trafo_ret_ano || ""}`, pageWidth / 2 + 10, yRet + 8);
+        doc.text(`Nº Série: ${dadosExec.trafo_ret_numero_serie || ""}`, pageWidth / 2 + 10, yRet + 12);
+      }
+      
+      yPos += 22;
     }
-    
-    // Transformador Retirado
-    if (dadosExec?.trafo_ret_potencia || dadosExec?.trafo_ret_marca) {
-      let yRet = yPos + 4;
-      doc.text(`Potência: ${dadosExec.trafo_ret_potencia || ""}`, pageWidth / 2 + 10, yRet);
-      doc.text(`Marca: ${dadosExec.trafo_ret_marca || ""}`, pageWidth / 2 + 10, yRet + 4);
-      doc.text(`Ano: ${dadosExec.trafo_ret_ano || ""}`, pageWidth / 2 + 10, yRet + 8);
-      doc.text(`Nº Série: ${dadosExec.trafo_ret_numero_serie || ""}`, pageWidth / 2 + 10, yRet + 12);
-    }
-    
-    yPos += 22;
 
     // ==================== MATERIAL APLICADO ====================
     if (consumo.length > 0) {
@@ -1729,11 +1794,19 @@ export const WorkflowSteps = () => {
 
           etapa_atual: 3,
 
-          execucao_finalizada_em: new Date().toISOString()
+          execucao_finalizada_em: new Date().toISOString(),
+
+          status: "concluido"
 
         })
 
         .eq("id_acionamento", selectedItem.id_acionamento);
+
+      // Atualiza item local para refletir mudanças
+      if (selectedItem) {
+        selectedItem.status = "concluido";
+        selectedItem.etapa_atual = 3;
+      }
 
       setExecInfo("Dados da execução salvos e etapa liberada.");
 
@@ -2216,13 +2289,16 @@ export const WorkflowSteps = () => {
 
       }
 
-      // Atualiza carimbo de validação da pré-lista
+      // Atualiza carimbo de validação da pré-lista e status
 
       await supabase
 
         .from("acionamentos")
 
-        .update({ pre_lista_validada_em: new Date().toISOString() })
+        .update({ 
+          pre_lista_validada_em: new Date().toISOString(),
+          status: "despachado"
+        })
 
         .eq("id_acionamento", selectedItem.id_acionamento);
 
@@ -2241,6 +2317,11 @@ export const WorkflowSteps = () => {
       const enriched = await enrichPreLista(preReload || []);
 
       setPreLista(enriched);
+
+      // Atualiza item local para refletir mudanças
+      if (selectedItem) {
+        selectedItem.status = "despachado";
+      }
 
       setMaterialInfo("Pre-lista salva.");
 
@@ -2678,15 +2759,23 @@ export const WorkflowSteps = () => {
 
       }
 
-      // Atualiza carimbo de consumo de materiais
+      // Atualiza carimbo de consumo de materiais e status
 
       await supabase
 
         .from("acionamentos")
 
-        .update({ materiais_consumidos_em: new Date().toISOString() })
+        .update({ 
+          materiais_consumidos_em: new Date().toISOString(),
+          status: "em_execucao"
+        })
 
         .eq("id_acionamento", selectedItem.id_acionamento);
+
+      // Atualiza item local para refletir mudanças
+      if (selectedItem) {
+        selectedItem.status = "em_execucao";
+      }
 
       setMaterialInfo("Consumo salvo.");
 
@@ -3510,6 +3599,7 @@ export const WorkflowSteps = () => {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Código</TableHead>
+                      <TableHead>Operação</TableHead>
                       <TableHead>Descrição</TableHead>
                       <TableHead>Unidade</TableHead>
                       <TableHead>Qtd</TableHead>
@@ -3520,19 +3610,20 @@ export const WorkflowSteps = () => {
                   </TableHeader>
                   <TableBody>
                     {(medicaoItens[medicaoTab] || []).map((i) => (
-                      <TableRow key={i.codigo}>
+                      <TableRow key={`${i.codigo}-${i.operacao}`}>
                         <TableCell>{i.codigo}</TableCell>
+                        <TableCell>{i.operacao}</TableCell>
                         <TableCell>{i.descricao}</TableCell>
                         <TableCell>{i.unidade}</TableCell>
                         <TableCell className="max-w-[120px]">
-                          <Input type="number" min={0} value={i.quantidade} onChange={(e) => handleQtdMedicao(i.codigo, Number(e.target.value))} />
+                          <Input type="number" min={0} value={i.quantidade} onChange={(e) => handleQtdMedicao(i.codigo, i.operacao, Number(e.target.value))} />
                         </TableCell>
                         <TableCell>{Number(i.valorUps || 0).toFixed(2)}</TableCell>
                         <TableCell>
                           {subtotalMedicao(i).toFixed(2)}
                         </TableCell>
                         <TableCell>
-                          <Button variant="ghost" size="sm" onClick={() => handleRemoveMedicao(i.codigo)}>Remover</Button>
+                          <Button variant="ghost" size="sm" onClick={() => handleRemoveMedicao(i.codigo, i.operacao)}>Remover</Button>
                         </TableCell>
                       </TableRow>
                     ))}
