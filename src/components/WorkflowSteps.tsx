@@ -1321,6 +1321,27 @@ export const WorkflowSteps = () => {
 
     setExecModalOpen(false);
 
+    // Na Etapa 2, se ainda estiver como "despachado", ajusta para "em_execucao"
+    if (selectedStep?.id === 2 && (item.status || "").toLowerCase().includes("despach")) {
+      try {
+        await supabase
+          .from("acionamentos")
+          .update({ status: "em_execucao" })
+          .eq("id_acionamento", item.id_acionamento);
+        setSelectedItem((prev: any) =>
+          prev
+            ? {
+                ...prev,
+                status: "em_execucao",
+              }
+            : prev
+        );
+        item.status = "em_execucao";
+      } catch {
+        // não bloqueia o fluxo se falhar
+      }
+    }
+
     try {
 
       const { data: pre } = await supabase
