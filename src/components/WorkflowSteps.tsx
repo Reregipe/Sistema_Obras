@@ -585,6 +585,8 @@ export const WorkflowSteps = () => {
       fracao: upsValue,
       valorUps: upsValue,
       quantidade: 1,
+      inst: 0, // Instalação
+      ret: 0,  // Retirada
     };
     setMedicaoItens((prev) => ({
       ...prev,
@@ -618,6 +620,24 @@ export const WorkflowSteps = () => {
     }));
   };
 
+  const handleInstMedicao = (codigo: string, operacao: string, inst: number) => {
+    setMedicaoItens((prev) => ({
+      ...prev,
+      [medicaoTab]: prev[medicaoTab].map((i) =>
+        i.codigo === codigo && i.operacao === operacao ? { ...i, inst } : i
+      ),
+    }));
+  };
+
+  const handleRetMedicao = (codigo: string, operacao: string, ret: number) => {
+    setMedicaoItens((prev) => ({
+      ...prev,
+      [medicaoTab]: prev[medicaoTab].map((i) =>
+        i.codigo === codigo && i.operacao === operacao ? { ...i, ret } : i
+      ),
+    }));
+  };
+
   const subtotalMedicao = (i: any) => {
     const valorUpsConfig = medicaoTab === "LM" ? medicaoValorUpsLM : medicaoValorUpsLV;
     const base = (Number(i.quantidade) || 0) * (Number(i.valorUps) || 0) * valorUpsConfig;
@@ -637,93 +657,180 @@ export const WorkflowSteps = () => {
   const materiaisReferencia = consumo || [];
 
   const gerarOrcamento = async () => {
-    if (!selectedItem) return;
-    
-    // Busca dados de execução para incluir informações de transformador
-    let dadosExec: any = null;
-    try {
-      const { data } = await supabase
-        .from("acionamento_execucao")
-        .select("*")
-        .eq("id_acionamento", selectedItem.id_acionamento)
-        .maybeSingle();
-      dadosExec = data;
-    } catch {
-      // Se não houver dados, continua sem
+    if (!selectedItem) {
+      setMaterialInfo("Erro: Nenhum acionamento selecionado");
+      return;
     }
+    
+    const idAcionamento = selectedItem.id_acionamento || selectedItem.id;
+    if (!idAcionamento) {
+      setMaterialInfo("Erro: ID do acionamento não encontrado");
+      return;
+    }
+    
+    try {
+      // Busca dados de execução para incluir informações de transformador
+      let dadosExec: any = null;
+      try {
+        const { data } = await supabase
+          .from("acionamento_execucao")
+          .select("*")
+          .eq("id_acionamento", idAcionamento)
+          .maybeSingle();
+        dadosExec = data;
+      } catch {
+        // Se não houver dados, continua sem
+      }
     
     const doc = new jsPDF("landscape");
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
-    const orangeColor = [255, 200, 150]; // Cor laranja clara #FFC896
+    const orangeColor: [number, number, number] = [255, 200, 150];
     
     // ==================== CABEÇALHO ====================
     // Fundo laranja
     doc.setFillColor(orangeColor[0], orangeColor[1], orangeColor[2]);
-    doc.rect(0, 0, pageWidth, 35, "F");
+    doc.rect(0, 0, pageWidth, 50, "F");
     
     doc.setTextColor(0);
     doc.setFont("helvetica", "bold");
-    
-    // Linha 1: Labels
     doc.setFontSize(7);
-    doc.text("EQUIPE/S:", 10, 8);
-    doc.text("ACIONAMENTO:", 70, 8);
-    doc.text("CÓDIGO CLIENTE:", 130, 8);
-    doc.text("DATA MEDIÇÃO:", 180, 8);
-    doc.text("SERVIÇO:", 230, 8);
     
-    // Linha 1: Valores
+    // Primeira linha
+    doc.text("EQUIPE=>", 10, 8);
+    doc.text("ENCARREGADO=>", 70, 8);
+    doc.text("DATA SAÍDA=>", 130, 8);
+    doc.text("DATA RETORNO=>", 180, 8);
+    doc.text("TÉCNICO ENG:", 240, 8);
+    
+    // Segunda linha (valores)
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(7);
     doc.text(encarregadoNome || selectedItem.encarregado || "", 10, 12);
-    doc.text(selectedItem.codigo_acionamento || "", 70, 12);
-    doc.text("", 130, 12); // código cliente vazio
-    doc.text(formatDateBr(selectedItem.data_abertura), 180, 12);
-    doc.text(selectedItem.tipo_servico || "", 230, 12);
+    doc.text("", 70, 12); // será preenchido manualmente
+    doc.text(formatDateBr(selectedItem.data_abertura), 130, 12);
+    const dataRetorno = dadosExec?.retorno_servico ? formatDateBr(dadosExec.retorno_servico) : "";
+    doc.text(dataRetorno, 180, 12);
+    doc.text("", 240, 12); // será preenchido manualmente
     
-    // Linha 2: Endereço da obra
+    // Terceira linha
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(7);
-    doc.text("OBRA NOME =>", 10, 18);
+    doc.text("ENDEREÇO=>", 10, 18);
     doc.setFont("helvetica", "normal");
     doc.text(selectedItem.endereco || "", 35, 18);
     
-    // Linha 3: Retorno base e início
+    // Quarta linha
     doc.setFont("helvetica", "bold");
-    doc.text("RETORNO BASE =>", 10, 23);
-    doc.text("INÍCIO DA OBRA =>", 10, 28);
+    doc.text("ELETRICISTAS=>", 10, 24);
     doc.setFont("helvetica", "normal");
-    const retornoBase = dadosExec?.retorno_base ? formatDateBr(dadosExec.retorno_base) : "";
-    const inicioObra = dadosExec?.inicio_servico ? formatDateBr(dadosExec.inicio_servico) : formatDateBr(selectedItem.data_abertura);
-    doc.text(retornoBase, 40, 23);
-    doc.text(inicioObra, 40, 28);
+    doc.text("", 35, 24); // será preenchido manualmente
     
-    // Coluna direita do cabeçalho
+    // Quinta linha
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(7);
-    doc.text("DATA DE RETORNO:", 180, 23);
-    doc.text("SITUAÇÃO:", 180, 28);
-    doc.text("TÉCNICO BASE:", 180, 33);
-    doc.text("HORÁRIO:", 230, 33);
-    
+    doc.text("SAÍDA BASE=>", 10, 30);
+    doc.text("RETORNO BASE=>", 70, 30);
+    doc.text("00:00:00", 130, 30);
+    doc.text("KM INICIAL=>", 160, 30);
     doc.setFont("helvetica", "normal");
-    const dataRetorno = dadosExec?.retorno_servico ? formatDateBr(dadosExec.retorno_servico) : "";
-    doc.text(dataRetorno, 215, 23);
-    doc.text(selectedItem.status || "", 205, 28);
-    doc.text("", 210, 33); // vazio
-    doc.text(medicaoForaHC ? "FORA HC" : "HORÁRIO COMERCIAL", 245, 33);
+    doc.text(dadosExec?.saida_base ? new Date(dadosExec.saida_base).toLocaleTimeString() : "", 50, 30);
+    doc.text(dadosExec?.retorno_base ? new Date(dadosExec.retorno_base).toLocaleTimeString() : "", 100, 30);
+    doc.text(dadosExec?.km_inicial || "", 180, 30);
+    
+    // Sexta linha
+    doc.setFont("helvetica", "bold");
+    doc.text("INÍCIO SERVIÇO=>", 10, 36);
+    doc.text("RETORNO SERVIÇO=>", 70, 36);
+    doc.text("00:00:00", 130, 36);
+    doc.text("KM FINAL=>", 160, 36);
+    doc.setFont("helvetica", "normal");
+    doc.text(dadosExec?.inicio_servico ? new Date(dadosExec.inicio_servico).toLocaleTimeString() : "", 50, 36);
+    doc.text(dadosExec?.retorno_servico ? new Date(dadosExec.retorno_servico).toLocaleTimeString() : "", 100, 36);
+    doc.text(dadosExec?.km_final || "", 180, 36);
+    
+    // Sétima linha
+    doc.setFont("helvetica", "bold");
+    doc.text("COD. ACIONAMENTO=>", 10, 42);
+    doc.text("Nº INTERVENÇÃO=>", 70, 42);
+    doc.text("NOTA (SS)=>", 130, 42);
+    doc.text("OS TABLET=>", 180, 42);
+    doc.setFont("helvetica", "normal");
+    doc.text(selectedItem.codigo_acionamento || "", 40, 42);
+    doc.text(dadosExec?.numero_intervencao || "", 100, 42);
+    doc.text(dadosExec?.ss_nota || "", 150, 42);
+    doc.text(dadosExec?.os_tablet || "", 210, 42);
     
     // NR grande no canto direito
     doc.setFont("helvetica", "bold");
     doc.setFontSize(16);
-    doc.text("NR", pageWidth - 25, 12);
+    doc.text("NR", pageWidth - 25, 15);
     doc.setFontSize(14);
-    doc.text(selectedItem.numero_os || "400", pageWidth - 25, 20);
+    doc.text(selectedItem.numero_os || "400", pageWidth - 25, 25);
     doc.setFontSize(12);
-    doc.text(selectedItem.modalidade || "EM", pageWidth - 25, 27);
+    doc.text(selectedItem.modalidade || "EM", pageWidth - 25, 35);
     
-    let yPos = 40;
+    let yPos = 55;
+    
+    // ==================== TRANSFORMADORES (se houver) ====================
+    const temTrafoInst = dadosExec?.trafo_inst_potencia || dadosExec?.trafo_inst_marca || dadosExec?.trafo_inst_ano || dadosExec?.trafo_inst_numero_serie;
+    const temTrafoRet = dadosExec?.trafo_ret_potencia || dadosExec?.trafo_ret_marca || dadosExec?.trafo_ret_ano || dadosExec?.trafo_ret_numero_serie;
+    
+    if (temTrafoInst || temTrafoRet) {
+      doc.setFillColor(orangeColor[0], orangeColor[1], orangeColor[2]);
+      doc.rect(0, yPos, pageWidth / 2 - 2, 7, "F");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8);
+      doc.setTextColor(0);
+      doc.text("TRANSFORMADOR RETIRADO POTÊNCIA=>", 10, yPos + 5);
+      
+      doc.rect(pageWidth / 2 + 2, yPos, pageWidth / 2 - 2, 7, "F");
+      doc.text("MARCA=>", pageWidth / 2 + 10, yPos + 5);
+      yPos += 7;
+      
+      // Linha 2 de trafo
+      doc.rect(0, yPos, pageWidth / 2 - 2, 7, "F");
+      doc.text("TENSÃO SECUNDÁRIA=>", 10, yPos + 5);
+      doc.rect(pageWidth / 2 + 2, yPos, pageWidth / 2 - 2, 7, "F");
+      doc.text("TENSÃO PRIMÁRIA=>", pageWidth / 2 + 10, yPos + 5);
+      yPos += 7;
+      
+      // Trafo instalado
+      doc.setFillColor(orangeColor[0], orangeColor[1], orangeColor[2]);
+      doc.rect(0, yPos, pageWidth / 2 - 2, 7, "F");
+      doc.text("TRANSFORMADOR INSTALADO POTÊNCIA=>", 10, yPos + 5);
+      doc.rect(pageWidth / 2 + 2, yPos, pageWidth / 2 - 2, 7, "F");
+      doc.text("MARCA=>", pageWidth / 2 + 10, yPos + 5);
+      yPos += 7;
+      
+      doc.rect(0, yPos, pageWidth / 2 - 2, 7, "F");
+      doc.text("TENSÃO SECUNDÁRIA=>", 10, yPos + 5);
+      doc.rect(pageWidth / 2 + 2, yPos, pageWidth / 2 - 2, 7, "F");
+      doc.text("TENSÃO PRIMÁRIA=>", pageWidth / 2 + 10, yPos + 5);
+      yPos += 7;
+      
+      // Dados técnicos
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7);
+      const linhas = ["A.N=>", "B.N=>", "C.N=>"];
+      const dados = [
+        [temTrafoRet ? dadosExec?.trafo_ret_numero_serie : "", "KV", temTrafoInst ? dadosExec?.trafo_inst_numero_serie : ""],
+        [temTrafoRet ? dadosExec?.trafo_ret_numero_serie : "", "KV", temTrafoInst ? dadosExec?.trafo_inst_numero_serie : ""],
+        [temTrafoRet ? dadosExec?.trafo_ret_numero_serie : "", "KV", temTrafoInst ? dadosExec?.trafo_inst_numero_serie : ""]
+      ];
+      
+      doc.rect(0, yPos, pageWidth, 7, "S");
+      doc.text("A.N=>", 10, yPos + 5);
+      doc.text("B.N=>", 80, yPos + 5);
+      doc.text("C.N=>", 150, yPos + 5);
+      doc.text("A-B=>", 220, yPos + 5);
+      doc.text("A-C=>", 280, yPos + 5);
+      yPos += 7;
+      
+      doc.rect(0, yPos, pageWidth, 8, "S");
+      doc.text(temTrafoInst ? `${dadosExec?.trafo_inst_tensao_secundaria || ""}V` : "", 10, yPos + 5);
+      doc.text(temTrafoInst ? `${dadosExec?.trafo_inst_tensao_primaria || ""}KV` : "", 80, yPos + 5);
+      yPos += 8;
+      
+      yPos += 5;
+    }
     
     // ==================== MÃO DE OBRA ====================
     doc.setFillColor(orangeColor[0], orangeColor[1], orangeColor[2]);
@@ -738,23 +845,27 @@ export const WorkflowSteps = () => {
     if (itensMO.length > 0) {
       const bodyMO = itensMO.map((item, idx) => {
         const valorUni = (Number(item.valorUps) || 0) * (medicaoTab === "LM" ? medicaoValorUpsLM : medicaoValorUpsLV);
-        const subtotal = subtotalMedicao(item);
+        const inst = Number(item.inst) || 0;
+        const ret = Number(item.ret) || 0;
+        const total = inst + ret;
+        const subtotal = total > 0 ? total * valorUni : 0;
+        
         return [
           idx + 1,
           item.codigo,
-          item.operacao || "",
           item.descricao,
           item.unidade,
-          Number(item.quantidade).toFixed(2),
-          Number(item.valorUps || 0).toFixed(3),
-          `R$ ${valorUni.toFixed(2)}`,
+          `${valorUni.toFixed(2)}`,
+          `${inst.toFixed(2)}`,
+          `${ret.toFixed(2)}`,
+          `${total.toFixed(2)}`,
           `R$ ${subtotal.toFixed(2)}`
         ];
       });
       
       autoTable(doc, {
         startY: yPos,
-        head: [["ITEM", "CÓDIGO", "OPERAÇÃO", "DESCRIÇÃO", "UN", "QUANT", "UPS", "VALOR UNI", "TOTAL"]],
+        head: [["ITEM", "CÓD", "MÃO DE OBRA", "Un", "R$", "Inst.", "Ret.", "TOTAL", "R$"]],
         body: bodyMO,
         styles: { 
           fontSize: 7, 
@@ -769,14 +880,14 @@ export const WorkflowSteps = () => {
           halign: "center"
         },
         columnStyles: {
-          0: { cellWidth: 10, halign: "center" },
+          0: { cellWidth: 12, halign: "center" },
           1: { cellWidth: 18, halign: "center" },
-          2: { cellWidth: 18, halign: "center" },
-          3: { cellWidth: 95, halign: "left" },
-          4: { cellWidth: 12, halign: "center" },
+          2: { cellWidth: 140, halign: "left" },
+          3: { cellWidth: 12, halign: "center" },
+          4: { cellWidth: 18, halign: "right" },
           5: { cellWidth: 18, halign: "center" },
           6: { cellWidth: 18, halign: "center" },
-          7: { cellWidth: 23, halign: "right" },
+          7: { cellWidth: 18, halign: "center" },
           8: { cellWidth: 25, halign: "right" }
         },
         theme: "grid",
@@ -784,61 +895,23 @@ export const WorkflowSteps = () => {
       yPos = (doc as any).lastAutoTable.finalY + 3;
     }
 
-    // Total MO com fundo laranja
-    const totalMO = totalAbaMedicao(medicaoTab);
+    // Total MO
+    const totalMO = itensMO.reduce((acc, item) => {
+      const valorUni = (Number(item.valorUps) || 0) * (medicaoTab === "LM" ? medicaoValorUpsLM : medicaoValorUpsLV);
+      const total = (Number(item.inst) || 0) + (Number(item.ret) || 0);
+      const subtotal = total > 0 ? total * valorUni : 0;
+      if (medicaoForaHC) return acc + (subtotal * 1.30);
+      return acc + (subtotal * 1.12);
+    }, 0);
+    
     doc.setFillColor(orangeColor[0], orangeColor[1], orangeColor[2]);
-    doc.rect(pageWidth - 60, yPos, 55, 7, "F");
+    doc.rect(pageWidth - 70, yPos, 65, 7, "F");
     doc.setDrawColor(0);
-    doc.rect(pageWidth - 60, yPos, 55, 7, "S");
+    doc.rect(pageWidth - 70, yPos, 65, 7, "S");
     doc.setFont("helvetica", "bold");
     doc.setFontSize(9);
-    doc.text(`TOTAL MÃO DE OBRA: R$ ${totalMO.toFixed(2)}`, pageWidth - 57, yPos + 5);
+    doc.text(`R$ ${totalMO.toFixed(2)}`, pageWidth - 5, yPos + 5, { align: "right" });
     yPos += 10;
-
-    // ==================== TRANSFORMADOR ====================
-    // Só inclui se houver dados de transformador
-    const temTrafoInst = dadosExec?.trafo_inst_potencia || dadosExec?.trafo_inst_marca || dadosExec?.trafo_inst_ano || dadosExec?.trafo_inst_numero_serie;
-    const temTrafoRet = dadosExec?.trafo_ret_potencia || dadosExec?.trafo_ret_marca || dadosExec?.trafo_ret_ano || dadosExec?.trafo_ret_numero_serie;
-    
-    if (temTrafoInst || temTrafoRet) {
-      doc.setFillColor(orangeColor[0], orangeColor[1], orangeColor[2]);
-      doc.rect(0, yPos, pageWidth / 2 - 2, 7, "F");
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(8);
-      doc.text("TRANSFORMADOR INSTALADO - POTÊNCIA:", 10, yPos + 5);
-      
-      doc.rect(pageWidth / 2 + 2, yPos, pageWidth / 2 - 2, 7, "F");
-      doc.text("TRANSFORMADOR RETIRADO:", pageWidth / 2 + 10, yPos + 5);
-      yPos += 7;
-      
-      // Dados dos transformadores (da etapa de execução)
-      doc.setDrawColor(0);
-      doc.rect(0, yPos, pageWidth / 2 - 2, 20, "S");
-      doc.rect(pageWidth / 2 + 2, yPos, pageWidth / 2 - 2, 20, "S");
-      
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(7);
-      
-      // Transformador Instalado
-      if (temTrafoInst) {
-        let yInst = yPos + 4;
-        doc.text(`Potência: ${dadosExec.trafo_inst_potencia || ""}`, 10, yInst);
-        doc.text(`Marca: ${dadosExec.trafo_inst_marca || ""}`, 10, yInst + 4);
-        doc.text(`Ano: ${dadosExec.trafo_inst_ano || ""}`, 10, yInst + 8);
-        doc.text(`Nº Série: ${dadosExec.trafo_inst_numero_serie || ""}`, 10, yInst + 12);
-      }
-      
-      // Transformador Retirado
-      if (temTrafoRet) {
-        let yRet = yPos + 4;
-        doc.text(`Potência: ${dadosExec.trafo_ret_potencia || ""}`, pageWidth / 2 + 10, yRet);
-        doc.text(`Marca: ${dadosExec.trafo_ret_marca || ""}`, pageWidth / 2 + 10, yRet + 4);
-        doc.text(`Ano: ${dadosExec.trafo_ret_ano || ""}`, pageWidth / 2 + 10, yRet + 8);
-        doc.text(`Nº Série: ${dadosExec.trafo_ret_numero_serie || ""}`, pageWidth / 2 + 10, yRet + 12);
-      }
-      
-      yPos += 22;
-    }
 
     // ==================== MATERIAL APLICADO ====================
     if (consumo.length > 0) {
@@ -846,6 +919,7 @@ export const WorkflowSteps = () => {
       doc.rect(0, yPos, pageWidth, 7, "F");
       doc.setFont("helvetica", "bold");
       doc.setFontSize(8);
+      doc.setTextColor(0);
       doc.text("MATERIAL APLICADO", 10, yPos + 5);
       yPos += 7;
 
@@ -854,12 +928,13 @@ export const WorkflowSteps = () => {
         c.codigo_material,
         c.descricao_item || "",
         c.unidade_medida || "",
-        Number(c.quantidade).toFixed(2)
+        "1.00",
+        "-"
       ]);
 
       autoTable(doc, {
         startY: yPos,
-        head: [["ITEM", "CÓDIGO", "DESCRIÇÃO", "UN", "QUANT"]],
+        head: [["ITEM", "CÓD", "MATERIAL APLICADO", "UN", "Ret.", "TOTAL"]],
         body: bodyConsumo,
         styles: { 
           fontSize: 7, 
@@ -876,9 +951,10 @@ export const WorkflowSteps = () => {
         columnStyles: {
           0: { cellWidth: 12, halign: "center" },
           1: { cellWidth: 25, halign: "center" },
-          2: { cellWidth: 150, halign: "left" },
+          2: { cellWidth: 180, halign: "left" },
           3: { cellWidth: 15, halign: "center" },
-          4: { cellWidth: 20, halign: "center" }
+          4: { cellWidth: 18, halign: "center" },
+          5: { cellWidth: 18, halign: "center" }
         },
         theme: "grid",
       });
@@ -896,7 +972,8 @@ export const WorkflowSteps = () => {
       doc.rect(0, yPos, pageWidth, 7, "F");
       doc.setFont("helvetica", "bold");
       doc.setFontSize(8);
-      doc.text("MATERIAL RETIRADO (SUCATA)", 10, yPos + 5);
+      doc.setTextColor(0);
+      doc.text("MATERIAL RETIRADO", 10, yPos + 5);
       yPos += 7;
 
       const bodySucata = sucata.map((s, idx) => [
@@ -904,13 +981,16 @@ export const WorkflowSteps = () => {
         s.codigo_material,
         s.descricao_item || "",
         s.unidade_medida || "",
-        Number(s.quantidade).toFixed(2),
-        s.classificacao || ""
+        s.classificacao === "SUCATA" ? "X" : "",
+        s.classificacao === "REFORMA" ? "X" : "",
+        s.classificacao === "BOM" ? "X" : "",
+        s.classificacao === "DESCARTE" ? "X" : "",
+        Number(s.quantidade).toFixed(2)
       ]);
 
       autoTable(doc, {
         startY: yPos,
-        head: [["ITEM", "CÓDIGO", "DESCRIÇÃO", "UN", "QUANT", "CLASSIFICAÇÃO"]],
+        head: [["ITEM", "CÓD", "MATERIAL RETIRADO", "UN", "SUCATA", "REFORMA", "BOM", "DESCARTE", "TOTAL"]],
         body: bodySucata,
         styles: { 
           fontSize: 7, 
@@ -927,10 +1007,13 @@ export const WorkflowSteps = () => {
         columnStyles: {
           0: { cellWidth: 12, halign: "center" },
           1: { cellWidth: 25, halign: "center" },
-          2: { cellWidth: 120, halign: "left" },
-          3: { cellWidth: 15, halign: "center" },
-          4: { cellWidth: 20, halign: "center" },
-          5: { cellWidth: 30, halign: "center" }
+          2: { cellWidth: 140, halign: "left" },
+          3: { cellWidth: 12, halign: "center" },
+          4: { cellWidth: 15, halign: "center" },
+          5: { cellWidth: 15, halign: "center" },
+          6: { cellWidth: 12, halign: "center" },
+          7: { cellWidth: 15, halign: "center" },
+          8: { cellWidth: 18, halign: "center" }
         },
         theme: "grid",
       });
@@ -945,7 +1028,7 @@ export const WorkflowSteps = () => {
     
     yPos = pageHeight - 40;
     
-    const colWidth = pageWidth / 3 - 5;
+    const colWidth = (pageWidth - 30) / 3;
     
     // Líder equipe
     doc.setDrawColor(0);
@@ -955,22 +1038,25 @@ export const WorkflowSteps = () => {
     doc.text("LÍDER DE EQUIPE", 10 + colWidth / 2, yPos + 20, { align: "center" });
     
     // Fiscal
-    doc.line(10 + colWidth + 5, yPos + 15, 10 + 2 * colWidth + 5, yPos + 15);
-    doc.text("FISCAL", 10 + 1.5 * colWidth + 5, yPos + 20, { align: "center" });
+    doc.line(10 + colWidth + 10, yPos + 15, 10 + 2 * colWidth + 10, yPos + 15);
+    doc.text("FISCAL", 10 + 1.5 * colWidth + 10, yPos + 20, { align: "center" });
     
     // Cliente
-    doc.line(10 + 2 * colWidth + 10, yPos + 15, 10 + 3 * colWidth + 10, yPos + 15);
-    doc.text("CLIENTE / RESPONSÁVEL", 10 + 2.5 * colWidth + 10, yPos + 20, { align: "center" });
+    doc.line(10 + 2 * colWidth + 20, yPos + 15, 10 + 3 * colWidth + 20, yPos + 15);
+    doc.text("CLIENTE / RESPONSÁVEL", 10 + 2.5 * colWidth + 20, yPos + 20, { align: "center" });
 
     // ==================== RODAPÉ ====================
     doc.setFontSize(6);
     doc.setFont("helvetica", "italic");
     doc.setTextColor(100);
-    const rodape = `Orçamento gerado em ${new Date().toLocaleString("pt-BR")} | Tipo: ${medicaoTab} | ${medicaoForaHC ? "Fora de Horário Comercial (+30%)" : "Horário Comercial (+12%)"}`;
+    const rodape = `Orçamento gerado em ${new Date().toLocaleString("pt-BR")} | Modalidade: ${medicaoTab} | ${medicaoForaHC ? "Fora de Horário Comercial (+30%)" : "Horário Comercial (+12%)"}`;
     doc.text(rodape, pageWidth / 2, pageHeight - 5, { align: "center" });
 
     doc.save(`Orcamento_${selectedItem.codigo_acionamento || "acionamento"}_${medicaoTab}.pdf`);
     setMaterialInfo("Orçamento gerado com sucesso.");
+    } catch (error: any) {
+      setMaterialInfo(`Erro ao gerar orçamento: ${error?.message || "Erro desconhecido"}`);
+    }
   };
 
 
@@ -3601,10 +3687,10 @@ export const WorkflowSteps = () => {
                       <TableHead>Código</TableHead>
                       <TableHead>Operação</TableHead>
                       <TableHead>Descrição</TableHead>
-                      <TableHead>Unidade</TableHead>
-                      <TableHead>Qtd</TableHead>
-                      <TableHead>Valor UPS</TableHead>
-                      <TableHead>Subtotal</TableHead>
+                      <TableHead>Un</TableHead>
+                      <TableHead>UPS</TableHead>
+                      <TableHead>Total</TableHead>
+                      <TableHead>R$</TableHead>
                       <TableHead></TableHead>
                     </TableRow>
                   </TableHeader>
@@ -3615,10 +3701,10 @@ export const WorkflowSteps = () => {
                         <TableCell>{i.operacao}</TableCell>
                         <TableCell>{i.descricao}</TableCell>
                         <TableCell>{i.unidade}</TableCell>
-                        <TableCell className="max-w-[120px]">
-                          <Input type="number" min={0} value={i.quantidade} onChange={(e) => handleQtdMedicao(i.codigo, i.operacao, Number(e.target.value))} />
-                        </TableCell>
                         <TableCell>{Number(i.valorUps || 0).toFixed(2)}</TableCell>
+                        <TableCell className="max-w-[80px]">
+                          <Input type="number" min={0} step="0.01" value={i.quantidade} onChange={(e) => handleQtdMedicao(i.codigo, i.operacao, Number(e.target.value))} />
+                        </TableCell>
                         <TableCell>
                           {subtotalMedicao(i).toFixed(2)}
                         </TableCell>
@@ -3653,7 +3739,7 @@ export const WorkflowSteps = () => {
 
           <DialogFooter className="flex gap-2 justify-end">
             <Button variant="outline" onClick={() => setMedicaoModalOpen(false)}>Fechar</Button>
-            <Button onClick={gerarOrcamento}>Gerar orçamento (PDF)</Button>
+            <Button onClick={gerarOrcamento} className="bg-red-600 hover:bg-red-700">Gerar orçamento (PDF)</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
