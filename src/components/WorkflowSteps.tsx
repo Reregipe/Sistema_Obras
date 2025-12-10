@@ -657,6 +657,8 @@ export const WorkflowSteps = () => {
   const materiaisReferencia = consumo || [];
 
   const gerarOrcamento = async () => {
+    console.log("🔍 Iniciando geração de orçamento...", { selectedItem, medicaoTab, medicaoForaHC });
+    
     if (!selectedItem) {
       setMaterialInfo("Erro: Nenhum acionamento selecionado");
       return;
@@ -668,6 +670,8 @@ export const WorkflowSteps = () => {
       return;
     }
     
+    console.log("✅ ID do acionamento:", idAcionamento);
+    
     try {
       // Busca dados de execução para incluir informações de transformador
       let dadosExec: any = null;
@@ -678,76 +682,80 @@ export const WorkflowSteps = () => {
           .eq("id_acionamento", idAcionamento)
           .maybeSingle();
         dadosExec = data;
-      } catch {
-        // Se não houver dados, continua sem
+        console.log("✅ Dados de execução carregados:", dadosExec);
+      } catch (err) {
+        console.warn("⚠️ Dados de execução não encontrados, continuando sem...", err);
       }
-    
-    const doc = new jsPDF("landscape");
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const pageHeight = doc.internal.pageSize.getHeight();
-    const orangeColor: [number, number, number] = [255, 200, 150];
-    
-    // ==================== CABEÇALHO ====================
-    // Fundo laranja
-    doc.setFillColor(orangeColor[0], orangeColor[1], orangeColor[2]);
-    doc.rect(0, 0, pageWidth, 50, "F");
-    
-    doc.setTextColor(0);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(7);
-    
-    // Primeira linha
-    doc.text("EQUIPE=>", 10, 8);
-    doc.text("ENCARREGADO=>", 70, 8);
-    doc.text("DATA SAÍDA=>", 130, 8);
-    doc.text("DATA RETORNO=>", 180, 8);
-    doc.text("TÉCNICO ENG:", 240, 8);
-    
-    // Segunda linha (valores)
-    doc.setFont("helvetica", "normal");
-    doc.text(encarregadoNome || selectedItem.encarregado || "", 10, 12);
-    doc.text("", 70, 12); // será preenchido manualmente
-    doc.text(formatDateBr(selectedItem.data_abertura), 130, 12);
-    const dataRetorno = dadosExec?.retorno_servico ? formatDateBr(dadosExec.retorno_servico) : "";
-    doc.text(dataRetorno, 180, 12);
-    doc.text("", 240, 12); // será preenchido manualmente
-    
-    // Terceira linha
-    doc.setFont("helvetica", "bold");
-    doc.text("ENDEREÇO=>", 10, 18);
-    doc.setFont("helvetica", "normal");
-    doc.text(selectedItem.endereco || "", 35, 18);
-    
-    // Quarta linha
-    doc.setFont("helvetica", "bold");
-    doc.text("ELETRICISTAS=>", 10, 24);
-    doc.setFont("helvetica", "normal");
-    doc.text("", 35, 24); // será preenchido manualmente
-    
-    // Quinta linha
-    doc.setFont("helvetica", "bold");
-    doc.text("SAÍDA BASE=>", 10, 30);
-    doc.text("RETORNO BASE=>", 70, 30);
-    doc.text("00:00:00", 130, 30);
-    doc.text("KM INICIAL=>", 160, 30);
-    doc.setFont("helvetica", "normal");
-    doc.text(dadosExec?.saida_base ? new Date(dadosExec.saida_base).toLocaleTimeString() : "", 50, 30);
-    doc.text(dadosExec?.retorno_base ? new Date(dadosExec.retorno_base).toLocaleTimeString() : "", 100, 30);
-    doc.text(dadosExec?.km_inicial || "", 180, 30);
-    
-    // Sexta linha
-    doc.setFont("helvetica", "bold");
-    doc.text("INÍCIO SERVIÇO=>", 10, 36);
-    doc.text("RETORNO SERVIÇO=>", 70, 36);
-    doc.text("00:00:00", 130, 36);
-    doc.text("KM FINAL=>", 160, 36);
-    doc.setFont("helvetica", "normal");
-    doc.text(dadosExec?.inicio_servico ? new Date(dadosExec.inicio_servico).toLocaleTimeString() : "", 50, 36);
-    doc.text(dadosExec?.retorno_servico ? new Date(dadosExec.retorno_servico).toLocaleTimeString() : "", 100, 36);
-    doc.text(dadosExec?.km_final || "", 180, 36);
-    
-    // Sétima linha
-    doc.setFont("helvetica", "bold");
+      
+      console.log("📝 Criando PDF...");
+      const doc = new jsPDF("landscape");
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const orangeColor: [number, number, number] = [255, 200, 150];
+      
+      console.log("✅ PDF criado. Dimensões:", { pageWidth, pageHeight });
+      
+      // ==================== CABEÇALHO ====================
+      // Fundo laranja
+      doc.setFillColor(orangeColor[0], orangeColor[1], orangeColor[2]);
+      doc.rect(0, 0, pageWidth, 50, "F");
+      
+      doc.setTextColor(0);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7);
+      
+      // Primeira linha
+      doc.text("EQUIPE=>", 10, 8);
+      doc.text("ENCARREGADO=>", 70, 8);
+      doc.text("DATA SAÍDA=>", 130, 8);
+      doc.text("DATA RETORNO=>", 180, 8);
+      doc.text("TÉCNICO ENG:", 240, 8);
+      
+      // Segunda linha (valores)
+      doc.setFont("helvetica", "normal");
+      doc.text(encarregadoNome || selectedItem.encarregado || "", 10, 12);
+      doc.text("", 70, 12); // será preenchido manualmente
+      doc.text(formatDateBr(selectedItem.data_abertura), 130, 12);
+      const dataRetorno = dadosExec?.retorno_servico ? formatDateBr(dadosExec.retorno_servico) : "";
+      doc.text(dataRetorno, 180, 12);
+      doc.text("", 240, 12); // será preenchido manualmente
+      
+      // Terceira linha
+      doc.setFont("helvetica", "bold");
+      doc.text("ENDEREÇO=>", 10, 18);
+      doc.setFont("helvetica", "normal");
+      doc.text(selectedItem.endereco || "", 35, 18);
+      
+      // Quarta linha
+      doc.setFont("helvetica", "bold");
+      doc.text("ELETRICISTAS=>", 10, 24);
+      doc.setFont("helvetica", "normal");
+      doc.text("", 35, 24); // será preenchido manualmente
+      
+      // Quinta linha
+      doc.setFont("helvetica", "bold");
+      doc.text("SAÍDA BASE=>", 10, 30);
+      doc.text("RETORNO BASE=>", 70, 30);
+      doc.text("00:00:00", 130, 30);
+      doc.text("KM INICIAL=>", 160, 30);
+      doc.setFont("helvetica", "normal");
+      doc.text(dadosExec?.saida_base ? new Date(dadosExec.saida_base).toLocaleTimeString() : "", 50, 30);
+      doc.text(dadosExec?.retorno_base ? new Date(dadosExec.retorno_base).toLocaleTimeString() : "", 100, 30);
+      doc.text(dadosExec?.km_inicial || "", 180, 30);
+      
+      // Sexta linha
+      doc.setFont("helvetica", "bold");
+      doc.text("INÍCIO SERVIÇO=>", 10, 36);
+      doc.text("RETORNO SERVIÇO=>", 70, 36);
+      doc.text("00:00:00", 130, 36);
+      doc.text("KM FINAL=>", 160, 36);
+      doc.setFont("helvetica", "normal");
+      doc.text(dadosExec?.inicio_servico ? new Date(dadosExec.inicio_servico).toLocaleTimeString() : "", 50, 36);
+      doc.text(dadosExec?.retorno_servico ? new Date(dadosExec.retorno_servico).toLocaleTimeString() : "", 100, 36);
+      doc.text(dadosExec?.km_final || "", 180, 36);
+      
+      // Sétima linha
+      doc.setFont("helvetica", "bold");
     doc.text("COD. ACIONAMENTO=>", 10, 42);
     doc.text("Nº INTERVENÇÃO=>", 70, 42);
     doc.text("NOTA (SS)=>", 130, 42);
@@ -1027,34 +1035,37 @@ export const WorkflowSteps = () => {
     }
     
     yPos = pageHeight - 40;
-    
-    const colWidth = (pageWidth - 30) / 3;
-    
-    // Líder equipe
-    doc.setDrawColor(0);
-    doc.line(10, yPos + 15, 10 + colWidth, yPos + 15);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(7);
-    doc.text("LÍDER DE EQUIPE", 10 + colWidth / 2, yPos + 20, { align: "center" });
-    
-    // Fiscal
-    doc.line(10 + colWidth + 10, yPos + 15, 10 + 2 * colWidth + 10, yPos + 15);
-    doc.text("FISCAL", 10 + 1.5 * colWidth + 10, yPos + 20, { align: "center" });
-    
-    // Cliente
-    doc.line(10 + 2 * colWidth + 20, yPos + 15, 10 + 3 * colWidth + 20, yPos + 15);
-    doc.text("CLIENTE / RESPONSÁVEL", 10 + 2.5 * colWidth + 20, yPos + 20, { align: "center" });
+      
+      const colWidth = (pageWidth - 30) / 3;
+      
+      // Líder equipe
+      doc.setDrawColor(0);
+      doc.line(10, yPos + 15, 10 + colWidth, yPos + 15);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7);
+      doc.text("LÍDER DE EQUIPE", 10 + colWidth / 2, yPos + 20, { align: "center" });
+      
+      // Fiscal
+      doc.line(10 + colWidth + 10, yPos + 15, 10 + 2 * colWidth + 10, yPos + 15);
+      doc.text("FISCAL", 10 + 1.5 * colWidth + 10, yPos + 20, { align: "center" });
+      
+      // Cliente
+      doc.line(10 + 2 * colWidth + 20, yPos + 15, 10 + 3 * colWidth + 20, yPos + 15);
+      doc.text("CLIENTE / RESPONSÁVEL", 10 + 2.5 * colWidth + 20, yPos + 20, { align: "center" });
 
-    // ==================== RODAPÉ ====================
-    doc.setFontSize(6);
-    doc.setFont("helvetica", "italic");
-    doc.setTextColor(100);
-    const rodape = `Orçamento gerado em ${new Date().toLocaleString("pt-BR")} | Modalidade: ${medicaoTab} | ${medicaoForaHC ? "Fora de Horário Comercial (+30%)" : "Horário Comercial (+12%)"}`;
-    doc.text(rodape, pageWidth / 2, pageHeight - 5, { align: "center" });
+      // ==================== RODAPÉ ====================
+      doc.setFontSize(6);
+      doc.setFont("helvetica", "italic");
+      doc.setTextColor(100);
+      const rodape = `Orçamento gerado em ${new Date().toLocaleString("pt-BR")} | Modalidade: ${medicaoTab} | ${medicaoForaHC ? "Fora de Horário Comercial (+30%)" : "Horário Comercial (+12%)"}`;
+      doc.text(rodape, pageWidth / 2, pageHeight - 5, { align: "center" });
 
-    doc.save(`Orcamento_${selectedItem.codigo_acionamento || "acionamento"}_${medicaoTab}.pdf`);
-    setMaterialInfo("Orçamento gerado com sucesso.");
+      doc.save(`Orcamento_${selectedItem.codigo_acionamento || "acionamento"}_${medicaoTab}.pdf`);
+      console.log("✅ PDF salvo com sucesso!");
+      setMaterialInfo("Orçamento gerado com sucesso.");
     } catch (error: any) {
+      console.error("❌ Erro ao gerar orçamento:", error);
+      console.error("Stack:", error?.stack);
       setMaterialInfo(`Erro ao gerar orçamento: ${error?.message || "Erro desconhecido"}`);
     }
   };
@@ -3627,117 +3638,166 @@ export const WorkflowSteps = () => {
     </Dialog>
 
       <Dialog open={medicaoModalOpen} onOpenChange={setMedicaoModalOpen} modal>
-        <DialogContent className="max-w-5xl h-[90vh] overflow-y-auto">
-          <DialogHeader className="text-center space-y-1">
-            <DialogTitle className="text-xl font-bold">Medição / Orçamento</DialogTitle>
-            <DialogDescription>Monte o orçamento de mão de obra. Nada é salvo; apenas cálculo/PDF.</DialogDescription>
-          </DialogHeader>
+        <DialogContent className="w-[98vw] max-w-7xl h-[92vh] flex flex-col p-0 overflow-hidden">
+          <div className="flex flex-col flex-1 overflow-hidden">
+            <div className="px-6 pt-4 pb-2 border-b">
+              <DialogHeader className="text-center space-y-1">
+                <DialogTitle className="text-xl font-bold">Medição / Orçamento</DialogTitle>
+                <DialogDescription>Monte o orçamento de mão de obra. Nada é salvo; apenas cálculo/PDF.</DialogDescription>
+              </DialogHeader>
 
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex gap-2">
-              {selectedItem?.modalidade?.toUpperCase() === "LM+LV" ? (
-                <>
-                  <Button variant={medicaoTab === "LM" ? "default" : "outline"} size="sm" onClick={() => setMedicaoTab("LM")}>LM</Button>
-                  <Button variant={medicaoTab === "LV" ? "default" : "outline"} size="sm" onClick={() => setMedicaoTab("LV")}>LV</Button>
-                </>
-              ) : (
-                <span className="text-sm font-medium px-3 py-1.5 rounded-md bg-muted">Modalidade: {selectedItem?.modalidade || "LM"}</span>
-              )}
-            </div>
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={medicaoForaHC} onChange={(e) => setMedicaoForaHC(e.target.checked)} className="w-4 h-4" />
-              Fora do horário comercial
-            </label>
-          </div>
-
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <Input placeholder="Buscar MO por código ou descrição" value={medicaoBusca} onChange={(e) => setMedicaoBusca(e.target.value)} />
-              <div className="text-xs text-muted-foreground">Catálogo: {medicaoCatalogo.length}</div>
-            </div>
-            <div className="max-h-40 overflow-y-auto border rounded-md">
-              {medicaoCatalogo
-                .filter((m) => {
-                  const buscaMatch = 
-                    (m.codigo_mao_de_obra || "").toLowerCase().includes(medicaoBusca.toLowerCase()) ||
-                    (m.descricao || "").toLowerCase().includes(medicaoBusca.toLowerCase());
-                  const tipoMatch = (m.tipo || "").toUpperCase() === medicaoTab;
-                  const naoEhAjusteHC = !["26376", "92525"].includes(m.codigo_mao_de_obra);
-                  return buscaMatch && tipoMatch && naoEhAjusteHC;
-                })
-                .map((m) => (
-                  <button
-                    key={`${m.codigo_mao_de_obra}-${m.operacao}-${m.tipo}`}
-                    className="w-full text-left px-3 py-2 text-sm hover:bg-muted"
-                    onClick={() => handleAddMedicaoItem(m)}
-                  >
-                    {m.codigo_mao_de_obra} - {m.descricao} (fração {m.operacao || 1}, UPS {m.ups || 0})
-                  </button>
-                ))}
-            </div>
-
-            <div className="rounded-md border p-3 space-y-2">
-              <h4 className="font-semibold text-sm">Itens {medicaoTab}</h4>
-              {(medicaoItens[medicaoTab] || []).length === 0 ? (
-                <p className="text-sm text-muted-foreground">Nenhum item adicionado.</p>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Código</TableHead>
-                      <TableHead>Operação</TableHead>
-                      <TableHead>Descrição</TableHead>
-                      <TableHead>Un</TableHead>
-                      <TableHead>UPS</TableHead>
-                      <TableHead>Total</TableHead>
-                      <TableHead>R$</TableHead>
-                      <TableHead></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {(medicaoItens[medicaoTab] || []).map((i) => (
-                      <TableRow key={`${i.codigo}-${i.operacao}`}>
-                        <TableCell>{i.codigo}</TableCell>
-                        <TableCell>{i.operacao}</TableCell>
-                        <TableCell>{i.descricao}</TableCell>
-                        <TableCell>{i.unidade}</TableCell>
-                        <TableCell>{Number(i.valorUps || 0).toFixed(2)}</TableCell>
-                        <TableCell className="max-w-[80px]">
-                          <Input type="number" min={0} step="0.01" value={i.quantidade} onChange={(e) => handleQtdMedicao(i.codigo, i.operacao, Number(e.target.value))} />
-                        </TableCell>
-                        <TableCell>
-                          {subtotalMedicao(i).toFixed(2)}
-                        </TableCell>
-                        <TableCell>
-                          <Button variant="ghost" size="sm" onClick={() => handleRemoveMedicao(i.codigo, i.operacao)}>Remover</Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-              <div className="text-right font-semibold">
-                Total {medicaoTab}: {totalAbaMedicao(medicaoTab).toFixed(2)}
+              <div className="flex items-center justify-between mt-3">
+                <div className="flex gap-2">
+                  {selectedItem?.modalidade?.toUpperCase() === "LM+LV" ? (
+                    <>
+                      <Button variant={medicaoTab === "LM" ? "default" : "outline"} size="sm" onClick={() => setMedicaoTab("LM")}>LM</Button>
+                      <Button variant={medicaoTab === "LV" ? "default" : "outline"} size="sm" onClick={() => setMedicaoTab("LV")}>LV</Button>
+                    </>
+                  ) : (
+                    <span className="text-sm font-medium px-3 py-1.5 rounded-md bg-muted">Modalidade: {selectedItem?.modalidade || "LM"}</span>
+                  )}
+                </div>
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={medicaoForaHC} onChange={(e) => setMedicaoForaHC(e.target.checked)} className="w-4 h-4" />
+                  Fora do horário comercial
+                </label>
               </div>
             </div>
 
-            <div className="rounded-md border p-3 space-y-2">
-              <h4 className="font-semibold text-sm">Materiais (referência)</h4>
-              {materiaisReferencia.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Nenhum material aplicado.</p>
-              ) : (
-                <ul className="text-sm space-y-1">
-                  {materiaisReferencia.map((m: any) => (
-                    <li key={m.codigo_material}>
-                      {m.codigo_material} - {m.descricao_item} ({m.unidade_medida}) — {m.quantidade}
-                    </li>
-                  ))}
-                </ul>
-              )}
+            <div className="flex-1 overflow-hidden grid grid-cols-2 gap-3 px-6 py-3">
+              {/* Quadrante 1: Catálogo */}
+              <div className="rounded-md border p-3 space-y-2 flex flex-col min-h-0">
+                <div className="flex items-center gap-2">
+                  <h4 className="font-semibold text-sm flex-1">Catálogo de MO</h4>
+                  <div className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">{medicaoCatalogo.filter(m => {
+                    const buscaMatch = (m.codigo_mao_de_obra || "").toLowerCase().includes(medicaoBusca.toLowerCase()) || (m.descricao || "").toLowerCase().includes(medicaoBusca.toLowerCase());
+                    const tipoMatch = (m.tipo || "").toUpperCase() === medicaoTab;
+                    const naoEhAjusteHC = !["26376", "92525"].includes(m.codigo_mao_de_obra);
+                    return buscaMatch && tipoMatch && naoEhAjusteHC;
+                  }).length}</div>
+                </div>
+                <Input placeholder="Buscar..." value={medicaoBusca} onChange={(e) => setMedicaoBusca(e.target.value)} className="text-xs h-8" />
+                <div className="flex-1 overflow-y-auto border rounded-md bg-card">
+                  {medicaoCatalogo
+                    .filter((m) => {
+                      const buscaMatch = 
+                        (m.codigo_mao_de_obra || "").toLowerCase().includes(medicaoBusca.toLowerCase()) ||
+                        (m.descricao || "").toLowerCase().includes(medicaoBusca.toLowerCase());
+                      const tipoMatch = (m.tipo || "").toUpperCase() === medicaoTab;
+                      const naoEhAjusteHC = !["26376", "92525"].includes(m.codigo_mao_de_obra);
+                      return buscaMatch && tipoMatch && naoEhAjusteHC;
+                    })
+                    .map((m) => (
+                      <button
+                        key={`${m.codigo_mao_de_obra}-${m.operacao}-${m.tipo}`}
+                        className="w-full text-left px-2 py-1.5 text-xs hover:bg-muted border-b transition-colors"
+                        onClick={() => handleAddMedicaoItem(m)}
+                      >
+                        <div className="font-semibold truncate">{m.codigo_mao_de_obra}</div>
+                        <div className="text-muted-foreground text-xs truncate">{m.descricao}</div>
+                      </button>
+                    ))}
+                </div>
+              </div>
+
+              {/* Quadrante 2: Itens MO */}
+              <div className="rounded-md border p-3 space-y-2 flex flex-col min-h-0">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-semibold text-sm">Itens {medicaoTab}</h4>
+                  <span className="text-xs font-bold text-green-600 bg-green-50 px-2 py-1 rounded">R$ {totalAbaMedicao(medicaoTab).toFixed(2)}</span>
+                </div>
+                {(medicaoItens[medicaoTab] || []).length === 0 ? (
+                  <div className="flex items-center justify-center flex-1 text-muted-foreground">
+                    <p className="text-xs">Nenhum item</p>
+                  </div>
+                ) : (
+                  <div className="flex-1 overflow-y-auto min-h-0 border rounded-sm bg-card">
+                    <div className="text-xs divide-y">
+                      {(medicaoItens[medicaoTab] || []).map((i) => (
+                        <div key={`${i.codigo}-${i.operacao}`} className="p-2 hover:bg-muted transition-colors">
+                          <div className="flex justify-between items-start gap-2">
+                            <div className="flex-1 min-w-0">
+                              <div className="font-semibold truncate">{i.codigo}</div>
+                              <div className="text-muted-foreground text-xs truncate">{i.descricao}</div>
+                            </div>
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              onClick={() => handleRemoveMedicao(i.codigo, i.operacao)}
+                              className="h-5 w-5 p-0 text-xs"
+                            >
+                              ✕
+                            </Button>
+                          </div>
+                          <div className="grid grid-cols-3 gap-2 mt-1 text-xs">
+                            <input 
+                              type="number" 
+                              min={0} 
+                              step="0.01" 
+                              value={i.quantidade} 
+                              onChange={(e) => handleQtdMedicao(i.codigo, i.operacao, Number(e.target.value))}
+                              placeholder="Qty"
+                              className="border rounded px-1 h-6 bg-background"
+                            />
+                            <div className="text-right">{i.unidade}</div>
+                            <div className="text-right font-semibold">{subtotalMedicao(i).toFixed(2)}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Quadrante 3: Materiais Aplicados */}
+              <div className="rounded-md border p-3 space-y-2 flex flex-col min-h-0">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-semibold text-sm">Materiais Aplicados</h4>
+                  <span className="text-xs bg-muted px-2 py-1 rounded">{consumo.length}</span>
+                </div>
+                {consumo.length === 0 ? (
+                  <div className="flex items-center justify-center flex-1 text-muted-foreground">
+                    <p className="text-xs">Nenhum material</p>
+                  </div>
+                ) : (
+                  <div className="flex-1 overflow-y-auto min-h-0 border rounded-sm bg-card divide-y">
+                    {consumo.map((m: any) => (
+                      <div key={m.codigo_material} className="p-2 hover:bg-muted transition-colors text-xs">
+                        <div className="font-semibold truncate">{m.codigo_material}</div>
+                        <div className="text-muted-foreground text-xs truncate">{m.descricao_item}</div>
+                        <div className="text-muted-foreground text-xs">Qtd: {m.quantidade}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Quadrante 4: Materiais Retirados */}
+              <div className="rounded-md border p-3 space-y-2 flex flex-col min-h-0">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-semibold text-sm">Materiais Retirados</h4>
+                  <span className="text-xs bg-muted px-2 py-1 rounded">{sucata.length}</span>
+                </div>
+                {sucata.length === 0 ? (
+                  <div className="flex items-center justify-center flex-1 text-muted-foreground">
+                    <p className="text-xs">Nenhum material</p>
+                  </div>
+                ) : (
+                  <div className="flex-1 overflow-y-auto min-h-0 border rounded-sm bg-card divide-y">
+                    {sucata.map((m: any) => (
+                      <div key={m.codigo_material} className="p-2 hover:bg-muted transition-colors text-xs">
+                        <div className="font-semibold truncate">{m.codigo_material}</div>
+                        <div className="text-muted-foreground text-xs truncate">{m.descricao_item}</div>
+                        <div className="text-muted-foreground text-xs">Qtd: {m.quantidade} | {m.classificacao}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
-          <DialogFooter className="flex gap-2 justify-end">
+          <DialogFooter className="border-t px-6 py-3 flex gap-2 justify-end bg-muted/30">
             <Button variant="outline" onClick={() => setMedicaoModalOpen(false)}>Fechar</Button>
             <Button onClick={gerarOrcamento} className="bg-red-600 hover:bg-red-700">Gerar orçamento (PDF)</Button>
           </DialogFooter>
