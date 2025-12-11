@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { inferLinhaPorCodigo, inferLinhaPorEncarregado } from "@/data/equipesCatalog";
 
 type EquipeOption = {
   id_equipe: string;
@@ -21,6 +22,7 @@ type Adicional = {
   id_equipe: string;
   nome: string;
   encarregado?: string | null;
+  linha?: string | null;
 };
 
 type AcionamentoRecord = {
@@ -79,6 +81,37 @@ const toIsoOrNull = (value?: string) => {
   return isNaN(d.getTime()) ? null : d.toISOString();
 };
 
+const normalizeLinhaEquipe = (valor?: string | null) => {
+  if (!valor) return null;
+  const texto = valor.toString().trim().toUpperCase();
+  if (!texto) return null;
+  if (texto === "LM" || texto.includes("MORTA")) return "LM";
+  if (texto === "LV" || texto.includes("VIVA")) return "LV";
+  return null;
+};
+
+const extrairCodigoPossivel = (valor?: string | null) => {
+  if (!valor) return null;
+  const texto = valor.toString().toUpperCase();
+  const match = texto.match(/\bE\d{1,3}\b/);
+  return match ? match[0] : null;
+};
+
+const deduzirLinhaEquipe = (
+  linhaBruta?: string | null,
+  idEquipe?: string | null,
+  nomeEquipe?: string | null,
+  encarregado?: string | null
+): "LM" | "LV" | null => {
+  return (
+    normalizeLinhaEquipe(linhaBruta) ??
+    inferLinhaPorCodigo(idEquipe || undefined) ??
+    inferLinhaPorCodigo(extrairCodigoPossivel(nomeEquipe) || undefined) ??
+    inferLinhaPorEncarregado(encarregado || undefined) ??
+    null
+  );
+};
+
 export default function AcionamentoDetalhe() {
   const { codigo } = useParams();
   const [loading, setLoading] = useState(true);
@@ -135,18 +168,29 @@ export default function AcionamentoDetalhe() {
       const lookup = (eqList || equipes) as EquipeOption[];
       const { data } = await supabase
         .from("acionamento_equipes")
-        .select("id_equipe, encarregado_nome")
+        .select("id_equipe, encarregado_nome, papel")
         .eq("id_acionamento", idAcionamento);
       const mapped: Adicional[] =
         data?.map((item) => ({
           id_equipe: item.id_equipe,
           nome: lookup.find((e) => e.id_equipe === item.id_equipe)?.nome_equipe || item.id_equipe,
           encarregado: item.encarregado_nome || "",
+          linha:
+            normalizeLinhaEquipe(item.papel) ||
+            normalizeLinhaEquipe(lookup.find((e) => e.id_equipe === item.id_equipe)?.linha),
         })) || [];
-      setEquipesAdicionais(mapped);
+      return mapped;
     } catch (err) {
       console.error("Erro ao carregar equipes adicionais", err);
+      return [];
     }
+  };
+
+  const aplicarEquipesAdicionais = (lista: Adicional[], principalId?: string | null) => {
+    const filtro = principalId ? principalId.trim() : "";
+    const filtradas = filtro ? lista.filter((item) => item.id_equipe !== filtro) : lista;
+    setEquipesAdicionais(filtradas);
+    return filtradas;
   };
 
   useEffect(() => {
@@ -168,6 +212,22 @@ export default function AcionamentoDetalhe() {
         }
         const rec = data as any as AcionamentoRecord;
         setAcionamento(rec);
+
+        const adicionaisLista = await loadAdicionais(rec.id_acionamento, eqs);
+        let resolvedIdEquipe = rec.id_equipe || "";
+        let resolvedEncarregado = rec.encarregado || "";
+
+        if (rec.modalidade === "LM+LV" && !resolvedIdEquipe && adicionaisLista.length > 0) {
+          const preferidaLM = adicionaisLista.find((item) => normalizeLinhaEquipe(item.linha) === "LM");
+          const fallback = preferidaLM || adicionaisLista[0];
+          if (fallback) {
+            resolvedIdEquipe = fallback.id_equipe;
+            resolvedEncarregado = fallback.encarregado || resolvedEncarregado;
+          }
+        }
+
+        aplicarEquipesAdicionais(adicionaisLista, resolvedIdEquipe);
+
         setForm({
           modalidade: rec.modalidade || "",
           status: rec.status || "",
@@ -175,8 +235,8 @@ export default function AcionamentoDetalhe() {
           prioridade_nivel: rec.prioridade_nivel || "",
           municipio: rec.municipio || "",
           endereco: rec.endereco || "",
-          id_equipe: rec.id_equipe || "",
-          encarregado: rec.encarregado || "",
+          id_equipe: resolvedIdEquipe,
+          encarregado: resolvedEncarregado,
           data_abertura: rec.data_abertura || "",
           data_despacho: rec.data_despacho || "",
           observacao: rec.observacao || "",
@@ -189,7 +249,6 @@ export default function AcionamentoDetalhe() {
           nf_emitida_em: rec.nf_emitida_em || "",
           nf_numero: rec.nf_numero || "",
         });
-        await loadAdicionais(rec.id_acionamento, eqs);
       } catch (err: any) {
         setErro(err.message || "Erro ao carregar acionamento.");
       } finally {
@@ -245,7 +304,12 @@ export default function AcionamentoDetalhe() {
     if (idEquipe === form.id_equipe || equipesAdicionais.some((a) => a.id_equipe === idEquipe)) return;
     setEquipesAdicionais((prev) => [
       ...prev,
-      { id_equipe: idEquipe, nome: eq.nome_equipe, encarregado: eq.encarregado_nome || "" },
+      {
+        id_equipe: idEquipe,
+        nome: eq.nome_equipe,
+        encarregado: eq.encarregado_nome || "",
+        linha: normalizeLinhaEquipe(eq.linha),
+      },
     ]);
     if (!isMulti) {
       onChange("modalidade", "LM+LV");
@@ -324,14 +388,75 @@ export default function AcionamentoDetalhe() {
 
       if (acionamento.id_acionamento) {
         await supabase.from("acionamento_equipes").delete().eq("id_acionamento", acionamento.id_acionamento);
-        if (modalidade === "LM+LV" && equipesAdicionais.length > 0) {
-          const insertPayload = equipesAdicionais.map((e) => ({
-            id_acionamento: acionamento.id_acionamento,
-            id_equipe: e.id_equipe,
-            encarregado_nome: e.encarregado || null,
-          }));
-          const { error: errIns } = await supabase.from("acionamento_equipes").insert(insertPayload);
-          if (errIns) throw errIns;
+        if (modalidade === "LM+LV") {
+          const equipesParaSalvar: {
+            id_equipe: string;
+            encarregado_nome: string | null;
+            papel: string | null;
+          }[] = [];
+
+          const registrarEquipe = (idEquipe?: string, encarregado?: string | null, linha?: string | null) => {
+            if (!idEquipe) return;
+            equipesParaSalvar.push({
+              id_equipe: idEquipe,
+              encarregado_nome: encarregado || null,
+              papel: linha ? linha.toUpperCase() : null,
+            });
+          };
+
+          const principalInfo = equipes.find((e) => e.id_equipe === form.id_equipe);
+          const principalLinha = deduzirLinhaEquipe(
+            principalInfo?.linha,
+            form.id_equipe,
+            principalInfo?.nome_equipe,
+            form.encarregado || principalInfo?.encarregado_nome || null
+          );
+          registrarEquipe(
+            form.id_equipe,
+            form.encarregado || principalInfo?.encarregado_nome || null,
+            principalLinha
+          );
+
+          equipesAdicionais.forEach((eq) => {
+            const info = equipes.find((e) => e.id_equipe === eq.id_equipe);
+            const adicionalLinha = deduzirLinhaEquipe(
+              eq.linha || info?.linha,
+              eq.id_equipe,
+              eq.nome || info?.nome_equipe,
+              eq.encarregado || info?.encarregado_nome || null
+            );
+            registrarEquipe(
+              eq.id_equipe,
+              eq.encarregado || info?.encarregado_nome || null,
+              adicionalLinha
+            );
+          });
+
+          if (modalidade === "LM+LV" && equipesParaSalvar.length > 0) {
+            let possuiLM = equipesParaSalvar.some((item) => item.papel === "LM");
+            let possuiLV = equipesParaSalvar.some((item) => item.papel === "LV");
+            equipesParaSalvar.forEach((item) => {
+              if (item.papel) return;
+              if (!possuiLM) {
+                item.papel = "LM";
+                possuiLM = true;
+              } else if (!possuiLV) {
+                item.papel = "LV";
+                possuiLV = true;
+              }
+            });
+          }
+
+          if (equipesParaSalvar.length > 0) {
+            const insertPayload = equipesParaSalvar.map((item) => ({
+              id_acionamento: acionamento.id_acionamento,
+              id_equipe: item.id_equipe,
+              encarregado_nome: item.encarregado_nome,
+              papel: item.papel,
+            }));
+            const { error: errIns } = await supabase.from("acionamento_equipes").insert(insertPayload);
+            if (errIns) throw errIns;
+          }
         }
       }
 
@@ -343,6 +468,10 @@ export default function AcionamentoDetalhe() {
         .maybeSingle();
       if (refreshed) {
         setAcionamento(refreshed as any);
+      }
+      if (acionamento.id_acionamento) {
+        const atualizadas = await loadAdicionais(acionamento.id_acionamento, equipes);
+        aplicarEquipesAdicionais(atualizadas, form.id_equipe || null);
       }
     } catch (err: any) {
       setErro(err.message || "Erro ao salvar acionamento.");

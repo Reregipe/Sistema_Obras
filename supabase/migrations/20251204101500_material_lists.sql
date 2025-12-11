@@ -26,5 +26,31 @@ ALTER TABLE public.lista_aplicacao_itens
 ALTER TABLE public.pre_lista_itens ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.sucata_itens ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY IF NOT EXISTS "Pre-lista visivel" ON public.pre_lista_itens FOR ALL TO authenticated USING (true) WITH CHECK (true);
-CREATE POLICY IF NOT EXISTS "Sucata visivel" ON public.sucata_itens FOR ALL TO authenticated USING (true) WITH CHECK (true);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'pre_lista_itens'
+      AND policyname = 'Pre-lista visivel'
+  ) THEN
+    CREATE POLICY "Pre-lista visivel"
+      ON public.pre_lista_itens FOR ALL
+      TO authenticated
+      USING (true)
+      WITH CHECK (true);
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'sucata_itens'
+      AND policyname = 'Sucata visivel'
+  ) THEN
+    CREATE POLICY "Sucata visivel"
+      ON public.sucata_itens FOR ALL
+      TO authenticated
+      USING (true)
+      WITH CHECK (true);
+  END IF;
+END $$;

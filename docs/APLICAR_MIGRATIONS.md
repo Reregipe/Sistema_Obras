@@ -80,3 +80,19 @@ Após aplicar as migrations, o sistema vai:
 Se der erro dizendo que a coluna já existe, é porque você já aplicou antes. Tudo bem, só ignore o erro.
 
 Se der erro de permissão, verifique se você está logado como owner do projeto no Supabase.
+
+### Erro "function public.avancar_etapa_acionamento(uuid) is not unique"
+
+Esse erro aparece quando já existe mais de uma função com o mesmo nome/assinatura no banco. Antes de rodar a migration da função, execute no SQL Editor:
+
+```sql
+SELECT proname, oidvectortypes(proargtypes)
+FROM pg_proc
+WHERE proname = 'avancar_etapa_acionamento';
+
+DROP FUNCTION IF EXISTS public.avancar_etapa_acionamento(uuid);
+DROP FUNCTION IF EXISTS public.avancar_etapa_acionamento(uuid, text);
+DROP FUNCTION IF EXISTS public.avancar_etapa_acionamento(uuid, text, text);
+```
+
+Depois disso, rode novamente o conteúdo de `supabase/migrations/20251209000000_avancar_etapa_acionamento.sql` para recriar apenas a versão correta.
