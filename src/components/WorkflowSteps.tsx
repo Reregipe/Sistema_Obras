@@ -25,259 +25,226 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import jsPDF from "jspdf";
 
 import autoTable from "jspdf-autotable";
+import {
+  type EquipeLinha,
+  getEquipeInfoByCodigo,
+  inferEquipePorEncarregado,
+  inferLinhaPorCodigo,
+  inferLinhaPorEncarregado,
+} from "@/data/equipesCatalog";
+
+type EquipeEntry = { nome: string; linha?: EquipeLinha };
+
+const isUuidValue = (value: string) =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+
+const normalizeLinha = (valor?: string | null): EquipeLinha | undefined => {
+  if (!valor) return undefined;
+  const text = valor.trim();
+  if (/^lv$/i.test(text) || /linha viva/i.test(text) || /^viva$/i.test(text)) return "LV";
+  if (/^lm$/i.test(text) || /linha morta/i.test(text) || /^morta$/i.test(text)) return "LM";
+  return undefined;
+};
+
+const extrairSiglaEquipe = (nome?: string) => {
+  if (!nome) return "";
+  const texto = nome.trim();
+  if (!texto) return "";
+  const prefix = texto.includes("-") ? texto.split("-")[0]?.trim() : texto;
+  const codigoMatch = prefix.match(/[A-Za-z]{1,4}\d{1,4}/);
+  return (codigoMatch ? codigoMatch[0] : prefix).toUpperCase();
+};
+
+const formatEquipeDisplay = (info?: EquipeEntry, modalidade: EquipeLinha = "LM") => {
+  if (!info?.nome) return "";
+  const sigla = extrairSiglaEquipe(info.nome);
+  if (info.linha === "LV" && modalidade === "LM") {
+    return `Equipe LV: ${sigla}`;
+  }
+  if (info.linha === "LM" && modalidade === "LV") {
+    return `Equipe LM: ${sigla}`;
+  }
+  return sigla;
+};
+
+const extrairCandidatosEquipe = (fonte?: any): string[] => {
+  if (!fonte) return [];
+  return [
+    fonte.equipe_lm,
+    fonte.codigo_equipe,
+    fonte.equipe,
+    fonte.nome_equipe,
+    fonte.id_equipe,
+  ]
+    .map((valor) => (typeof valor === "string" ? valor.trim() : ""))
+    .filter((valor) => !!valor && !isUuidValue(valor));
+};
+
+const inferirEquipePreferencial = (
+  linhaDesejada: EquipeLinha,
+  fontes: any[] = [],
+  codigosExtras: string[] = []
+): string | undefined => {
+  const candidatos = [
+    ...codigosExtras,
+    ...fontes.flatMap((fonte) => extrairCandidatosEquipe(fonte)),
+  ];
+
+  for (const candidato of candidatos) {
+    const linha = inferLinhaPorCodigo(candidato);
+    if (linha === linhaDesejada) {
+      return candidato;
+    }
+  }
+
+  for (const fonte of fontes) {
+    if (!fonte) continue;
+    const encarregados = [
+      fonte.encarregado_lm,
+      fonte.encarregado,
+      fonte.encarregado_nome,
+      fonte.responsavel,
+      fonte.responsavel_nome,
+    ].filter((nome) => typeof nome === "string" && nome.trim().length > 0);
+
+    for (const nome of encarregados) {
+      const deducao = inferEquipePorEncarregado(nome);
+      if (deducao?.linha === linhaDesejada) {
+        return deducao.codigo;
+      }
+    }
+  }
+
+  return undefined;
+};
 
 
 
 interface WorkflowStep {
-
   id: number;
-
   title: string;
-
   description: string;
-
   icon: any;
-
   color: string;
-
   bgColor: string;
-
   route: string;
-
   count: number;
-
   urgent?: number;
-
   delayed?: number;
-
   status: "pending" | "active" | "completed" | "alert";
-
 }
 
-
-
 const workflowSteps: WorkflowStep[] = [
-
   {
-
     id: 1,
-
     title: "Acionamentos recebidos",
-
     description: "Recebido e lista prévia de materiais para o almoxarifado",
-
     icon: FileText,
-
     color: "text-blue-600",
-
     bgColor: "bg-blue-50",
-
     route: "/acionamentos",
-
     count: 0,
-
     status: "alert",
-
   },
-
   {
-
     id: 2,
-
     title: "Acionamentos executados",
-
     description: "Serviço em execução ou despachado",
-
     icon: Wrench,
-
     color: "text-green-600",
-
     bgColor: "bg-green-50",
-
     route: "/acionamentos",
-
     count: 0,
-
     status: "active",
-
   },
-
   {
-
     id: 3,
-
     title: "Medir serviços executados",
-
     description: "Valorizar MO, ajustar materiais e registrar horário (orçamento)",
-
     icon: TrendingUp,
-
     color: "text-orange-600",
-
     bgColor: "bg-orange-50",
-
     route: "/medicoes",
-
     count: 0,
-
     status: "alert",
-
   },
-
   {
-
     id: 4,
-
     title: "Criar OS no sistema",
-
-    description: "OS formal com dados e evidencias",
-
+    description: "OS formal com dados e evidências",
     icon: CheckCircle2,
-
     color: "text-purple-600",
-
     bgColor: "bg-purple-50",
-
     route: "/obras",
-
     count: 0,
-
     status: "active",
-
   },
-
   {
-
     id: 5,
-
     title: "Enviar Book / Aguardando Obra",
-
-    description: "Book com fotos e relatorios",
-
+    description: "Book com fotos e relatórios",
     icon: Clock,
-
     color: "text-yellow-600",
-
     bgColor: "bg-yellow-50",
-
     route: "/obras",
-
     count: 0,
-
     status: "pending",
-
   },
-
   {
-
     id: 6,
-
-    title: "Aprovacao Fiscal",
-
-    description: "Analise de evidencias e conformidade",
-
+    title: "Aprovação Fiscal",
+    description: "Análise de evidências e conformidade",
     icon: AlertCircle,
-
     color: "text-red-600",
-
     bgColor: "bg-red-50",
-
     route: "/obras",
-
     count: 0,
-
     status: "alert",
-
   },
-
   {
-
     id: 7,
-
     title: "Obra criada (TCI)",
-
-    description: "TCI emitido e pendencias tratadas",
-
+    description: "TCI emitido e pendências tratadas",
     icon: FileText,
-
     color: "text-indigo-600",
-
     bgColor: "bg-indigo-50",
-
     route: "/obras",
-
     count: 0,
-
     status: "active",
-
   },
-
   {
-
     id: 8,
-
-    title: "Aprovacao da medicao",
-
+    title: "Aprovação da medição",
     description: "Gestor aprova para pagamento",
-
     icon: CheckCircle2,
-
     color: "text-teal-600",
-
     bgColor: "bg-teal-50",
-
     route: "/medicoes",
-
     count: 0,
-
     status: "alert",
-
   },
-
   {
-
     id: 9,
-
-    title: "Geracao de lote",
-
+    title: "Geração de lote",
     description: "Agrupa obras aprovadas",
-
     icon: FileText,
-
     color: "text-cyan-600",
-
     bgColor: "bg-cyan-50",
-
     route: "/medicoes",
-
     count: 0,
-
     status: "pending",
-
   },
-
   {
-
     id: 10,
-
-    title: "Emissao de NF",
-
-    description: "Nota fiscal para concessionaria",
-
+    title: "Emissão de NF",
+    description: "Nota fiscal para concessionária",
     icon: CheckCircle2,
-
     color: "text-emerald-600",
-
     bgColor: "bg-emerald-50",
-
     route: "/medicoes",
-
     count: 0,
-
     status: "completed",
-
   },
-
 ];
 
 
@@ -357,6 +324,7 @@ export const WorkflowSteps = () => {
   const [loadingSugestoesConsumo, setLoadingSugestoesConsumo] = useState(false);
 
   const [currentUserName, setCurrentUserName] = useState<string>("");
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   const [encarregadoNome, setEncarregadoNome] = useState<string>("");
 
@@ -387,6 +355,35 @@ export const WorkflowSteps = () => {
     LM: [],
     LV: [],
   });
+  const [savingMedicao, setSavingMedicao] = useState(false);
+  const [medicaoDetalhesAcionamento, setMedicaoDetalhesAcionamento] = useState<any | null>(null);
+  const [medicaoEquipeSelecionada, setMedicaoEquipeSelecionada] = useState<Record<EquipeLinha, string>>({
+    LM: "",
+    LV: "",
+  });
+  const [medicaoEquipeOpcoes, setMedicaoEquipeOpcoes] = useState<Record<EquipeLinha, { value: string; label: string }[]>>({
+    LM: [],
+    LV: [],
+  });
+  const [medicaoEquipeMetaPorCodigo, setMedicaoEquipeMetaPorCodigo] = useState<Record<string, EquipeEntry>>({});
+
+  const atualizarEquipeSelecionada = (linha: EquipeLinha, codigo: string) => {
+    setMedicaoEquipeSelecionada((prev) => ({
+      ...prev,
+      [linha]: codigo,
+    }));
+  };
+
+  const equipeValidaParaLinha = (linha: EquipeLinha) => {
+    const codigo = medicaoEquipeSelecionada[linha];
+    if (!codigo) return false;
+    const info = medicaoEquipeMetaPorCodigo[codigo];
+    return !!info && info.linha === linha;
+  };
+
+  const modalidadeSelecionada = (selectedItem?.modalidade || "LM").toUpperCase();
+  const modalSuportaLM = modalidadeSelecionada !== "LV";
+  const modalSuportaLV = modalidadeSelecionada !== "LM";
 
   const emptyExec = {
 
@@ -401,12 +398,6 @@ export const WorkflowSteps = () => {
     inicio_servico: "",
 
     retorno_servico: "",
-
-    retorno_base: "",
-
-    troca_transformador: false,
-
-    trafo_ret_potencia: "",
 
     trafo_ret_marca: "",
 
@@ -462,7 +453,7 @@ export const WorkflowSteps = () => {
 
     observacoes: "",
 
-  };
+  }
 
   const [execForm, setExecForm] = useState<any>(emptyExec);
 
@@ -472,6 +463,26 @@ export const WorkflowSteps = () => {
     if (isNaN(d.getTime())) return "";
     // datetime-local expects yyyy-MM-ddTHH:mm
     return d.toISOString().slice(0, 16);
+  };
+
+  const enrichMateriais = async (lista: any[]) => {
+    if (!lista || lista.length === 0) return [];
+    const codigos = Array.from(new Set(lista.map((p: any) => p.codigo_material).filter(Boolean)));
+    if (codigos.length === 0) return lista;
+    const { data: mats } = await supabase
+      .from("materiais")
+      .select("codigo_material,descricao,unidade_medida")
+      .in("codigo_material", codigos);
+    const matMap = new Map((mats || []).map((m: any) => [m.codigo_material, m]));
+    return (lista || []).map((p: any) => {
+      const found = matMap.get(p.codigo_material) || {};
+      return {
+        ...p,
+        descricao_item: p.descricao_item || found.descricao || "",
+        unidade_medida: p.unidade_medida || found.unidade_medida || "",
+        descricao: p.descricao || found.descricao || "",
+      };
+    });
   };
 
   // ---------- Medição / Orçamento (Etapa 3 - sem persistência) ----------
@@ -491,10 +502,174 @@ export const WorkflowSteps = () => {
 
   const openMedicaoModal = async (item: any) => {
     setSelectedItem(item);
+    const idAcionamento = item.id_acionamento || item.id;
+    if (!idAcionamento) {
+      alert("❌ ID do acionamento não encontrado para medição.");
+      return;
+    }
+
     const mod = (item.modalidade || "LM").toUpperCase();
     const initialTab: "LM" | "LV" = mod === "LM+LV" ? "LM" : (mod as "LM" | "LV");
     setMedicaoTab(initialTab);
+    setMedicaoItens({ LM: [], LV: [] });
+    setMedicaoForaHC(false);
+    setMedicaoDetalhesAcionamento(null);
+    setMedicaoEquipeSelecionada({ LM: "", LV: "" });
+    setMedicaoEquipeOpcoes({ LM: [], LV: [] });
+    setMedicaoEquipeMetaPorCodigo({});
     setMedicaoModalOpen(true);
+
+    let detalhesAcionamento: any = null;
+    try {
+      const { data } = await supabase
+        .from("acionamentos")
+        .select("*")
+        .eq("id_acionamento", idAcionamento)
+        .maybeSingle();
+      if (data) {
+        detalhesAcionamento = data;
+        setMedicaoDetalhesAcionamento(data);
+      }
+    } catch (err) {
+      console.warn("⚠️ Falha ao carregar detalhes do acionamento para a medição", err);
+    }
+
+    let equipesRelacionadas: { id_equipe?: string | null; papel?: string | null; encarregado_nome?: string | null }[] = [];
+    try {
+      const { data } = await supabase
+        .from("acionamento_equipes")
+        .select("id_equipe,papel,encarregado_nome")
+        .eq("id_acionamento", idAcionamento);
+      equipesRelacionadas = data || [];
+    } catch (err) {
+      console.warn("⚠️ Falha ao carregar equipes relacionadas para sugestão", err);
+    }
+
+    type EquipeMeta = { original: string; linha?: EquipeLinha; encarregado?: string | null };
+    const equipeMetaMap = new Map<string, EquipeMeta>();
+    const registrarCodigo = (valor?: string | null, linhaHint?: EquipeLinha, encarregado?: string | null) => {
+      if (!valor) return undefined;
+      const texto = String(valor).trim();
+      if (!texto) return undefined;
+      const key = texto.toUpperCase();
+      const existente = equipeMetaMap.get(key) || { original: texto };
+      if (linhaHint && !existente.linha) existente.linha = linhaHint;
+      if (encarregado && encarregado.trim() && !existente.encarregado) existente.encarregado = encarregado.trim();
+      equipeMetaMap.set(key, existente);
+      return key;
+    };
+
+    const preferenciaNomeLM = [
+      detalhesAcionamento?.encarregado_lm,
+      item?.encarregado_lm,
+      detalhesAcionamento?.encarregado,
+      item?.encarregado,
+      detalhesAcionamento?.encarregado_nome,
+      item?.encarregado_nome,
+    ].find((nome) => typeof nome === "string" && nome.trim().length > 0);
+
+    const preferenciaNomeLV = [
+      detalhesAcionamento?.encarregado_lv,
+      item?.encarregado_lv,
+      detalhesAcionamento?.encarregado,
+      item?.encarregado,
+      detalhesAcionamento?.encarregado_nome,
+      item?.encarregado_nome,
+    ].find((nome) => typeof nome === "string" && nome.trim().length > 0);
+
+    registrarCodigo(detalhesAcionamento?.equipe_lm, "LM", preferenciaNomeLM);
+    registrarCodigo(item?.equipe_lm, "LM", preferenciaNomeLM);
+    registrarCodigo(detalhesAcionamento?.equipe_lv, "LV", preferenciaNomeLV);
+    registrarCodigo(item?.equipe_lv, "LV", preferenciaNomeLV);
+    registrarCodigo(detalhesAcionamento?.codigo_equipe, undefined, preferenciaNomeLM || preferenciaNomeLV);
+    registrarCodigo(item?.codigo_equipe, undefined, preferenciaNomeLM || preferenciaNomeLV);
+    registrarCodigo(detalhesAcionamento?.equipe, undefined, preferenciaNomeLM || preferenciaNomeLV);
+    registrarCodigo(item?.equipe, undefined, preferenciaNomeLM || preferenciaNomeLV);
+    registrarCodigo(detalhesAcionamento?.id_equipe, undefined, preferenciaNomeLM || preferenciaNomeLV);
+    registrarCodigo(item?.id_equipe, undefined, preferenciaNomeLM || preferenciaNomeLV);
+    registrarCodigo(detalhesAcionamento?.nome_equipe, undefined, preferenciaNomeLM || preferenciaNomeLV);
+    registrarCodigo(item?.nome_equipe, undefined, preferenciaNomeLM || preferenciaNomeLV);
+
+    equipesRelacionadas.forEach((rel) => {
+      registrarCodigo(rel?.id_equipe, normalizeLinha(rel?.papel), rel?.encarregado_nome);
+    });
+
+    let equipesDbMap = new Map<string, { nome_equipe?: string | null; linha?: string | null }>();
+    const uuidRefs = Array.from(equipeMetaMap.values())
+      .map((meta) => meta.original)
+      .filter((valor) => isUuidValue(valor));
+    if (uuidRefs.length > 0) {
+      try {
+        const { data } = await supabase
+          .from("equipes")
+          .select("id_equipe,nome_equipe,linha")
+          .in("id_equipe", uuidRefs);
+        equipesDbMap = new Map(
+          (data || []).map((eq: any) => [String(eq.id_equipe || "").toUpperCase(), eq])
+        );
+      } catch (err) {
+        console.warn("⚠️ Falha ao carregar nomes das equipes relacionadas", err);
+      }
+    }
+
+    const opcoesPorLinha: Record<EquipeLinha, { value: string; label: string }[]> = {
+      LM: [],
+      LV: [],
+    };
+    const metaPorCodigo: Record<string, EquipeEntry> = {};
+
+    equipeMetaMap.forEach((meta, key) => {
+      const original = meta.original;
+      const registroDb = isUuidValue(original) ? equipesDbMap.get(key) : undefined;
+      const nomeBase = registroDb?.nome_equipe?.trim() || original;
+      const linhaInferida =
+        meta.linha ||
+        normalizeLinha(registroDb?.linha) ||
+        inferLinhaPorCodigo(nomeBase) ||
+        inferLinhaPorCodigo(original) ||
+        inferLinhaPorEncarregado(meta.encarregado);
+      if (!linhaInferida) return;
+      const label = meta.encarregado?.trim()
+        ? `${nomeBase} - ${meta.encarregado.trim()}`
+        : nomeBase;
+      opcoesPorLinha[linhaInferida].push({ value: original, label });
+      metaPorCodigo[original] = { nome: label, linha: linhaInferida };
+    });
+
+    setMedicaoEquipeOpcoes(opcoesPorLinha);
+    setMedicaoEquipeMetaPorCodigo(metaPorCodigo);
+
+    const fontesSugestao = [detalhesAcionamento, item, ...equipesRelacionadas];
+    const codigosDisponiveis = Object.values(opcoesPorLinha)
+      .flat()
+      .map((opt) => opt.value);
+    const sugestaoLM = inferirEquipePreferencial("LM", fontesSugestao, codigosDisponiveis);
+    const sugestaoLV = inferirEquipePreferencial("LV", fontesSugestao, codigosDisponiveis);
+
+    const modSuportaLM = mod !== "LV";
+    const modSuportaLV = mod !== "LM";
+    const selecionarValorDisponivel = (
+      linha: EquipeLinha,
+      preferencia?: string
+    ): string => {
+      if (!((linha === "LM" && modSuportaLM) || (linha === "LV" && modSuportaLV))) {
+        return "";
+      }
+      const opcoes = opcoesPorLinha[linha];
+      if (opcoes.length === 0) return "";
+      if (preferencia) {
+        const match = opcoes.find(
+          (opt) => opt.value.toUpperCase() === preferencia.toUpperCase()
+        );
+        if (match) return match.value;
+      }
+      return opcoes[0].value;
+    };
+
+    setMedicaoEquipeSelecionada({
+      LM: selecionarValorDisponivel("LM", sugestaoLM),
+      LV: selecionarValorDisponivel("LV", sugestaoLV),
+    });
     
     // Carrega valores UPS em reais das configurações
     try {
@@ -517,7 +692,7 @@ export const WorkflowSteps = () => {
       const { data: consumoList } = await supabase
         .from("lista_aplicacao_itens")
         .select("id_lista_aplicacao_item,codigo_material,descricao_item,unidade_medida,quantidade,id_acionamento")
-        .eq("id_acionamento", item.id_acionamento)
+        .eq("id_acionamento", idAcionamento)
         .order("ordem_item");
       
       if (consumoList && consumoList.length > 0) {
@@ -537,7 +712,7 @@ export const WorkflowSteps = () => {
       const { data: sucataList } = await supabase
         .from("sucata_itens")
         .select("id,codigo_material,quantidade_retirada,criado_em,classificacao")
-        .eq("id_acionamento", item.id_acionamento)
+        .eq("id_acionamento", idAcionamento)
         .order("criado_em", { ascending: false });
       
       if (sucataList && sucataList.length > 0) {
@@ -560,120 +735,185 @@ export const WorkflowSteps = () => {
     }
     
     await loadCatalogoMO();
-  };
 
-  const handleAddMedicaoItem = (mo: any) => {
-    const codigo = mo.codigo_mao_de_obra;
-    const operacao = mo.operacao || "";
-    
-    // Verifica duplicata por código + operação
-    const jaExiste = medicaoItens[medicaoTab]?.some(
-      (i: any) => i.codigo === codigo && i.operacao === operacao
-    );
-    
-    if (jaExiste) {
-      setMaterialError(`Código ${codigo} (${operacao}) já foi adicionado à medição.`);
-      return;
+    try {
+      const { data: rascunho } = await supabase
+        .from("medicao_orcamentos")
+        .select("itens_lm,itens_lv,fora_horario,valor_ups_lm,valor_ups_lv")
+        .eq("id_acionamento", idAcionamento)
+        .maybeSingle();
+      if (rascunho) {
+        setMedicaoItens({
+          LM: Array.isArray(rascunho.itens_lm) ? rascunho.itens_lm : [],
+          LV: Array.isArray(rascunho.itens_lv) ? rascunho.itens_lv : [],
+        });
+        setMedicaoForaHC(Boolean(rascunho.fora_horario));
+        if (rascunho.valor_ups_lm) {
+          setMedicaoValorUpsLM(Number(rascunho.valor_ups_lm));
+        }
+        if (rascunho.valor_ups_lv) {
+          setMedicaoValorUpsLV(Number(rascunho.valor_ups_lv));
+        }
+      }
+    } catch (err) {
+      console.warn("Falha ao carregar rascunho da medição", err);
     }
-    
-    const upsValue = Number(mo.ups) || 0;
-    const novo = {
-      codigo,
-      operacao,
-      descricao: mo.descricao || "",
-      unidade: mo.unidade || mo.tipo || "",
-      fracao: upsValue,
-      valorUps: upsValue,
-      quantidade: 1,
-      inst: 0, // Instalação
-      ret: 0,  // Retirada
-    };
-    setMedicaoItens((prev) => ({
-      ...prev,
-      [medicaoTab]: [...prev[medicaoTab], novo],
-    }));
-    setMaterialError(null);
   };
 
-  const handleQtdMedicao = (codigo: string, operacao: string, qtd: number) => {
-    setMedicaoItens((prev) => ({
-      ...prev,
-      [medicaoTab]: prev[medicaoTab].map((i) =>
-        i.codigo === codigo && i.operacao === operacao ? { ...i, quantidade: qtd } : i
-      ),
-    }));
+  const aplicarPercentualFinal = (valorBase: number) => {
+    if (!valorBase) return 0;
+    const percentual = medicaoForaHC ? 0.3 : 0.12;
+    return valorBase * (1 + percentual);
   };
 
-  const handleFracaoMedicao = (codigo: string, operacao: string, fr: number) => {
-    setMedicaoItens((prev) => ({
-      ...prev,
-      [medicaoTab]: prev[medicaoTab].map((i) =>
-        i.codigo === codigo && i.operacao === operacao ? { ...i, fracao: fr } : i
-      ),
-    }));
+  const calcularSubtotalItem = (item: any, tabKey: "LM" | "LV") => {
+    if (!item) return 0;
+    const upsQtd = Number(item.valorUps ?? item.ups ?? 0);
+    const valorConfig = tabKey === "LM" ? medicaoValorUpsLM : medicaoValorUpsLV;
+    const quantidade = Number(item.quantidade) || 0;
+    return quantidade * upsQtd * valorConfig;
   };
 
-  const handleRemoveMedicao = (codigo: string, operacao: string) => {
-    setMedicaoItens((prev) => ({
-      ...prev,
-      [medicaoTab]: prev[medicaoTab].filter((i) => !(i.codigo === codigo && i.operacao === operacao)),
-    }));
+  const subtotalMedicao = (item: any) => {
+    return calcularSubtotalItem(item, medicaoTab);
   };
 
-  const handleInstMedicao = (codigo: string, operacao: string, inst: number) => {
-    setMedicaoItens((prev) => ({
-      ...prev,
-      [medicaoTab]: prev[medicaoTab].map((i) =>
-        i.codigo === codigo && i.operacao === operacao ? { ...i, inst } : i
-      ),
-    }));
-  };
-
-  const handleRetMedicao = (codigo: string, operacao: string, ret: number) => {
-    setMedicaoItens((prev) => ({
-      ...prev,
-      [medicaoTab]: prev[medicaoTab].map((i) =>
-        i.codigo === codigo && i.operacao === operacao ? { ...i, ret } : i
-      ),
-    }));
-  };
-
-  const subtotalMedicao = (i: any) => {
-    const valorUpsConfig = medicaoTab === "LM" ? medicaoValorUpsLM : medicaoValorUpsLV;
-    const base = (Number(i.quantidade) || 0) * (Number(i.valorUps) || 0) * valorUpsConfig;
-    // Aplica adicional em todos os itens
-    if (medicaoForaHC) {
-      return base * 1.30; // +30% fora HC
-    }
-    // Horário comercial: +12%
-    return base * 1.12;
+  const totalBaseMedicao = (tabKey: "LM" | "LV") => {
+    const itens = medicaoItens[tabKey] || [];
+    return itens.reduce((acc, i) => acc + calcularSubtotalItem(i, tabKey), 0);
   };
 
   const totalAbaMedicao = (tabKey: "LM" | "LV") => {
-    const soma = (medicaoItens[tabKey] || []).reduce((acc, i) => acc + subtotalMedicao(i), 0);
-    return medicaoForaHC ? soma * (1 + (medicaoAdicional || 0) / 100) : soma;
+    const base = totalBaseMedicao(tabKey);
+    return aplicarPercentualFinal(base);
   };
 
-  const materiaisReferencia = consumo || [];
+  const handleAddMedicaoItem = (itemCatalogo: any) => {
+    const tabDestino: "LM" | "LV" = ((itemCatalogo?.tipo || medicaoTab || "LM").toUpperCase() === "LV" ? "LV" : "LM");
+    const codigo = itemCatalogo?.codigo_mao_de_obra || itemCatalogo?.codigo || "";
+    const valorUps = Number(itemCatalogo?.ups ?? itemCatalogo?.valorUps ?? 0);
+    setMedicaoItens((prev) => {
+      const copia = { ...prev };
+      const lista = [...(copia[tabDestino] || [])];
+      const idx = lista.findIndex((i) => i.codigo === codigo && i.operacao === itemCatalogo?.operacao);
+      if (idx >= 0) {
+        const atual = { ...lista[idx] };
+        atual.quantidade = Number(atual.quantidade || 0) + 1;
+        lista[idx] = atual;
+      } else {
+        lista.push({
+          codigo,
+          descricao: itemCatalogo?.descricao || "",
+          unidade: itemCatalogo?.unidade || "UN",
+          valorUps,
+          quantidade: 1,
+          operacao: itemCatalogo?.operacao || "",
+          tipo: tabDestino,
+        });
+      }
+      copia[tabDestino] = lista;
+      return copia;
+    });
+  };
 
-  const gerarOrcamento = async () => {
-    console.log("🔍 Iniciando geração de orçamento...", { selectedItem, medicaoTab, medicaoForaHC });
-    
+  const handleRemoveMedicao = (codigo: string, operacao?: string) => {
+    setMedicaoItens((prev) => {
+      const copia = { ...prev };
+      copia[medicaoTab] = (copia[medicaoTab] || []).filter(
+        (i) => !(i.codigo === codigo && (i.operacao || "") === (operacao || ""))
+      );
+      return copia;
+    });
+  };
+
+  const handleQtdMedicao = (codigo: string, operacao: string | undefined, quantidade: number) => {
+    const valorNormalizado = quantidade > 0 ? quantidade : 0;
+    setMedicaoItens((prev) => {
+      const copia = { ...prev };
+      copia[medicaoTab] = (copia[medicaoTab] || []).map((i) => {
+        if (i.codigo === codigo && (i.operacao || "") === (operacao || "")) {
+          return { ...i, quantidade: valorNormalizado };
+        }
+        return i;
+      });
+      return copia;
+    });
+  };
+
+  const salvarMedicao = async () => {
     if (!selectedItem) {
-      setMaterialInfo("Erro: Nenhum acionamento selecionado");
+      alert("❌ Nenhum acionamento selecionado.");
       return;
     }
-    
+
     const idAcionamento = selectedItem.id_acionamento || selectedItem.id;
     if (!idAcionamento) {
-      setMaterialInfo("Erro: ID do acionamento não encontrado");
+      alert("❌ ID do acionamento não encontrado.");
       return;
     }
-    
-    console.log("✅ ID do acionamento:", idAcionamento);
-    
+
+    const itensLM = medicaoItens.LM || [];
+    const itensLV = medicaoItens.LV || [];
+    if (itensLM.length === 0 && itensLV.length === 0) {
+      alert("⚠️ Adicione ao menos um item antes de salvar o rascunho.");
+      return;
+    }
+
+    const baseLM = totalBaseMedicao("LM");
+    const baseLV = totalBaseMedicao("LV");
+    const payload = {
+      id_acionamento: idAcionamento,
+      itens_lm: itensLM,
+      itens_lv: itensLV,
+      fora_horario: medicaoForaHC,
+      valor_ups_lm: medicaoValorUpsLM,
+      valor_ups_lv: medicaoValorUpsLV,
+      total_base_lm: baseLM,
+      total_base_lv: baseLV,
+      total_final_lm: aplicarPercentualFinal(baseLM),
+      total_final_lv: aplicarPercentualFinal(baseLV),
+      atualizado_por: currentUserId,
+      atualizado_em: new Date().toISOString(),
+    };
+
+    setSavingMedicao(true);
     try {
-      // Busca dados de execução para incluir informações de transformador
+      const { error } = await supabase
+        .from("medicao_orcamentos")
+        .upsert(payload, { onConflict: "id_acionamento" });
+      if (error) throw error;
+      alert("✅ Rascunho salvo com sucesso!");
+    } catch (err: any) {
+      console.error("Erro ao salvar medição", err);
+      alert(`❌ Erro ao salvar medição: ${err?.message || err}`);
+    } finally {
+      setSavingMedicao(false);
+    }
+  };
+
+  const gerarOrcamento = async () => {
+    try {
+      if (!selectedItem) {
+        alert("❌ Nenhum acionamento selecionado");
+        return;
+      }
+      
+      const idAcionamento = selectedItem.id_acionamento || selectedItem.id;
+      if (!idAcionamento) {
+        alert("❌ ID do acionamento não encontrado");
+        return;
+      }
+
+      const pdfModalidade: "LM" | "LV" = medicaoTab === "LM" ? "LM" : "LV";
+      if (!equipeValidaParaLinha(pdfModalidade)) {
+        alert(
+          `⚠️ Selecione uma equipe de ${pdfModalidade === "LM" ? "Linha Morta" : "Linha Viva"} válida antes de gerar o PDF.`
+        );
+        return;
+      }
+
+      alert("⏰ Iniciando geração de PDF...");
+      
       let dadosExec: any = null;
       try {
         const { data } = await supabase
@@ -682,391 +922,737 @@ export const WorkflowSteps = () => {
           .eq("id_acionamento", idAcionamento)
           .maybeSingle();
         dadosExec = data;
-        console.log("✅ Dados de execução carregados:", dadosExec);
       } catch (err) {
-        console.warn("⚠️ Dados de execução não encontrados, continuando sem...", err);
+        console.warn("⚠️ Dados de execução não encontrados");
       }
+
+      let detalhesAcionamento: any =
+        medicaoDetalhesAcionamento && medicaoDetalhesAcionamento.id_acionamento === idAcionamento
+          ? medicaoDetalhesAcionamento
+          : null;
+      if (!detalhesAcionamento) {
+        try {
+          const { data } = await supabase
+            .from("acionamentos")
+            .select("*")
+            .eq("id_acionamento", idAcionamento)
+            .maybeSingle();
+          detalhesAcionamento = data;
+        } catch (err) {
+          console.warn("⚠️ Detalhes do acionamento não encontrados");
+        }
+      }
+
+      let equipesRelacionadas: { id_equipe?: string | null; papel?: string | null; encarregado_nome?: string | null }[] = [];
+      try {
+        const { data } = await supabase
+          .from("acionamento_equipes")
+          .select("id_equipe,papel,encarregado_nome")
+          .eq("id_acionamento", idAcionamento);
+        equipesRelacionadas = data || [];
+      } catch (err) {
+        console.warn("⚠️ Equipes adicionais não encontradas", err);
+      }
+      const rawEquipeRefs = new Set<string>();
+      const registrarEquipe = (valor?: string | null) => {
+        if (!valor) return;
+        const texto = String(valor).trim();
+        if (!texto) return;
+        rawEquipeRefs.add(texto);
+      };
+
+      registrarEquipe(detalhesAcionamento?.id_equipe);
+      registrarEquipe(detalhesAcionamento?.codigo_equipe);
+      registrarEquipe(detalhesAcionamento?.equipe);
+      registrarEquipe(detalhesAcionamento?.equipe_lm);
+      registrarEquipe(detalhesAcionamento?.nome_equipe);
+      registrarEquipe((selectedItem as any)?.id_equipe);
+      registrarEquipe((selectedItem as any)?.equipe);
+      registrarEquipe((selectedItem as any)?.equipe_lm);
+      equipesRelacionadas.forEach((rel) => registrarEquipe(rel?.id_equipe));
+
+      const equipeCodigos = new Set<string>();
+      const equipeUuids = new Set<string>();
+      rawEquipeRefs.forEach((valor) => {
+        if (isUuidValue(valor)) {
+          equipeUuids.add(valor);
+        } else {
+          equipeCodigos.add(valor.toUpperCase());
+        }
+      });
+
+      const equipeCatalogo = new Map<string, { nome: string; linha?: "LM" | "LV" }>();
+      equipeCodigos.forEach((codigo) => {
+        const info = getEquipeInfoByCodigo(codigo);
+        if (info) {
+          equipeCatalogo.set(codigo, info);
+        } else {
+          equipeCatalogo.set(codigo, { nome: codigo });
+        }
+      });
+
+      if (equipeUuids.size > 0) {
+        try {
+          const { data } = await supabase
+            .from("equipes")
+            .select("id_equipe,nome_equipe,linha")
+            .in("id_equipe", Array.from(equipeUuids));
+          (data || []).forEach((eq: any) => {
+            const nome = eq?.nome_equipe || String(eq?.id_equipe || "");
+            equipeCatalogo.set(String(eq.id_equipe), {
+              nome,
+              linha:
+                normalizeLinha(eq?.linha) || inferLinhaPorCodigo(nome) || inferLinhaPorEncarregado(eq?.encarregado_nome),
+            });
+          });
+        } catch (err) {
+          console.warn("⚠️ Nomes das equipes não encontrados", err);
+        }
+      }
+
+      const obterInfoEquipe = (valor?: string | null, encarregado?: string | null) => {
+        if (valor) {
+          const texto = valor.trim();
+          if (texto) {
+            const info =
+              equipeCatalogo.get(texto) ||
+              equipeCatalogo.get(texto.toUpperCase()) ||
+              equipeCatalogo.get(texto.toLowerCase());
+            if (info) {
+              return info;
+            }
+          }
+        }
+        if (encarregado) {
+          const deducao = inferEquipePorEncarregado(encarregado);
+          if (deducao) {
+            return (
+              equipeCatalogo.get(deducao.codigo) || {
+                nome: deducao.codigo,
+                linha: deducao.linha,
+              }
+            );
+          }
+        }
+        return undefined;
+      };
       
-      console.log("📝 Criando PDF...");
       const doc = new jsPDF("landscape");
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
-      const orangeColor: [number, number, number] = [255, 200, 150];
+      const mainColor: [number, number, number] = [51, 102, 153];
+      const headerBg: [number, number, number] = [230, 240, 250];
+      const altRowBg: [number, number, number] = [245, 250, 255];
       
-      console.log("✅ PDF criado. Dimensões:", { pageWidth, pageHeight });
-      
-      // ==================== CABEÇALHO ====================
-      // Fundo laranja
-      doc.setFillColor(orangeColor[0], orangeColor[1], orangeColor[2]);
-      doc.rect(0, 0, pageWidth, 50, "F");
-      
-      doc.setTextColor(0);
+      // ==================== CABEÇALHO COM LOGO ====================
+      // Fundo azul cabeçalho
+      doc.setFillColor(mainColor[0], mainColor[1], mainColor[2]);
+      doc.rect(0, 0, pageWidth, 30, "F");
+      // Logo centralizada e maior
+      const logoUrl = "/src/assets/logo-engeletrica.png";
+      try {
+        const logoWidth = 38;
+        const logoHeight = 16;
+        const logoX = (pageWidth - logoWidth) / 2;
+        doc.addImage(logoUrl, "PNG", logoX, 5, logoWidth, logoHeight);
+      } catch (err) {
+        console.warn("Logo não pôde ser carregada");
+      }
+      const headerBase = {
+        ...(selectedItem || {}),
+        ...(detalhesAcionamento || {}),
+        modalidade: pdfModalidade,
+      };
+      const modalidadeLabel =
+        pdfModalidade === "LM"
+          ? "Linha Morta"
+          : pdfModalidade === "LV"
+          ? "Linha Viva"
+          : pdfModalidade;
+      const reportTitle = `Fechamento de OS - ${modalidadeLabel}`;
+
+      // Título centralizado abaixo da logo
+      doc.setTextColor(255, 255, 255);
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(7);
-      
-      // Primeira linha
-      doc.text("EQUIPE=>", 10, 8);
-      doc.text("ENCARREGADO=>", 70, 8);
-      doc.text("DATA SAÍDA=>", 130, 8);
-      doc.text("DATA RETORNO=>", 180, 8);
-      doc.text("TÉCNICO ENG:", 240, 8);
-      
-      // Segunda linha (valores)
+      doc.setFontSize(16);
+      doc.text(reportTitle, pageWidth / 2, 28, { align: "center" });
       doc.setFont("helvetica", "normal");
-      doc.text(encarregadoNome || selectedItem.encarregado || "", 10, 12);
-      doc.text("", 70, 12); // será preenchido manualmente
-      doc.text(formatDateBr(selectedItem.data_abertura), 130, 12);
-      const dataRetorno = dadosExec?.retorno_servico ? formatDateBr(dadosExec.retorno_servico) : "";
-      doc.text(dataRetorno, 180, 12);
-      doc.text("", 240, 12); // será preenchido manualmente
-      
-      // Terceira linha
+      doc.setFontSize(9);
+      doc.text(`Modalidade: ${modalidadeLabel}`, pageWidth / 2, 33, { align: "center" });
+      let yPos = 34;
+
+      // ==================== CABEÇALHO OPERACIONAL ====================
+      doc.setFillColor(mainColor[0], mainColor[1], mainColor[2]);
+      doc.rect(0, yPos, pageWidth, 6, "F");
+      doc.setTextColor(255, 255, 255);
       doc.setFont("helvetica", "bold");
-      doc.text("ENDEREÇO=>", 10, 18);
-      doc.setFont("helvetica", "normal");
-      doc.text(selectedItem.endereco || "", 35, 18);
-      
-      // Quarta linha
-      doc.setFont("helvetica", "bold");
-      doc.text("ELETRICISTAS=>", 10, 24);
-      doc.setFont("helvetica", "normal");
-      doc.text("", 35, 24); // será preenchido manualmente
-      
-      // Quinta linha
-      doc.setFont("helvetica", "bold");
-      doc.text("SAÍDA BASE=>", 10, 30);
-      doc.text("RETORNO BASE=>", 70, 30);
-      doc.text("00:00:00", 130, 30);
-      doc.text("KM INICIAL=>", 160, 30);
-      doc.setFont("helvetica", "normal");
-      doc.text(dadosExec?.saida_base ? new Date(dadosExec.saida_base).toLocaleTimeString() : "", 50, 30);
-      doc.text(dadosExec?.retorno_base ? new Date(dadosExec.retorno_base).toLocaleTimeString() : "", 100, 30);
-      doc.text(dadosExec?.km_inicial || "", 180, 30);
-      
-      // Sexta linha
-      doc.setFont("helvetica", "bold");
-      doc.text("INÍCIO SERVIÇO=>", 10, 36);
-      doc.text("RETORNO SERVIÇO=>", 70, 36);
-      doc.text("00:00:00", 130, 36);
-      doc.text("KM FINAL=>", 160, 36);
-      doc.setFont("helvetica", "normal");
-      doc.text(dadosExec?.inicio_servico ? new Date(dadosExec.inicio_servico).toLocaleTimeString() : "", 50, 36);
-      doc.text(dadosExec?.retorno_servico ? new Date(dadosExec.retorno_servico).toLocaleTimeString() : "", 100, 36);
-      doc.text(dadosExec?.km_final || "", 180, 36);
-      
-      // Sétima linha
-      doc.setFont("helvetica", "bold");
-    doc.text("COD. ACIONAMENTO=>", 10, 42);
-    doc.text("Nº INTERVENÇÃO=>", 70, 42);
-    doc.text("NOTA (SS)=>", 130, 42);
-    doc.text("OS TABLET=>", 180, 42);
-    doc.setFont("helvetica", "normal");
-    doc.text(selectedItem.codigo_acionamento || "", 40, 42);
-    doc.text(dadosExec?.numero_intervencao || "", 100, 42);
-    doc.text(dadosExec?.ss_nota || "", 150, 42);
-    doc.text(dadosExec?.os_tablet || "", 210, 42);
-    
-    // NR grande no canto direito
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(16);
-    doc.text("NR", pageWidth - 25, 15);
-    doc.setFontSize(14);
-    doc.text(selectedItem.numero_os || "400", pageWidth - 25, 25);
-    doc.setFontSize(12);
-    doc.text(selectedItem.modalidade || "EM", pageWidth - 25, 35);
-    
-    let yPos = 55;
-    
-    // ==================== TRANSFORMADORES (se houver) ====================
-    const temTrafoInst = dadosExec?.trafo_inst_potencia || dadosExec?.trafo_inst_marca || dadosExec?.trafo_inst_ano || dadosExec?.trafo_inst_numero_serie;
-    const temTrafoRet = dadosExec?.trafo_ret_potencia || dadosExec?.trafo_ret_marca || dadosExec?.trafo_ret_ano || dadosExec?.trafo_ret_numero_serie;
-    
-    if (temTrafoInst || temTrafoRet) {
-      doc.setFillColor(orangeColor[0], orangeColor[1], orangeColor[2]);
-      doc.rect(0, yPos, pageWidth / 2 - 2, 7, "F");
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(8);
-      doc.setTextColor(0);
-      doc.text("TRANSFORMADOR RETIRADO POTÊNCIA=>", 10, yPos + 5);
-      
-      doc.rect(pageWidth / 2 + 2, yPos, pageWidth / 2 - 2, 7, "F");
-      doc.text("MARCA=>", pageWidth / 2 + 10, yPos + 5);
-      yPos += 7;
-      
-      // Linha 2 de trafo
-      doc.rect(0, yPos, pageWidth / 2 - 2, 7, "F");
-      doc.text("TENSÃO SECUNDÁRIA=>", 10, yPos + 5);
-      doc.rect(pageWidth / 2 + 2, yPos, pageWidth / 2 - 2, 7, "F");
-      doc.text("TENSÃO PRIMÁRIA=>", pageWidth / 2 + 10, yPos + 5);
-      yPos += 7;
-      
-      // Trafo instalado
-      doc.setFillColor(orangeColor[0], orangeColor[1], orangeColor[2]);
-      doc.rect(0, yPos, pageWidth / 2 - 2, 7, "F");
-      doc.text("TRANSFORMADOR INSTALADO POTÊNCIA=>", 10, yPos + 5);
-      doc.rect(pageWidth / 2 + 2, yPos, pageWidth / 2 - 2, 7, "F");
-      doc.text("MARCA=>", pageWidth / 2 + 10, yPos + 5);
-      yPos += 7;
-      
-      doc.rect(0, yPos, pageWidth / 2 - 2, 7, "F");
-      doc.text("TENSÃO SECUNDÁRIA=>", 10, yPos + 5);
-      doc.rect(pageWidth / 2 + 2, yPos, pageWidth / 2 - 2, 7, "F");
-      doc.text("TENSÃO PRIMÁRIA=>", pageWidth / 2 + 10, yPos + 5);
-      yPos += 7;
-      
-      // Dados técnicos
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(7);
-      const linhas = ["A.N=>", "B.N=>", "C.N=>"];
-      const dados = [
-        [temTrafoRet ? dadosExec?.trafo_ret_numero_serie : "", "KV", temTrafoInst ? dadosExec?.trafo_inst_numero_serie : ""],
-        [temTrafoRet ? dadosExec?.trafo_ret_numero_serie : "", "KV", temTrafoInst ? dadosExec?.trafo_inst_numero_serie : ""],
-        [temTrafoRet ? dadosExec?.trafo_ret_numero_serie : "", "KV", temTrafoInst ? dadosExec?.trafo_inst_numero_serie : ""]
-      ];
-      
-      doc.rect(0, yPos, pageWidth, 7, "S");
-      doc.text("A.N=>", 10, yPos + 5);
-      doc.text("B.N=>", 80, yPos + 5);
-      doc.text("C.N=>", 150, yPos + 5);
-      doc.text("A-B=>", 220, yPos + 5);
-      doc.text("A-C=>", 280, yPos + 5);
-      yPos += 7;
-      
-      doc.rect(0, yPos, pageWidth, 8, "S");
-      doc.text(temTrafoInst ? `${dadosExec?.trafo_inst_tensao_secundaria || ""}V` : "", 10, yPos + 5);
-      doc.text(temTrafoInst ? `${dadosExec?.trafo_inst_tensao_primaria || ""}KV` : "", 80, yPos + 5);
+      doc.setFontSize(9);
+      doc.text("CABEÇALHO OPERACIONAL", 10, yPos + 4);
       yPos += 8;
-      
-      yPos += 5;
-    }
-    
-    // ==================== MÃO DE OBRA ====================
-    doc.setFillColor(orangeColor[0], orangeColor[1], orangeColor[2]);
-    doc.rect(0, yPos, pageWidth, 7, "F");
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(8);
-    doc.setTextColor(0);
-    doc.text(`MÃO DE OBRA - ${medicaoTab}`, 10, yPos + 5);
-    yPos += 7;
 
-    const itensMO = medicaoItens[medicaoTab] || [];
-    if (itensMO.length > 0) {
-      const bodyMO = itensMO.map((item, idx) => {
-        const valorUni = (Number(item.valorUps) || 0) * (medicaoTab === "LM" ? medicaoValorUpsLM : medicaoValorUpsLV);
-        const inst = Number(item.inst) || 0;
-        const ret = Number(item.ret) || 0;
-        const total = inst + ret;
-        const subtotal = total > 0 ? total * valorUni : 0;
+      const pickValue = (...values: Array<string | null | undefined>) => {
+        for (const value of values) {
+          if (typeof value === "string" && value.trim().length > 0) {
+            return value.trim();
+          }
+        }
+        return undefined;
+      };
+
+      const dataExecucaoFonte = pickValue(
+        dadosExec?.inicio_servico,
+        headerBase.data_execucao,
+        headerBase.data_execucao_lm,
+        headerBase.data_despacho,
+        headerBase.data_abertura
+      );
+      const dataExecucaoTexto = formatDateTimeBr(dataExecucaoFonte);
+      const codigoAcionamento = headerBase.codigo_acionamento || "--";
+      const numeroSigod = pickValue(
+        dadosExec?.numero_intervencao,
+        headerBase.numero_intervencao,
+        headerBase.numero_os
+      );
+      const numeroSs = pickValue(dadosExec?.ss_nota, headerBase.ss_nota);
+      const numeroIntervencaoTexto =
+        [numeroSigod ? `SIGOD: ${numeroSigod}` : null, numeroSs ? `SS: ${numeroSs}` : null]
+          .filter(Boolean)
+          .join(" | ") || "--";
+
+      const equipeEntries: EquipeEntry[] = [];
+      const adicionarEntradaEquipe = (
+        valor?: string | null,
+        linhaSugestao?: "LM" | "LV",
+        encarregadoRelacionado?: string | null
+      ) => {
+        if (!valor && !encarregadoRelacionado) return;
+        const info = obterInfoEquipe(valor, encarregadoRelacionado);
+        if (info?.nome) {
+          equipeEntries.push({ nome: info.nome, linha: info.linha || linhaSugestao });
+          return;
+        }
+        const texto = valor?.trim() || "";
+        if (!texto || isUuidValue(texto)) return;
+        equipeEntries.push({ nome: texto, linha: linhaSugestao });
+      };
+
+      const principalLinhaInferida =
+        inferLinhaPorCodigo(detalhesAcionamento?.codigo_equipe) ||
+        inferLinhaPorCodigo(detalhesAcionamento?.equipe_lm) ||
+        inferLinhaPorEncarregado(
+          detalhesAcionamento?.encarregado_lm ||
+            detalhesAcionamento?.encarregado ||
+            headerBase.encarregado_lm ||
+            headerBase.encarregado
+        );
+
+      const encarregadoPrincipal =
+        detalhesAcionamento?.encarregado_lm ||
+        detalhesAcionamento?.encarregado ||
+        headerBase.encarregado_lm ||
+        headerBase.encarregado;
+
+      adicionarEntradaEquipe(detalhesAcionamento?.id_equipe, principalLinhaInferida, encarregadoPrincipal);
+      adicionarEntradaEquipe(detalhesAcionamento?.codigo_equipe, principalLinhaInferida, encarregadoPrincipal);
+      adicionarEntradaEquipe(detalhesAcionamento?.equipe_lm, principalLinhaInferida, encarregadoPrincipal);
+
+      equipesRelacionadas.forEach((rel) => {
+        const linhaRel =
+          normalizeLinha(rel?.papel) || inferLinhaPorCodigo(rel?.id_equipe) || inferLinhaPorEncarregado(rel?.encarregado_nome);
+        adicionarEntradaEquipe(rel?.id_equipe, linhaRel, rel?.encarregado_nome || encarregadoPrincipal);
+      });
+
+      const uniqueEquipes = equipeEntries.filter((item, index, arr) => {
+        const key = `${item.nome}::${item.linha || ""}`;
+        return arr.findIndex((target) => `${target.nome}::${target.linha || ""}` === key) === index;
+      });
+
+      const preferenciaLinha = pdfModalidade === "LM" ? "LM" : pdfModalidade === "LV" ? "LV" : undefined;
+      const preferidas =
+        preferenciaLinha != null
+          ? uniqueEquipes.filter((eq) => eq.linha === preferenciaLinha)
+          : uniqueEquipes;
+      const equipesParaMostrar =
+        preferidas.length > 0 ? preferidas : uniqueEquipes.length > 0 ? uniqueEquipes : [];
+
+      const equipeListaTexto = equipesParaMostrar
+        .map((eq) => formatEquipeDisplay(eq, pdfModalidade))
+        .join(" | ");
+
+      const formatarCampoEquipe = (valor?: string | null, encarregadoFallback?: string | null) => {
+        const info = obterInfoEquipe(valor, encarregadoFallback || encarregadoPrincipal);
+        if (info) {
+          return formatEquipeDisplay(info, pdfModalidade);
+        }
+        if (!valor) return undefined;
+        const texto = valor.trim();
+        if (!texto || isUuidValue(texto)) return undefined;
+        return texto;
+      };
+
+      let equipeTexto =
+        pickValue(
+          equipeListaTexto,
+          formatarCampoEquipe(headerBase.equipe),
+          formatarCampoEquipe(headerBase.equipe_nome),
+          formatarCampoEquipe(headerBase.nome_equipe),
+          formatarCampoEquipe(headerBase.equipe_lm),
+          formatarCampoEquipe(headerBase.codigo_equipe)
+        ) || "--";
+
+      const equipeSelecionadaCodigo = medicaoEquipeSelecionada[pdfModalidade];
+      if (equipeSelecionadaCodigo) {
+        const equipeInfoManual =
+          medicaoEquipeMetaPorCodigo[equipeSelecionadaCodigo] ||
+          getEquipeInfoByCodigo(equipeSelecionadaCodigo) || {
+            nome: equipeSelecionadaCodigo,
+            linha: inferLinhaPorCodigo(equipeSelecionadaCodigo),
+          };
+        const manualLabel = formatEquipeDisplay(equipeInfoManual, pdfModalidade);
+        if (manualLabel) {
+          equipeTexto = manualLabel;
+        }
+      }
+      const encarregadoTexto =
+        pickValue(
+          headerBase.encarregado_lm,
+          headerBase.encarregado,
+          headerBase.encarregado_nome,
+          encarregadoSelecionado,
+          encarregadoNome
+        ) || "--";
+      const tecnicoTexto =
+        pickValue(
+          headerBase.tecnico,
+          headerBase.tecnico_responsavel,
+          headerBase.tecnico_nome,
+          currentUserName
+        ) || "--";
+      const enderecoTexto = (() => {
+        const direto = pickValue(headerBase.endereco, headerBase.endereco_completo);
+        if (direto) return direto;
+        const partes = [
+          headerBase.logradouro,
+          headerBase.numero,
+          headerBase.bairro,
+          headerBase.municipio || headerBase.cidade,
+          headerBase.uf,
+        ]
+          .filter((parte) => typeof parte === "string" && parte.trim().length > 0)
+          .join(", ");
+        return partes || "--";
+      })();
+      const alimentadorTexto = pickValue(dadosExec?.alimentador, headerBase.alimentador) || "--";
+      const subestacaoTexto = pickValue(dadosExec?.subestacao, headerBase.subestacao) || "--";
+      const alimentadorSubTexto = `${alimentadorTexto} / ${subestacaoTexto}`;
+      const osTabletTexto = pickValue(dadosExec?.os_tablet, headerBase.os_tablet) || "--";
+
+      const headerMarginX = 10;
+      const headerWidth = pageWidth - headerMarginX * 2;
+      const headerColWidth = headerWidth / 3;
+      const row4FirstWidth = headerWidth * 0.65;
+      const row4SecondWidth = headerWidth - row4FirstWidth;
+
+      const drawHeaderField = (
+        baseY: number,
+        label: string,
+        value: string | undefined,
+        x: number,
+        width: number,
+        highlight = false
+      ) => {
+        const rawValue = typeof value === "string" ? value : value != null ? String(value) : "";
+        const displayValue = rawValue.trim().length > 0 ? rawValue.trim() : "--";
+        const valueFontSize = highlight ? 11 : 8;
+        doc.setFont("helvetica", highlight ? "bold" : "normal");
+        doc.setFontSize(valueFontSize);
+        const lines = doc.splitTextToSize(displayValue, width - 4);
+        const blockHeight = Math.max(12, 7 + lines.length * 4);
+        doc.setFillColor(headerBg[0], headerBg[1], headerBg[2]);
+        doc.setDrawColor(mainColor[0], mainColor[1], mainColor[2]);
+        doc.setLineWidth(0.1);
+        doc.rect(x, baseY, width, blockHeight, "FD");
+        doc.setTextColor(mainColor[0], mainColor[1], mainColor[2]);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(7);
+        doc.text(label.toUpperCase(), x + 2, baseY + 3.5);
+        doc.setTextColor(0);
+        doc.setFont("helvetica", highlight ? "bold" : "normal");
+        doc.setFontSize(valueFontSize);
+        let lineY = baseY + 7;
+        lines.forEach((line) => {
+          doc.text(line, x + 2, lineY);
+          lineY += 4;
+        });
+        return blockHeight;
+      };
+
+      const drawInfoRow = (
+        fields: { label: string; value: string; highlight?: boolean }[],
+        widths: number[]
+      ) => {
+        const rowStartY = yPos;
+        let cursorX = headerMarginX;
+        let rowHeight = 0;
+        fields.forEach((field, idx) => {
+          const height = drawHeaderField(
+            rowStartY,
+            field.label,
+            field.value,
+            cursorX,
+            widths[idx],
+            field.highlight
+          );
+          rowHeight = Math.max(rowHeight, height);
+          cursorX += widths[idx];
+        });
+        yPos += rowHeight + 3;
+      };
+
+      drawInfoRow(
+        [
+          { label: "Data da execução", value: dataExecucaoTexto },
+          { label: "Cód. acionamento", value: codigoAcionamento, highlight: true },
+          { label: "Nº intervenção (SIGOD/SS)", value: numeroIntervencaoTexto },
+        ],
+        [headerColWidth, headerColWidth, headerColWidth]
+      );
+
+      drawInfoRow(
+        [
+          { label: "Equipe", value: equipeTexto },
+          { label: "Encarregado", value: encarregadoTexto },
+          { label: "Técnico", value: tecnicoTexto },
+        ],
+        [headerColWidth, headerColWidth, headerColWidth]
+      );
+
+      drawInfoRow(
+        [{ label: "Endereço", value: enderecoTexto }],
+        [headerWidth]
+      );
+
+      drawInfoRow(
+        [
+          { label: "Alimentador / Subestação", value: alimentadorSubTexto },
+          { label: "OS tablet", value: osTabletTexto },
+        ],
+        [row4FirstWidth, row4SecondWidth]
+      );
+
+      yPos += 2;
+      
+      const execColWidth = (pageWidth - 30) / 3;
+      let rowBg = true;
+
+      // ==================== INFORMAÇÕES DE EXECUÇÃO ====================
+      if (dadosExec) {
+        doc.setFillColor(mainColor[0], mainColor[1], mainColor[2]);
+        doc.rect(0, yPos, pageWidth, 6, "F");
+        doc.setTextColor(255, 255, 255);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(9);
+        doc.text("INFORMAÇÕES DE EXECUÇÃO", 10, yPos + 4);
+        yPos += 6;
         
-        return [
-          idx + 1,
-          item.codigo,
-          item.descricao,
-          item.unidade,
-          `${valorUni.toFixed(2)}`,
-          `${inst.toFixed(2)}`,
-          `${ret.toFixed(2)}`,
-          `${total.toFixed(2)}`,
-          `R$ ${subtotal.toFixed(2)}`
-        ];
-      });
-      
-      autoTable(doc, {
-        startY: yPos,
-        head: [["ITEM", "CÓD", "MÃO DE OBRA", "Un", "R$", "Inst.", "Ret.", "TOTAL", "R$"]],
-        body: bodyMO,
-        styles: { 
-          fontSize: 7, 
-          cellPadding: 2,
-          lineColor: [0, 0, 0],
-          lineWidth: 0.1
-        },
-        headStyles: { 
-          fillColor: orangeColor, 
-          textColor: 0, 
-          fontStyle: "bold",
-          halign: "center"
-        },
-        columnStyles: {
-          0: { cellWidth: 12, halign: "center" },
-          1: { cellWidth: 18, halign: "center" },
-          2: { cellWidth: 140, halign: "left" },
-          3: { cellWidth: 12, halign: "center" },
-          4: { cellWidth: 18, halign: "right" },
-          5: { cellWidth: 18, halign: "center" },
-          6: { cellWidth: 18, halign: "center" },
-          7: { cellWidth: 18, halign: "center" },
-          8: { cellWidth: 25, halign: "right" }
-        },
-        theme: "grid",
-      });
-      yPos = (doc as any).lastAutoTable.finalY + 3;
-    }
-
-    // Total MO
-    const totalMO = itensMO.reduce((acc, item) => {
-      const valorUni = (Number(item.valorUps) || 0) * (medicaoTab === "LM" ? medicaoValorUpsLM : medicaoValorUpsLV);
-      const total = (Number(item.inst) || 0) + (Number(item.ret) || 0);
-      const subtotal = total > 0 ? total * valorUni : 0;
-      if (medicaoForaHC) return acc + (subtotal * 1.30);
-      return acc + (subtotal * 1.12);
-    }, 0);
-    
-    doc.setFillColor(orangeColor[0], orangeColor[1], orangeColor[2]);
-    doc.rect(pageWidth - 70, yPos, 65, 7, "F");
-    doc.setDrawColor(0);
-    doc.rect(pageWidth - 70, yPos, 65, 7, "S");
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(9);
-    doc.text(`R$ ${totalMO.toFixed(2)}`, pageWidth - 5, yPos + 5, { align: "right" });
-    yPos += 10;
-
-    // ==================== MATERIAL APLICADO ====================
-    if (consumo.length > 0) {
-      doc.setFillColor(orangeColor[0], orangeColor[1], orangeColor[2]);
-      doc.rect(0, yPos, pageWidth, 7, "F");
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(8);
-      doc.setTextColor(0);
-      doc.text("MATERIAL APLICADO", 10, yPos + 5);
-      yPos += 7;
-
-      const bodyConsumo = consumo.map((c, idx) => [
-        idx + 1,
-        c.codigo_material,
-        c.descricao_item || "",
-        c.unidade_medida || "",
-        "1.00",
-        "-"
-      ]);
-
-      autoTable(doc, {
-        startY: yPos,
-        head: [["ITEM", "CÓD", "MATERIAL APLICADO", "UN", "Ret.", "TOTAL"]],
-        body: bodyConsumo,
-        styles: { 
-          fontSize: 7, 
-          cellPadding: 2,
-          lineColor: [0, 0, 0],
-          lineWidth: 0.1
-        },
-        headStyles: { 
-          fillColor: orangeColor, 
-          textColor: 0, 
-          fontStyle: "bold",
-          halign: "center"
-        },
-        columnStyles: {
-          0: { cellWidth: 12, halign: "center" },
-          1: { cellWidth: 25, halign: "center" },
-          2: { cellWidth: 180, halign: "left" },
-          3: { cellWidth: 15, halign: "center" },
-          4: { cellWidth: 18, halign: "center" },
-          5: { cellWidth: 18, halign: "center" }
-        },
-        theme: "grid",
-      });
-      yPos = (doc as any).lastAutoTable.finalY + 5;
-    }
-
-    // ==================== MATERIAL RETIRADO (SUCATA) ====================
-    if (sucata.length > 0) {
-      if (yPos > pageHeight - 70) {
-        doc.addPage("landscape");
-        yPos = 15;
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(8);
+        doc.setTextColor(0);
+        rowBg = true;
+        
+        // Linha 1
+        if (rowBg) {
+          doc.setFillColor(altRowBg[0], altRowBg[1], altRowBg[2]);
+          doc.rect(0, yPos, pageWidth, 5, "F");
+        }
+        doc.text(`Saída: ${dadosExec?.saida_base ? new Date(dadosExec.saida_base).toLocaleTimeString() : "N/A"}`, 10, yPos + 3.5, { maxWidth: execColWidth - 5 });
+        doc.text(`Retorno: ${dadosExec?.retorno_base ? new Date(dadosExec.retorno_base).toLocaleTimeString() : "N/A"}`, 10 + execColWidth, yPos + 3.5, { maxWidth: execColWidth - 5 });
+        doc.text(`Alimentador: ${dadosExec?.alimentador || "N/A"}`, 10 + 2 * execColWidth, yPos + 3.5, { maxWidth: execColWidth - 5 });
+        yPos += 5;
+        
+        // Linha 2
+        rowBg = !rowBg;
+        if (rowBg) {
+          doc.setFillColor(altRowBg[0], altRowBg[1], altRowBg[2]);
+          doc.rect(0, yPos, pageWidth, 5, "F");
+        }
+        doc.text(`KM Inicial: ${dadosExec?.km_inicial || "N/A"}`, 10, yPos + 3.5, { maxWidth: execColWidth - 5 });
+        doc.text(`KM Final: ${dadosExec?.km_final || "N/A"}`, 10 + execColWidth, yPos + 3.5, { maxWidth: execColWidth - 5 });
+        doc.text(`Subestação: ${dadosExec?.subestacao || "N/A"}`, 10 + 2 * execColWidth, yPos + 3.5, { maxWidth: execColWidth - 5 });
+        yPos += 5;
+        
+        yPos += 2;
       }
       
-      doc.setFillColor(orangeColor[0], orangeColor[1], orangeColor[2]);
-      doc.rect(0, yPos, pageWidth, 7, "F");
+      // ==================== MÃO DE OBRA ====================
+      doc.setFillColor(mainColor[0], mainColor[1], mainColor[2]);
+      doc.rect(0, yPos, pageWidth, 6, "F");
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(8);
-      doc.setTextColor(0);
-      doc.text("MATERIAL RETIRADO", 10, yPos + 5);
-      yPos += 7;
+      doc.setFontSize(9);
+      doc.setTextColor(255, 255, 255);
+      doc.text(`MÃO DE OBRA - ${medicaoTab}`, 10, yPos + 4);
+      yPos += 6;
 
-      const bodySucata = sucata.map((s, idx) => [
-        idx + 1,
-        s.codigo_material,
-        s.descricao_item || "",
-        s.unidade_medida || "",
-        s.classificacao === "SUCATA" ? "X" : "",
-        s.classificacao === "REFORMA" ? "X" : "",
-        s.classificacao === "BOM" ? "X" : "",
-        s.classificacao === "DESCARTE" ? "X" : "",
-        Number(s.quantidade).toFixed(2)
-      ]);
+      const itensMO = medicaoItens[medicaoTab] || [];
+      const totalBaseMO = itensMO.reduce((acc, item) => {
+        const valorUni = (Number(item.valorUps) || 0) * (medicaoTab === "LM" ? medicaoValorUpsLM : medicaoValorUpsLV);
+        const total = Number(item.quantidade) || 0;
+        const subtotal = total > 0 ? total * valorUni : 0;
+        return acc + subtotal;
+      }, 0);
+      const totalMO = aplicarPercentualFinal(totalBaseMO);
 
-      autoTable(doc, {
-        startY: yPos,
-        head: [["ITEM", "CÓD", "MATERIAL RETIRADO", "UN", "SUCATA", "REFORMA", "BOM", "DESCARTE", "TOTAL"]],
-        body: bodySucata,
-        styles: { 
-          fontSize: 7, 
-          cellPadding: 2,
-          lineColor: [0, 0, 0],
-          lineWidth: 0.1
-        },
-        headStyles: { 
-          fillColor: orangeColor, 
-          textColor: 0, 
-          fontStyle: "bold",
-          halign: "center"
-        },
-        columnStyles: {
-          0: { cellWidth: 12, halign: "center" },
-          1: { cellWidth: 25, halign: "center" },
-          2: { cellWidth: 140, halign: "left" },
-          3: { cellWidth: 12, halign: "center" },
-          4: { cellWidth: 15, halign: "center" },
-          5: { cellWidth: 15, halign: "center" },
-          6: { cellWidth: 12, halign: "center" },
-          7: { cellWidth: 15, halign: "center" },
-          8: { cellWidth: 18, halign: "center" }
-        },
-        theme: "grid",
-      });
-      yPos = (doc as any).lastAutoTable.finalY + 5;
-    }
+      if (itensMO.length > 0) {
+        const bodyMO = itensMO.map((item, idx) => {
+          const upsQtd = Number(item.valorUps ?? item.ups ?? 0);
+          const valorUni = upsQtd * (medicaoTab === "LM" ? medicaoValorUpsLM : medicaoValorUpsLV);
+          const inst = Number(item.quantidade) || 0;
+          const subtotal = inst > 0 ? inst * valorUni : 0;
+          
+          return [
+            idx + 1,
+            item.codigo,
+            item.descricao,
+            item.operacao || "-",
+            item.unidade,
+            `${upsQtd.toFixed(2)}`,
+            `${inst.toFixed(2)}`,
+            `${subtotal.toFixed(2)}`
+          ];
+        });
 
-    // ==================== ASSINATURAS ====================
-    if (yPos > pageHeight - 45) {
-      doc.addPage("landscape");
-      yPos = 15;
-    }
-    
-    yPos = pageHeight - 40;
-      
-      const colWidth = (pageWidth - 30) / 3;
-      
-      // Líder equipe
-      doc.setDrawColor(0);
-      doc.line(10, yPos + 15, 10 + colWidth, yPos + 15);
+        if (totalBaseMO > 0.005) {
+          bodyMO.push([
+            "",
+            "",
+            "TOTAL MÃO DE OBRA (SEM ADICIONAL)",
+            "-",
+            "",
+            "",
+            "",
+            `${totalBaseMO.toFixed(2)}`
+          ]);
+        }
+
+        const acrescimoValor = totalMO - totalBaseMO;
+        if (acrescimoValor > 0.005) {
+          const acrescimoCodigo = medicaoForaHC ? "26376" : "92525";
+          const acrescimoDescricao = medicaoForaHC
+            ? "SERV. EMERG. FORA DO HORARIO COMERCIAL-ADICIONAL 30%"
+            : "SERV. EMERG. HORARIO COMERCIAL - ADICIONAL 12%";
+          bodyMO.push([
+            "",
+            acrescimoCodigo,
+            acrescimoDescricao,
+            "-",
+            "UN",
+            "1.00",
+            `${acrescimoValor.toFixed(2)}`,
+            `${acrescimoValor.toFixed(2)}`
+          ]);
+        }
+        
+        autoTable(doc, {
+          startY: yPos,
+          head: [["ITEM", "CÓD", "DESCRIÇÃO", "OPERAÇÃO", "Un", "VALOR UPS", "QTD", "TOTAL R$"]],
+          body: bodyMO,
+          styles: { 
+            fontSize: 7, 
+            cellPadding: 2,
+            lineColor: [200, 200, 200],
+            lineWidth: 0.3
+          },
+          headStyles: { 
+            fillColor: mainColor, 
+            textColor: 255, 
+            fontStyle: "bold",
+            halign: "center"
+          },
+          alternateRowStyles: {
+            fillColor: altRowBg
+          },
+          columnStyles: {
+            0: { cellWidth: 12, halign: "center" },
+            1: { cellWidth: 18, halign: "center" },
+            2: { cellWidth: 120, halign: "left" },
+            3: { cellWidth: 24, halign: "center" },
+            4: { cellWidth: 16, halign: "center" },
+            5: { cellWidth: 22, halign: "right" },
+            6: { cellWidth: 16, halign: "center" },
+            7: { cellWidth: 28, halign: "right" }
+          },
+          theme: "grid",
+          margin: { left: 5, right: 5 }
+        });
+        yPos = (doc as any).lastAutoTable.finalY + 3;
+      }
+
+      // Total MO com destaque
+      const totalBoxWidth = 110;
+      const totalBoxHeight = 10;
+      doc.setFillColor(mainColor[0], mainColor[1], mainColor[2]);
+      doc.rect(pageWidth - totalBoxWidth - 10, yPos, totalBoxWidth, totalBoxHeight, "F");
+      doc.setTextColor(255, 255, 255);
       doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.text(`TOTAL MO: R$ ${totalMO.toFixed(2)}`, pageWidth - 15, yPos + totalBoxHeight - 3, { align: "right" });
+      yPos += totalBoxHeight + 4;
+
+      // ==================== MATERIAL APLICADO ====================
+      if (consumo.length > 0) {
+        if (yPos > pageHeight - 60) {
+          doc.addPage("landscape");
+          yPos = 10;
+        }
+        
+        doc.setFillColor(mainColor[0], mainColor[1], mainColor[2]);
+        doc.rect(0, yPos, pageWidth, 7, "F");
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(9);
+        doc.setTextColor(255, 255, 255);
+        doc.text("MATERIAL APLICADO", 10, yPos + 5);
+        yPos += 7;
+
+        const bodyConsumo = consumo.map((c, idx) => [
+          idx + 1,
+          c.codigo_material,
+          c.descricao_item || "",
+          c.unidade_medida || "",
+          Number(c.quantidade || 1).toFixed(2)
+        ]);
+
+        autoTable(doc, {
+          startY: yPos,
+          head: [["ITEM", "CÓD", "DESCRIÇÃO", "UNIDADE", "QUANTIDADE"]],
+          body: bodyConsumo,
+          styles: { 
+            fontSize: 7, 
+            cellPadding: 3,
+            lineColor: [200, 200, 200],
+            lineWidth: 0.3
+          },
+          headStyles: { 
+            fillColor: mainColor, 
+            textColor: 255, 
+            fontStyle: "bold",
+            halign: "center"
+          },
+          alternateRowStyles: {
+            fillColor: altRowBg
+          },
+          columnStyles: {
+            0: { cellWidth: 12, halign: "center" },
+            1: { cellWidth: 25, halign: "center" },
+            2: { cellWidth: 180, halign: "left" },
+            3: { cellWidth: 25, halign: "center" },
+            4: { cellWidth: 25, halign: "center" }
+          },
+          theme: "grid"
+        });
+        yPos = (doc as any).lastAutoTable.finalY + 5;
+      }
+
+      // ==================== MATERIAL RETIRADO ====================
+      if (sucata.length > 0) {
+        if (yPos > pageHeight - 60) {
+          doc.addPage("landscape");
+          yPos = 10;
+        }
+        
+        doc.setFillColor(mainColor[0], mainColor[1], mainColor[2]);
+        doc.rect(0, yPos, pageWidth, 7, "F");
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(9);
+        doc.setTextColor(255, 255, 255);
+        doc.text("MATERIAL RETIRADO / SUCATA", 10, yPos + 5);
+        yPos += 7;
+
+        const bodySucata = sucata.map((s, idx) => [
+          idx + 1,
+          s.codigo_material,
+          s.descricao_item || "",
+          s.unidade_medida || "",
+          s.classificacao || "",
+          Number(s.quantidade).toFixed(2)
+        ]);
+
+        autoTable(doc, {
+          startY: yPos,
+          head: [["ITEM", "CÓD", "DESCRIÇÃO", "UNIDADE", "CLASSIFICAÇÃO", "QUANTIDADE"]],
+          body: bodySucata,
+          styles: { 
+            fontSize: 7, 
+            cellPadding: 3,
+            lineColor: [200, 200, 200],
+            lineWidth: 0.3
+          },
+          headStyles: { 
+            fillColor: mainColor, 
+            textColor: 255, 
+            fontStyle: "bold",
+            halign: "center"
+          },
+          alternateRowStyles: {
+            fillColor: altRowBg
+          },
+          columnStyles: {
+            0: { cellWidth: 12, halign: "center" },
+            1: { cellWidth: 20, halign: "center" },
+            2: { cellWidth: 140, halign: "left" },
+            3: { cellWidth: 20, halign: "center" },
+            4: { cellWidth: 35, halign: "center" },
+            5: { cellWidth: 25, halign: "center" }
+          },
+          theme: "grid"
+        });
+        yPos = (doc as any).lastAutoTable.finalY + 5;
+      }
+
+      // ==================== ASSINATURAS ====================
+      yPos = pageHeight - 45;
+      const assinaturaColWidth = (pageWidth - 30) / 3;
+      
+      doc.setDrawColor(mainColor[0], mainColor[1], mainColor[2]);
+      doc.setLineWidth(0.5);
+      
+      doc.line(10, yPos + 15, 10 + assinaturaColWidth - 5, yPos + 15);
+      doc.setFont("helvetica", "normal");
       doc.setFontSize(7);
-      doc.text("LÍDER DE EQUIPE", 10 + colWidth / 2, yPos + 20, { align: "center" });
+      doc.setTextColor(mainColor[0], mainColor[1], mainColor[2]);
+      doc.text("LÍDER DE EQUIPE", 10 + assinaturaColWidth / 2 - 5, yPos + 20, { align: "center" });
       
-      // Fiscal
-      doc.line(10 + colWidth + 10, yPos + 15, 10 + 2 * colWidth + 10, yPos + 15);
-      doc.text("FISCAL", 10 + 1.5 * colWidth + 10, yPos + 20, { align: "center" });
+      doc.line(10 + assinaturaColWidth + 5, yPos + 15, 10 + 2 * assinaturaColWidth, yPos + 15);
+      doc.text("FISCAL", 10 + 1.5 * assinaturaColWidth + 5, yPos + 20, { align: "center" });
       
-      // Cliente
-      doc.line(10 + 2 * colWidth + 20, yPos + 15, 10 + 3 * colWidth + 20, yPos + 15);
-      doc.text("CLIENTE / RESPONSÁVEL", 10 + 2.5 * colWidth + 20, yPos + 20, { align: "center" });
+      doc.line(10 + 2 * assinaturaColWidth + 10, yPos + 15, 10 + 3 * assinaturaColWidth + 5, yPos + 15);
+      doc.text("CLIENTE / RESPONSÁVEL", 10 + 2.5 * assinaturaColWidth + 10, yPos + 20, { align: "center" });
 
       // ==================== RODAPÉ ====================
       doc.setFontSize(6);
       doc.setFont("helvetica", "italic");
-      doc.setTextColor(100);
-      const rodape = `Orçamento gerado em ${new Date().toLocaleString("pt-BR")} | Modalidade: ${medicaoTab} | ${medicaoForaHC ? "Fora de Horário Comercial (+30%)" : "Horário Comercial (+12%)"}`;
-      doc.text(rodape, pageWidth / 2, pageHeight - 5, { align: "center" });
+      doc.setTextColor(100, 100, 100);
+      const rodape = `Orçamento gerado em ${new Date().toLocaleString("pt-BR")} | Sistema de Gestão de Obras`;
+      doc.text(rodape, pageWidth / 2, pageHeight - 3, { align: "center" });
 
-      doc.save(`Orcamento_${selectedItem.codigo_acionamento || "acionamento"}_${medicaoTab}.pdf`);
-      console.log("✅ PDF salvo com sucesso!");
-      setMaterialInfo("Orçamento gerado com sucesso.");
+      console.log("💾 Salvando PDF...");
+      const nomeArquivo = `Orcamento_${selectedItem.codigo_acionamento || "acionamento"}_${medicaoTab}_${new Date().getTime()}.pdf`;
+      
+      const pdfBlob = doc.output("blob");
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(pdfBlob);
+      link.download = nomeArquivo;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(link.href);
+      
+      alert("✅ PDF gerado com sucesso! Verifique Downloads");
+      console.log("✅ PDF SALVO!");
+      setMaterialInfo("✅ PDF gerado com sucesso!");
     } catch (error: any) {
-      console.error("❌ Erro ao gerar orçamento:", error);
-      console.error("Stack:", error?.stack);
-      setMaterialInfo(`Erro ao gerar orçamento: ${error?.message || "Erro desconhecido"}`);
+      alert(`❌ ERRO: ${error?.message}`);
+      console.error("❌ ERRO:", error);
+      setMaterialInfo(`❌ Erro: ${error?.message}`);
     }
   };
 
@@ -1243,6 +1829,7 @@ export const WorkflowSteps = () => {
       const name = getUserDisplayName(user) || "";
 
       setCurrentUserName(name);
+      setCurrentUserId(user?.id || null);
 
     };
 
@@ -1409,48 +1996,6 @@ export const WorkflowSteps = () => {
     });
 
   };
-
-
-
-  const enrichMateriais = async (lista: any[]) => {
-
-    if (!lista || lista.length === 0) return [];
-
-    const codigos = Array.from(new Set(lista.map((p: any) => p.codigo_material).filter(Boolean)));
-
-    if (codigos.length === 0) return lista;
-
-    const { data: mats } = await supabase
-
-      .from("materiais")
-
-      .select("codigo_material,descricao,unidade_medida")
-
-      .in("codigo_material", codigos);
-
-    const matMap = new Map((mats || []).map((m: any) => [m.codigo_material, m]));
-
-    return (lista || []).map((p: any) => {
-
-      const found = matMap.get(p.codigo_material) || {};
-
-      return {
-
-        ...p,
-
-        descricao_item: p.descricao_item || found.descricao || "",
-
-        unidade_medida: p.unidade_medida || found.unidade_medida || "",
-
-        descricao: p.descricao || found.descricao || "",
-
-      };
-
-    });
-
-  };
-
-
 
   useEffect(() => {
 
@@ -2978,6 +3523,14 @@ export const WorkflowSteps = () => {
 
 
 
+  const formatDateTimeBr = (date?: string | null) => {
+    if (!date) return "--";
+    const d = new Date(date);
+    return isNaN(d.getTime()) ? "--" : d.toLocaleString("pt-BR");
+  };
+
+
+
   const getDataTitulo = () => {
 
     const dataLista =
@@ -3643,7 +4196,7 @@ export const WorkflowSteps = () => {
             <div className="px-6 pt-4 pb-2 border-b">
               <DialogHeader className="text-center space-y-1">
                 <DialogTitle className="text-xl font-bold">Medição / Orçamento</DialogTitle>
-                <DialogDescription>Monte o orçamento de mão de obra. Nada é salvo; apenas cálculo/PDF.</DialogDescription>
+                <DialogDescription>Monte o orçamento de mão de obra. Os itens ficam salvos como rascunho e podem ser exportados em PDF.</DialogDescription>
               </DialogHeader>
 
               <div className="flex items-center justify-between mt-3">
@@ -3662,6 +4215,77 @@ export const WorkflowSteps = () => {
                   Fora do horário comercial
                 </label>
               </div>
+
+              {(modalSuportaLM || modalSuportaLV) && (
+                <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {modalSuportaLM && (
+                    <div className="flex flex-col gap-1">
+                      <Label className="text-xs font-semibold">Equipe Linha Morta</Label>
+                      <select
+                        className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                        disabled={medicaoEquipeOpcoes.LM.length === 0}
+                        value={medicaoEquipeSelecionada.LM}
+                        onChange={(e) => atualizarEquipeSelecionada("LM", e.target.value)}
+                      >
+                        <option value="">{medicaoEquipeOpcoes.LM.length === 0 ? "Nenhuma equipe disponível" : "Selecione"}</option>
+                        {medicaoEquipeOpcoes.LM.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                      <span
+                        className={`text-xs font-semibold ${
+                          medicaoEquipeOpcoes.LM.length === 0
+                            ? "text-red-600"
+                            : equipeValidaParaLinha("LM")
+                            ? "text-green-600"
+                            : "text-red-600"
+                        }`}
+                      >
+                        {medicaoEquipeOpcoes.LM.length === 0
+                          ? "Nenhuma equipe de Linha Morta vinculada ao acionamento"
+                          : equipeValidaParaLinha("LM")
+                          ? "Equipe validada para Linha Morta"
+                          : "Selecione uma equipe LM válida"}
+                      </span>
+                    </div>
+                  )}
+                  {modalSuportaLV && (
+                    <div className="flex flex-col gap-1">
+                      <Label className="text-xs font-semibold">Equipe Linha Viva</Label>
+                      <select
+                        className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                        disabled={medicaoEquipeOpcoes.LV.length === 0}
+                        value={medicaoEquipeSelecionada.LV}
+                        onChange={(e) => atualizarEquipeSelecionada("LV", e.target.value)}
+                      >
+                        <option value="">{medicaoEquipeOpcoes.LV.length === 0 ? "Nenhuma equipe disponível" : "Selecione"}</option>
+                        {medicaoEquipeOpcoes.LV.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                      <span
+                        className={`text-xs font-semibold ${
+                          medicaoEquipeOpcoes.LV.length === 0
+                            ? "text-red-600"
+                            : equipeValidaParaLinha("LV")
+                            ? "text-green-600"
+                            : "text-red-600"
+                        }`}
+                      >
+                        {medicaoEquipeOpcoes.LV.length === 0
+                          ? "Nenhuma equipe de Linha Viva vinculada ao acionamento"
+                          : equipeValidaParaLinha("LV")
+                          ? "Equipe validada para Linha Viva"
+                          : "Selecione uma equipe LV válida"}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="flex-1 overflow-hidden grid grid-cols-2 gap-3 px-6 py-3">
@@ -3687,16 +4311,23 @@ export const WorkflowSteps = () => {
                       const naoEhAjusteHC = !["26376", "92525"].includes(m.codigo_mao_de_obra);
                       return buscaMatch && tipoMatch && naoEhAjusteHC;
                     })
-                    .map((m) => (
-                      <button
-                        key={`${m.codigo_mao_de_obra}-${m.operacao}-${m.tipo}`}
-                        className="w-full text-left px-2 py-1.5 text-xs hover:bg-muted border-b transition-colors"
-                        onClick={() => handleAddMedicaoItem(m)}
-                      >
-                        <div className="font-semibold truncate">{m.codigo_mao_de_obra}</div>
-                        <div className="text-muted-foreground text-xs truncate">{m.descricao}</div>
-                      </button>
-                    ))}
+                    .map((m) => {
+                      const upsValor = Number(m.ups ?? m.valorUps ?? 0);
+                      return (
+                        <button
+                          key={`${m.codigo_mao_de_obra}-${m.operacao}-${m.tipo}`}
+                          className="w-full text-left px-2 py-1.5 text-xs hover:bg-muted border-b transition-colors"
+                          onClick={() => handleAddMedicaoItem(m)}
+                        >
+                          <div className="font-semibold truncate">{m.codigo_mao_de_obra}</div>
+                          <div className="text-muted-foreground text-xs truncate">{m.descricao}</div>
+                          <div className="text-[10px] text-muted-foreground flex justify-between gap-2">
+                            <span className="uppercase">Op: {m.operacao || "-"}</span>
+                            <span>UPS: {upsValor ? upsValor.toFixed(2) : "0"}</span>
+                          </div>
+                        </button>
+                      );
+                    })}
                 </div>
               </div>
 
@@ -3797,9 +4428,39 @@ export const WorkflowSteps = () => {
             </div>
           </div>
 
-          <DialogFooter className="border-t px-6 py-3 flex gap-2 justify-end bg-muted/30">
-            <Button variant="outline" onClick={() => setMedicaoModalOpen(false)}>Fechar</Button>
-            <Button onClick={gerarOrcamento} className="bg-red-600 hover:bg-red-700">Gerar orçamento (PDF)</Button>
+          <DialogFooter className="border-t px-6 py-3 bg-muted/30">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between w-full">
+              <div className={`text-xs font-semibold ${
+                (medicaoEquipeOpcoes[medicaoTab]?.length || 0) === 0
+                  ? "text-red-600"
+                  : equipeValidaParaLinha(medicaoTab)
+                  ? "text-green-600"
+                  : "text-red-600"
+              }`}>
+                {(medicaoEquipeOpcoes[medicaoTab]?.length || 0) === 0
+                  ? `Nenhuma equipe de ${medicaoTab === "LM" ? "Linha Morta" : "Linha Viva"} vinculada ao acionamento.`
+                  : equipeValidaParaLinha(medicaoTab)
+                  ? `Equipe validada para ${medicaoTab === "LM" ? "Linha Morta" : "Linha Viva"}.`
+                  : `Selecione uma equipe de ${medicaoTab === "LM" ? "Linha Morta" : "Linha Viva"} para liberar o PDF.`}
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={salvarMedicao} disabled={savingMedicao} className="gap-2">
+                  {savingMedicao ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  {savingMedicao ? "Salvando..." : "Salvar"}
+                </Button>
+                <Button
+                  disabled={
+                    savingMedicao ||
+                    (medicaoEquipeOpcoes[medicaoTab]?.length || 0) === 0 ||
+                    !equipeValidaParaLinha(medicaoTab)
+                  }
+                  onClick={gerarOrcamento}
+                  className="bg-red-600 hover:bg-red-700"
+                >
+                  Gerar orçamento (PDF)
+                </Button>
+              </div>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
