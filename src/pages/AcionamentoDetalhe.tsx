@@ -62,6 +62,13 @@ const NIVEL_OPCOES = [
 
 const MODALIDADES = ["LM", "LV", "LM+LV"];
 
+const STATUS_OPCOES = [
+  { value: "aberto", label: "Aberto" },
+  { value: "despachado", label: "Despachado" },
+  { value: "em_execucao", label: "Em execução" },
+  { value: "concluido", label: "Concluído" },
+];
+
 const capitalize = (value?: string | null) => {
   if (!value) return "";
   const v = value.replace("_", " ");
@@ -364,7 +371,7 @@ export default function AcionamentoDetalhe() {
       if (equipesAdicionais.length > 0) modalidade = "LM+LV";
       if (!MODALIDADES.includes(modalidade)) modalidade = "LM";
 
-      const status = getAutoStatus();
+      const status = form.status || getAutoStatus();
 
       const payload: Record<string, any> = {
         modalidade,
@@ -541,7 +548,18 @@ export default function AcionamentoDetalhe() {
             </div>
             <div>
               <Label>Status</Label>
-              <Input value={capitalize(getAutoStatus())} readOnly />
+              <Select value={form.status || getAutoStatus()} onValueChange={(v) => onChange("status", v)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione" />
+                </SelectTrigger>
+                <SelectContent>
+                  {STATUS_OPCOES.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             {!isMulti && (
               <>
