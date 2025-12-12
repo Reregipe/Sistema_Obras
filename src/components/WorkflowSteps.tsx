@@ -439,6 +439,27 @@ export const WorkflowSteps = () => {
   const [osInfo, setOsInfo] = useState<string | null>(null);
   const [osForm, setOsForm] = useState({ ...emptyOsForm });
   const [osElementoId, setOsElementoId] = useState("");
+  const emptyNumeroObraForm = {
+    numero_obra: "",
+    numero_obra_atualizado_em: "",
+  };
+  const [numeroModalOpen, setNumeroModalOpen] = useState(false);
+  const [numeroLoading, setNumeroLoading] = useState(false);
+  const [numeroSaving, setNumeroSaving] = useState(false);
+  const [numeroError, setNumeroError] = useState<string | null>(null);
+  const [numeroInfo, setNumeroInfo] = useState<string | null>(null);
+  const [numeroForm, setNumeroForm] = useState({ ...emptyNumeroObraForm });
+
+  const emptyBookForm = {
+    book_enviado_em: "",
+    email_msg: "",
+  };
+  const [bookModalOpen, setBookModalOpen] = useState(false);
+  const [bookLoading, setBookLoading] = useState(false);
+  const [bookSaving, setBookSaving] = useState(false);
+  const [bookError, setBookError] = useState<string | null>(null);
+  const [bookInfo, setBookInfo] = useState<string | null>(null);
+  const [bookForm, setBookForm] = useState({ ...emptyBookForm });
 
   // Etapa 3 - Medição / Orçamento (sem persistência)
   const [medicaoModalOpen, setMedicaoModalOpen] = useState(false);
@@ -2661,7 +2682,7 @@ export const WorkflowSteps = () => {
         .from("acionamentos")
 
         .select(
-          "id_acionamento,codigo_acionamento,numero_os,os_criada_em,elemento_id,status,prioridade,municipio,modalidade,data_abertura,data_despacho,etapa_atual,encarregado,almox_conferido_em"
+          "id_acionamento,codigo_acionamento,numero_os,os_criada_em,book_enviado_em,numero_obra,numero_obra_atualizado_em,elemento_id,status,prioridade,municipio,modalidade,data_abertura,data_despacho,etapa_atual,encarregado,almox_conferido_em"
         )
 
         .eq("etapa_atual", step.id)
@@ -3895,75 +3916,31 @@ export const WorkflowSteps = () => {
     };
   };
 
-  const exportPreListaPdf = () => {
-    const context = resolvePreListaPdfContext();
-    if (!context) return;
-
-    const { acionamento, encarregadoAss, printedBy } = context;
-
-    const doc = new jsPDF();
-    const width = doc.internal.pageSize.getWidth();
-    const titulo = `Acionamento ${acionamento.codigo_acionamento || acionamento.id_acionamento || "--"} - ${
-      acionamento.municipio || "--"
-    } - ${getDataTitulo()}`;
-
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(13);
-    doc.setTextColor(40);
-    doc.text(titulo, width / 2, 16, { align: "center" });
-    doc.setTextColor(0);
-
-    autoTable(doc, {
-      startY: 24,
-      head: [["Codigo", "Descricao", "Unidade", "Quantidade"]],
-      body: preLista.map((p) => [
-        p.codigo_material,
-        p.descricao_item || "",
-        p.unidade_medida || "",
-        p.quantidade_prevista,
-      ]),
-      styles: { fontSize: 10 },
-      headStyles: { fillColor: [220, 53, 69], textColor: 255 },
-      alternateRowStyles: { fillColor: [245, 245, 245] },
-      theme: "striped",
-    });
-
-    const finalY = (doc as any).lastAutoTable?.finalY || 24;
-
-    const lineY = finalY + 28;
-    const labelY = lineY + 5;
-    const lineWidth = (width - 60) / 2;
-
-    doc.setLineWidth(0.2);
-    doc.line(30, lineY, 30 + lineWidth, lineY);
-    doc.setFontSize(9);
-    doc.text(printedBy, 30 + lineWidth / 2, labelY, { align: "center" });
-
-    const rightStart = width - 30 - lineWidth;
-    doc.line(rightStart, lineY, rightStart + lineWidth, lineY);
-    doc.text(encarregadoAss, rightStart + lineWidth / 2, labelY, { align: "center" });
-
-    const fileName = `pre-lista-${acionamento.codigo_acionamento || acionamento.id_acionamento || "acionamento"}.pdf`;
-    doc.save(fileName);
-  };
-
-  const exportPreListaPdfLayoutB = async () => {
+  const exportPreListaPdf = async () => {
     const context = resolvePreListaPdfContext();
     if (!context) return;
 
     const { acionamento, encarregadoAss, printedBy } = context;
     const doc = new jsPDF("landscape");
     const pageWidth = doc.internal.pageSize.getWidth();
-    const pageHeight = doc.internal.pageSize.getHeight();
-    const primary: [number, number, number] = [21, 69, 120];
-    const accent: [number, number, number] = [236, 242, 252];
-    const subtleRow: [number, number, number] = [249, 251, 254];
+    let pageHeight = doc.internal.pageSize.getHeight();
+    const primary: [number, number, number] = [185, 32, 36]; // vermelho escurecido da logo
+    const accent: [number, number, number] = [245, 226, 227];
+    const subtleRow: [number, number, number] = [252, 241, 242];
 
     doc.setFillColor(primary[0], primary[1], primary[2]);
-    doc.rect(0, 0, pageWidth, 28, "F");
+    doc.rect(0, 0, pageWidth, 32, "F");
     try {
       const logoImg = await loadImageElement(logoEngeletrica);
-      doc.addImage(logoImg, "PNG", 14, 6, 34, 14);
+      const logoWidth = 46;
+      const aspectRatio = logoImg.width ? logoImg.height / logoImg.width : 0.32;
+      const rawHeight = logoWidth * (aspectRatio || 0.32);
+      const logoHeight = Math.min(22, Math.max(14, rawHeight));
+      doc.setFillColor(255, 255, 255);
+      const badgeX = 10;
+      const badgeY = 5;
+      doc.roundedRect(badgeX, badgeY, logoWidth + 10, logoHeight + 4, 4, 4, "F");
+      doc.addImage(logoImg, "PNG", badgeX + 5, badgeY + 2, logoWidth, logoHeight);
     } catch (error) {
       console.warn("Logo não pôde ser carregada para o layout alternativo da pré-lista", error);
     }
@@ -3971,10 +3948,7 @@ export const WorkflowSteps = () => {
     doc.setTextColor(255, 255, 255);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(16);
-    doc.text("Pré-lista de Materiais", pageWidth / 2, 16, { align: "center" });
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
-    doc.text("Layout B experimental", pageWidth / 2, 22, { align: "center" });
+    doc.text("Lista de Materiais", pageWidth / 2, 18, { align: "center" });
 
     const statusLabel =
       typeof acionamento.status === "string" && acionamento.status.trim().length > 0
@@ -3985,35 +3959,34 @@ export const WorkflowSteps = () => {
       { label: "Acionamento", value: acionamento.codigo_acionamento || acionamento.id_acionamento || "--" },
       { label: "Município", value: acionamento.municipio || "--" },
       { label: "Data", value: getDataTitulo() },
-      { label: "Status", value: statusLabel },
-      { label: "Encarregado", value: encarregadoAss },
-      { label: "Responsável almox", value: printedBy },
     ];
 
-    const blockWidth = (pageWidth - 34) / 2;
-    const blockHeight = 18;
-    const blockGap = 8;
+    const infoColumns = 3;
+    const horizontalGap = 10;
+    const verticalGap = 6;
+    const blockWidth = (pageWidth - 24 - horizontalGap * (infoColumns - 1)) / infoColumns;
+    const blockHeight = 16;
     const infoStartY = 36;
 
     infoBlocks.forEach((block, index) => {
-      const col = index % 2;
-      const row = Math.floor(index / 2);
-      const x = 12 + col * (blockWidth + 10);
-      const y = infoStartY + row * (blockHeight + blockGap);
+      const col = index % infoColumns;
+      const row = Math.floor(index / infoColumns);
+      const x = 12 + col * (blockWidth + horizontalGap);
+      const y = infoStartY + row * (blockHeight + verticalGap);
       doc.setFillColor(accent[0], accent[1], accent[2]);
       doc.setDrawColor(210, 218, 235);
       doc.roundedRect(x, y, blockWidth, blockHeight, 3, 3, "FD");
       doc.setTextColor(100, 112, 128);
-      doc.setFontSize(8);
-      doc.text(block.label.toUpperCase(), x + 4, y + 6);
+      doc.setFontSize(7);
+      doc.text(block.label.toUpperCase(), x + 3, y + 5);
       doc.setTextColor(22, 28, 36);
-      doc.setFontSize(11);
-      const lines = doc.splitTextToSize(block.value || "--", blockWidth - 8) as string[];
-      doc.text(lines, x + 4, y + 13);
+      doc.setFontSize(10);
+      const lines = doc.splitTextToSize(block.value || "--", blockWidth - 6) as string[];
+      doc.text(lines, x + 3, y + 11);
     });
 
-    const infoRows = Math.ceil(infoBlocks.length / 2);
-    let sectionY = infoStartY + infoRows * (blockHeight + blockGap) + 6;
+    const infoRows = Math.ceil(infoBlocks.length / infoColumns);
+    let sectionY = infoStartY + infoRows * (blockHeight + verticalGap) + 6;
 
     const descricaoServico =
       acionamento.descricao_servico ||
@@ -4021,16 +3994,18 @@ export const WorkflowSteps = () => {
       acionamento.resumo_servico ||
       acionamento.resumo ||
       acionamento.observacao ||
-      "Sem observações adicionais.";
+      "";
 
-    doc.setTextColor(100, 112, 128);
-    doc.setFontSize(8);
-    doc.text("Resumo do serviço", 12, sectionY);
-    doc.setTextColor(33, 37, 41);
-    doc.setFontSize(10);
-    const resumoLines = doc.splitTextToSize(descricaoServico, pageWidth - 24) as string[];
-    doc.text(resumoLines, 12, sectionY + 5);
-    sectionY += 5 + resumoLines.length * 5 + 4;
+    if (descricaoServico.trim().length > 0) {
+      doc.setTextColor(100, 112, 128);
+      doc.setFontSize(8);
+      doc.text("Resumo do serviço", 12, sectionY);
+      doc.setTextColor(33, 37, 41);
+      doc.setFontSize(10);
+      const resumoLines = doc.splitTextToSize(descricaoServico, pageWidth - 24) as string[];
+      doc.text(resumoLines, 12, sectionY + 5);
+      sectionY += 5 + resumoLines.length * 5 + 4;
+    }
 
     autoTable(doc, {
       startY: sectionY,
@@ -4042,10 +4017,15 @@ export const WorkflowSteps = () => {
         p.unidade_medida || "",
         p.quantidade_prevista,
       ]),
-      styles: { fontSize: 9, cellPadding: 2 },
+      styles: {
+        fontSize: 9,
+        cellPadding: 2,
+        lineWidth: 0.15,
+        lineColor: [200, 205, 214],
+      },
       headStyles: { fillColor: primary, textColor: 255 },
       alternateRowStyles: { fillColor: subtleRow },
-      theme: "striped",
+      theme: "grid",
       columnStyles: {
         0: { halign: "center", cellWidth: 12 },
         3: { halign: "center", cellWidth: 22 },
@@ -4056,10 +4036,11 @@ export const WorkflowSteps = () => {
     let finalY = (doc as any).lastAutoTable?.finalY || sectionY;
     if (finalY > pageHeight - 50) {
       doc.addPage("landscape");
+      pageHeight = doc.internal.pageSize.getHeight();
       finalY = 30;
     }
 
-    const signatureY = finalY + 24;
+    const signatureY = pageHeight - 28;
     const signatureWidth = (pageWidth - 160) / 2;
 
     doc.setDrawColor(190, 198, 210);
@@ -4080,12 +4061,8 @@ export const WorkflowSteps = () => {
     doc.setTextColor(100, 112, 128);
     doc.text("Encarregado", pageWidth - 60 - signatureWidth / 2, signatureY + 10, { align: "center" });
 
-    doc.setFontSize(8);
-    doc.setTextColor(120, 130, 140);
-    doc.text(`Exportado em ${getDataTitulo()} • Layout B`, 60, signatureY + 20);
-
     const fileId = acionamento.codigo_acionamento || acionamento.id_acionamento || "acionamento";
-    doc.save(`pre-lista-layout-b-${fileId}.pdf`);
+    doc.save(`pre-lista-${fileId}.pdf`);
   };
 
 
@@ -4466,6 +4443,242 @@ export const WorkflowSteps = () => {
 
   };
 
+  const handleStage5BookClick = async (item: any) => {
+    setSelectedItem(item);
+    setBookModalOpen(true);
+    setBookLoading(true);
+    setBookError(null);
+    setBookInfo(null);
+    setBookForm({
+      book_enviado_em: toInputDateTime(item.book_enviado_em || new Date().toISOString()),
+      email_msg: item.email_msg || "",
+    });
+
+    try {
+      const idAcionamento = item.id_acionamento || item.id;
+      if (!idAcionamento) {
+        throw new Error("ID do acionamento não encontrado.");
+      }
+
+      const { data, error } = await supabase
+        .from("acionamentos")
+        .select("book_enviado_em,email_msg,elemento_id,codigo_acionamento")
+        .eq("id_acionamento", idAcionamento)
+        .maybeSingle();
+      if (error) throw error;
+
+      setBookForm({
+        book_enviado_em: toInputDateTime(
+          data?.book_enviado_em || item.book_enviado_em || new Date().toISOString()
+        ),
+        email_msg: data?.email_msg || "",
+      });
+
+      if (data) {
+        setSelectedItem((prev: any) => {
+          if (!prev) return prev;
+          const prevId = prev.id_acionamento || prev.id;
+          return prevId === idAcionamento
+            ? {
+                ...prev,
+                book_enviado_em: data.book_enviado_em ?? prev.book_enviado_em,
+                email_msg: data.email_msg ?? prev.email_msg,
+                elemento_id: data.elemento_id ?? prev.elemento_id,
+                codigo_acionamento: data.codigo_acionamento ?? prev.codigo_acionamento,
+              }
+            : prev;
+        });
+      }
+    } catch (err: any) {
+      setBookError(err.message || "Erro ao carregar informações do book.");
+    } finally {
+      setBookLoading(false);
+    }
+  };
+
+  const handleBookFormChange = (field: keyof typeof emptyBookForm, value: string) => {
+    setBookForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const closeBookModal = () => {
+    setBookModalOpen(false);
+    setBookForm({ ...emptyBookForm });
+    setBookError(null);
+    setBookInfo(null);
+    setBookLoading(false);
+  };
+
+  const salvarDadosBook = async () => {
+    if (!selectedItem) {
+      setBookError("Nenhum acionamento selecionado.");
+      return;
+    }
+    const idAcionamento = selectedItem.id_acionamento || selectedItem.id;
+    if (!idAcionamento) {
+      setBookError("ID do acionamento não encontrado.");
+      return;
+    }
+
+    const enviadoEmIso = fromInputDateTime(bookForm.book_enviado_em);
+    if (!enviadoEmIso) {
+      setBookError("Informe a data e a hora em que o book foi enviado.");
+      return;
+    }
+
+    setBookSaving(true);
+    setBookError(null);
+    setBookInfo(null);
+
+    try {
+      const payload: Record<string, any> = {
+        book_enviado_em: enviadoEmIso,
+        email_msg: bookForm.email_msg?.trim() ? bookForm.email_msg.trim() : null,
+      };
+
+      const { error } = await supabase
+        .from("acionamentos")
+        .update(payload)
+        .eq("id_acionamento", idAcionamento);
+      if (error) throw error;
+
+      setSelectedItem((prev: any) => (prev ? { ...prev, ...payload } : prev));
+      setItems((prev) =>
+        prev.map((it) => {
+          const currId = it.id_acionamento || it.id;
+          return currId === idAcionamento ? { ...it, ...payload } : it;
+        })
+      );
+
+      setBookInfo("Book registrado com sucesso.");
+      setTimeout(() => closeBookModal(), 800);
+    } catch (err: any) {
+      setBookError(err.message || "Erro ao salvar informações do book.");
+    } finally {
+      setBookSaving(false);
+    }
+  };
+
+  const handleNumeroObraFormChange = (
+    field: keyof typeof emptyNumeroObraForm,
+    value: string
+  ) => {
+    setNumeroForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const closeNumeroObraModal = () => {
+    setNumeroModalOpen(false);
+    setNumeroForm({ ...emptyNumeroObraForm });
+    setNumeroError(null);
+    setNumeroInfo(null);
+    setNumeroLoading(false);
+  };
+
+  const openNumeroObraModal = async (item: any) => {
+    if (!item?.book_enviado_em) {
+      alert("Finalize o book e registre a data de envio para a Energisa antes de inserir o número da obra.");
+      return;
+    }
+    setSelectedItem(item);
+    setNumeroModalOpen(true);
+    setNumeroLoading(true);
+    setNumeroError(null);
+    setNumeroInfo(null);
+    setNumeroForm({
+      numero_obra: item.numero_obra || "",
+      numero_obra_atualizado_em: toInputDateTime(
+        item.numero_obra_atualizado_em || new Date().toISOString()
+      ),
+    });
+
+    try {
+      const idAcionamento = item.id_acionamento || item.id;
+      if (!idAcionamento) {
+        throw new Error("ID do acionamento não encontrado.");
+      }
+      const { data, error } = await supabase
+        .from("acionamentos")
+        .select("numero_obra,numero_obra_atualizado_em,elemento_id")
+        .eq("id_acionamento", idAcionamento)
+        .maybeSingle();
+      if (error) throw error;
+      setNumeroForm({
+        numero_obra: data?.numero_obra || "",
+        numero_obra_atualizado_em: toInputDateTime(
+          data?.numero_obra_atualizado_em || new Date().toISOString()
+        ),
+      });
+      if (data) {
+        setSelectedItem((prev: any) => {
+          if (!prev) return prev;
+          const prevId = prev.id_acionamento || prev.id;
+          return prevId === idAcionamento
+            ? {
+                ...prev,
+                numero_obra: data.numero_obra ?? prev.numero_obra,
+                numero_obra_atualizado_em:
+                  data.numero_obra_atualizado_em ?? prev.numero_obra_atualizado_em,
+                elemento_id: data.elemento_id ?? prev.elemento_id,
+              }
+            : prev;
+        });
+      }
+    } catch (err: any) {
+      setNumeroError(err.message || "Erro ao carregar número da obra.");
+    } finally {
+      setNumeroLoading(false);
+    }
+  };
+
+  const salvarNumeroObra = async () => {
+    if (!selectedItem) {
+      setNumeroError("Nenhum acionamento selecionado.");
+      return;
+    }
+    const idAcionamento = selectedItem.id_acionamento || selectedItem.id;
+    if (!idAcionamento) {
+      setNumeroError("ID do acionamento não encontrado.");
+      return;
+    }
+    const numero = numeroForm.numero_obra.trim();
+    if (!numero) {
+      setNumeroError("Informe o número da obra.");
+      return;
+    }
+
+    const atualizadoEmIso =
+      fromInputDateTime(numeroForm.numero_obra_atualizado_em) || new Date().toISOString();
+
+    setNumeroSaving(true);
+    setNumeroError(null);
+    setNumeroInfo(null);
+
+    try {
+      const payload = {
+        numero_obra: numero,
+        numero_obra_atualizado_em: atualizadoEmIso,
+      };
+      const { error } = await supabase
+        .from("acionamentos")
+        .update(payload)
+        .eq("id_acionamento", idAcionamento);
+      if (error) throw error;
+
+      setSelectedItem((prev: any) => (prev ? { ...prev, ...payload } : prev));
+      setItems((prev) =>
+        prev.map((it) =>
+          it.id_acionamento === idAcionamento ? { ...it, ...payload } : it
+        )
+      );
+
+      setNumeroInfo("Número da obra atualizado com sucesso.");
+      setTimeout(() => closeNumeroObraModal(), 800);
+    } catch (err: any) {
+      setNumeroError(err.message || "Erro ao salvar número da obra.");
+    } finally {
+      setNumeroSaving(false);
+    }
+  };
+
 
 
   const handleStepClick = (step: WorkflowStep) => {
@@ -4543,137 +4756,136 @@ export const WorkflowSteps = () => {
 
 
   const renderItems = () => {
-
     if (loading) {
-
       return (
-
         <div className="flex items-center gap-2 text-muted-foreground text-sm">
-
           <Loader2 className="h-4 w-4 animate-spin" />
-
           Carregando itens...
-
         </div>
-
       );
-
     }
 
     if (error) {
-
       return <div className="text-sm text-destructive">{error}</div>;
-
     }
 
     if (items.length === 0) {
-
       return <div className="text-sm text-muted-foreground">Nenhum item nesta etapa.</div>;
-
     }
 
+    return items.map((item) => {
+      const bookRegistrado = Boolean(item.book_enviado_em);
 
-
-    return items.map((item) => (
-
-      <div
-
-        key={item.id_acionamento}
-
-        className="border border-border rounded-lg p-3 space-y-2 bg-card text-foreground"
-
-      >
-
-        <div className="flex items-center justify-between gap-2">
-
-          <div className="cursor-pointer" onClick={() => navigate(`/acionamentos/${item.codigo_acionamento || item.id_acionamento}`)}>
-
-            <div className="font-semibold text-foreground">
-
-              {item.codigo_acionamento || item.id_acionamento}
-
-            </div>
-
-            <div className="text-xs text-muted-foreground">
-
-              {item.municipio || "--"}  {item.modalidade || "--"}
-
-            </div>
-
-            {item.numero_os ? (
-              <div className="text-[11px] text-emerald-600 font-semibold">
-                OS registrada: {item.numero_os}
+      return (
+        <div
+          key={item.id_acionamento}
+          className="border border-border rounded-lg p-3 space-y-2 bg-card text-foreground"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <div
+              className="cursor-pointer"
+              onClick={() =>
+                navigate(`/acionamentos/${item.codigo_acionamento || item.id_acionamento}`)
+              }
+            >
+              <div className="font-semibold text-foreground">
+                {item.codigo_acionamento || item.id_acionamento}
               </div>
-            ) : selectedStep?.id === 4 ? (
-              <div className="text-[11px] text-amber-600">
-                OS pendente nesta etapa
+              <div className="text-xs text-muted-foreground">
+                {item.municipio || "--"} {item.modalidade || "--"}
               </div>
-            ) : null}
-
+              {item.numero_os ? (
+                <div className="text-[11px] text-emerald-600 font-semibold">
+                  OS registrada: {item.numero_os}
+                </div>
+              ) : selectedStep?.id === 4 ? (
+                <div className="text-[11px] text-amber-600">OS pendente nesta etapa</div>
+              ) : null}
+              {item.book_enviado_em ? (
+                <div className="text-[11px] text-blue-600">
+                  Book enviado em {formatDateTimeBr(item.book_enviado_em)}
+                </div>
+              ) : selectedStep?.id === 5 ? (
+                <div className="text-[11px] text-blue-600">Book pendente nesta etapa</div>
+              ) : null}
+              {item.numero_obra ? (
+                <div className="text-[11px] text-blue-700 font-semibold">
+                  Nº obra: {item.numero_obra}
+                </div>
+              ) : selectedStep?.id === 5 ? (
+                <div className="text-[11px] text-amber-600">Nº da obra pendente</div>
+              ) : null}
+            </div>
+            <Badge variant="outline" className="capitalize">
+              {item.status || "--"}
+            </Badge>
           </div>
 
-          <Badge variant="outline" className="capitalize">
+          <div className="flex flex-wrap gap-2">
+            {selectedStep?.id !== 4 && selectedStep?.id !== 5 && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setSelectedItem(item);
+                  openMaterialsModal(item);
+                }}
+              >
+                Lista de materiais
+              </Button>
+            )}
 
-            {item.status || "--"}
+            {selectedStep?.id === 3 && (
+              <Button size="sm" variant="outline" onClick={() => openMedicaoModal(item)}>
+                Medição / Orçamento
+              </Button>
+            )}
 
-          </Badge>
+            {selectedStep?.id === 4 && (
+              <Button size="sm" onClick={() => openOsModal(item)}
+              >
+                Registrar OS
+              </Button>
+            )}
 
+            {selectedStep?.id === 5 && (
+              <>
+                <Button size="sm" onClick={() => handleStage5BookClick(item)}
+                >
+                  Criar book
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={!bookRegistrado}
+                  onClick={() => openNumeroObraModal(item)}
+                  title={bookRegistrado ? undefined : "Registre o book e a data de envio antes"}
+                >
+                  Inserir numero da obra
+                </Button>
+              </>
+            )}
+
+            {selectedStep?.id !== 4 && selectedStep?.id !== 5 && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  if (selectedStep?.id === 2) {
+                    openExecModal(item);
+                  } else {
+                    navigate(`/acionamentos/${item.codigo_acionamento || item.id_acionamento}`);
+                    setOpen(false);
+                  }
+                }}
+              >
+                Editar acionamento
+              </Button>
+            )}
+          </div>
         </div>
-
-        <div className="flex flex-wrap gap-2">
-
-          {selectedStep?.id !== 4 && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                setSelectedItem(item);
-                openMaterialsModal(item);
-              }}
-            >
-              Lista de materiais
-            </Button>
-          )}
-
-          {selectedStep?.id === 3 && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => openMedicaoModal(item)}
-            >
-              Medição / Orçamento
-            </Button>
-          )}
-
-          {selectedStep?.id === 4 && (
-            <Button size="sm" onClick={() => openOsModal(item)}>
-              Registrar OS
-            </Button>
-          )}
-
-          {selectedStep?.id !== 4 && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                if (selectedStep?.id === 2) {
-                  openExecModal(item);
-                } else {
-                  navigate(`/acionamentos/${item.codigo_acionamento || item.id_acionamento}`);
-                  setOpen(false);
-                }
-              }}
-            >
-              Editar acionamento
-            </Button>
-          )}
-
-        </div>
-
-      </div>
-
-    ));
-
+      );
+    });
   };
 
 
@@ -4687,7 +4899,6 @@ export const WorkflowSteps = () => {
         <div className="flex items-center justify-between">
 
           <div>
-
             <CardTitle className="text-xl font-bold">Fluxo de Trabalho - Controle de Etapas</CardTitle>
 
             <CardDescription className="mt-2">
@@ -5237,6 +5448,184 @@ export const WorkflowSteps = () => {
             >
               {osSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
               Salvar OS
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={bookModalOpen}
+        onOpenChange={(next) => {
+          if (!next) {
+            closeBookModal();
+          } else {
+            setBookModalOpen(true);
+          }
+        }}
+        modal
+      >
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Registro do book</DialogTitle>
+            <DialogDescription>
+              Informe quando o book foi enviado à Energisa e deixe registrado o conteúdo do e-mail ou observações relevantes.
+            </DialogDescription>
+          </DialogHeader>
+
+          {bookError && <div className="text-sm text-destructive">{bookError}</div>}
+          {bookInfo && <div className="text-sm text-emerald-600">{bookInfo}</div>}
+
+          {bookLoading ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground py-6">
+              <Loader2 className="h-4 w-4 animate-spin" /> Carregando dados do book...
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="rounded-md border px-3 py-2 bg-muted/50">
+                  <Label className="text-xs font-semibold text-muted-foreground">Acionamento</Label>
+                  <div className="text-sm font-semibold text-foreground mt-1">
+                    {selectedItem?.codigo_acionamento || selectedItem?.id_acionamento || "--"}
+                  </div>
+                </div>
+                <div className="rounded-md border px-3 py-2 bg-muted/50">
+                  <Label className="text-xs font-semibold text-muted-foreground">Elemento</Label>
+                  <div className="text-sm font-semibold text-foreground mt-1">
+                    {selectedItem?.elemento_id || "--"}
+                  </div>
+                </div>
+              </div>
+
+              {selectedItem?.book_enviado_em && (
+                <div className="text-xs text-muted-foreground">
+                  Último registro em {formatDateTimeBr(selectedItem.book_enviado_em)}
+                </div>
+              )}
+
+              <div>
+                <Label>Data/hora do envio</Label>
+                <Input
+                  type="datetime-local"
+                  value={bookForm.book_enviado_em}
+                  disabled={bookSaving}
+                  onChange={(e) => handleBookFormChange("book_enviado_em", e.target.value)}
+                />
+              </div>
+
+              <div>
+                <Label>Mensagem enviada</Label>
+                <textarea
+                  className="w-full border rounded-md px-3 py-2 text-sm min-h-[140px]"
+                  value={bookForm.email_msg}
+                  disabled={bookSaving}
+                  onChange={(e) => handleBookFormChange("email_msg", e.target.value)}
+                  placeholder="Cole aqui o texto do e-mail enviado ou observações importantes."
+                />
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="flex gap-2 justify-end">
+            <Button variant="outline" onClick={closeBookModal} disabled={bookSaving}>
+              Fechar
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={salvarDadosBook}
+              disabled={bookSaving || bookLoading}
+            >
+              {bookSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+              Registrar book
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={numeroModalOpen}
+        onOpenChange={(next) => {
+          if (!next) {
+            closeNumeroObraModal();
+          } else {
+            setNumeroModalOpen(true);
+          }
+        }}
+        modal
+      >
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Inserir número da obra</DialogTitle>
+            <DialogDescription>
+              Informe o número da obra e confirme a data/hora em que a concessionária disponibilizou a informação.
+            </DialogDescription>
+          </DialogHeader>
+
+          {numeroError && <div className="text-sm text-destructive">{numeroError}</div>}
+          {numeroInfo && <div className="text-sm text-emerald-600">{numeroInfo}</div>}
+
+          {numeroLoading ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground py-6">
+              <Loader2 className="h-4 w-4 animate-spin" /> Carregando dados da obra...
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="rounded-md border px-3 py-2 bg-muted/50">
+                  <Label className="text-xs font-semibold text-muted-foreground">Acionamento</Label>
+                  <div className="text-sm font-semibold text-foreground mt-1">
+                    {selectedItem?.codigo_acionamento || selectedItem?.id_acionamento || "--"}
+                  </div>
+                </div>
+                <div className="rounded-md border px-3 py-2 bg-muted/50">
+                  <Label className="text-xs font-semibold text-muted-foreground">Elemento</Label>
+                  <div className="text-sm font-semibold text-foreground mt-1">
+                    {selectedItem?.elemento_id || "--"}
+                  </div>
+                </div>
+              </div>
+
+              {selectedItem?.numero_obra_atualizado_em && (
+                <div className="text-xs text-muted-foreground">
+                  Última atualização registrada em {formatDateTimeBr(selectedItem.numero_obra_atualizado_em)}
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <Label>Número da obra</Label>
+                  <Input
+                    value={numeroForm.numero_obra}
+                    disabled={numeroSaving}
+                    onChange={(e) => handleNumeroObraFormChange("numero_obra", e.target.value)}
+                    placeholder="Ex: OB-123456/2024"
+                  />
+                </div>
+                <div>
+                  <Label>Data/hora da confirmação</Label>
+                  <Input
+                    type="datetime-local"
+                    value={numeroForm.numero_obra_atualizado_em}
+                    disabled={numeroSaving}
+                    onChange={(e) =>
+                      handleNumeroObraFormChange("numero_obra_atualizado_em", e.target.value)
+                    }
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="flex gap-2 justify-end">
+            <Button variant="outline" onClick={closeNumeroObraModal} disabled={numeroSaving}>
+              Fechar
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={salvarNumeroObra}
+              disabled={numeroSaving || numeroLoading}
+            >
+              {numeroSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+              Salvar número
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -5870,7 +6259,7 @@ export const WorkflowSteps = () => {
 
                         ? "Selecione um encarregado para gerar o PDF"
 
-                        : "Gere o PDF com o layout desejado";
+                        : "Gere o PDF da pré-lista";
 
                       return (
 
@@ -5891,24 +6280,6 @@ export const WorkflowSteps = () => {
                             <FileDown className="h-4 w-4 mr-2" />
 
                             Exportar PDF
-
-                          </Button>
-
-                          <Button
-
-                            variant="outline"
-
-                            onClick={exportPreListaPdfLayoutB}
-
-                            disabled={preLista.length === 0 || precisaEscolher}
-
-                            title={tooltip}
-
-                          >
-
-                            <LayoutGrid className="h-4 w-4 mr-2" />
-
-                            Layout B
 
                           </Button>
 
