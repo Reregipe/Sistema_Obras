@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
-import { CheckCircle2, Clock, AlertCircle, FileText, Wrench, TrendingUp, ArrowRight, Loader2, Plus, Save, FileDown } from "lucide-react";
+import { CheckCircle2, Clock, AlertCircle, FileText, Wrench, TrendingUp, ArrowRight, Loader2, Plus, Save, FileDown, LayoutGrid } from "lucide-react";
 
 import { useNavigate } from "react-router-dom";
 
@@ -35,6 +35,71 @@ import {
 } from "@/data/equipesCatalog";
 
 type EquipeEntry = { nome: string; linha?: EquipeLinha; encarregado?: string | null };
+
+type PreListaPdfContext = {
+  acionamento: any;
+  encarregadoAss: string;
+  printedBy: string;
+};
+
+type OrcamentoPdfContext = {
+  idAcionamento: string;
+  pdfModalidade: "LM" | "LV";
+  selectedItemSnapshot: any;
+  dadosExec: any;
+  detalhesAcionamento: any;
+  headerBase: Record<string, any>;
+  numeroIntervencaoTexto: string;
+  dataExecucaoTexto: string;
+  codigoAcionamento: string;
+  equipeTexto: string;
+  encarregadoTexto: string;
+  tecnicoTexto: string;
+  enderecoTexto: string;
+  alimentadorTexto: string;
+  subestacaoTexto: string;
+  alimentadorSubTexto: string;
+  osTabletTexto: string;
+  itensMO: any[];
+  consumo: any[];
+  sucata: any[];
+  medicaoValorUpsLM: number;
+  medicaoValorUpsLV: number;
+  medicaoForaHC: boolean;
+  medicaoItensSnapshot: Record<"LM" | "LV", any[]>;
+  medicaoTab: "LM" | "LV";
+  currentUserNameSnapshot: string;
+  numeroSigod?: string;
+  numeroSs?: string;
+  equipeInfo?: {
+    codigoSelecionado?: string;
+    linhaSelecionada?: EquipeLinha;
+    encarregadoSelecionado?: string;
+  };
+  detalhesEquipes?: {
+    encarregadoLinhaLM?: string;
+    encarregadoLinhaLV?: string;
+    encarregadoPrincipal?: string;
+    principalLinhaInferida?: EquipeLinha;
+  };
+};
+
+type MaoDeObraResumo = {
+  itensCalculados: {
+    index: number;
+    codigo: string;
+    descricao: string;
+    unidade: string;
+    operacao: string;
+    upsQtd: number;
+    quantidade: number;
+    subtotal: number;
+  }[];
+  totalBase: number;
+  totalComAdicional: number;
+  acrescimoValor: number;
+  acrescimoInfo: { codigo: string; descricao: string };
+};
 
 const isUuidValue = (value: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
@@ -76,6 +141,15 @@ const loadImageElement = (src: string) =>
     img.onerror = reject;
     img.src = src;
   });
+
+const pickValue = (...values: Array<string | null | undefined>) => {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+  return undefined;
+};
 
 const extrairCandidatosEquipe = (fonte?: any): string[] => {
   if (!fonte) return [];
@@ -352,6 +426,20 @@ export const WorkflowSteps = () => {
 
   const [execReadonly, setExecReadonly] = useState(false);
 
+  // Etapa 4 - Registro de OS
+  const emptyOsForm = {
+    numero_os: "",
+    os_criada_em: "",
+    observacoes: "",
+  };
+  const [osModalOpen, setOsModalOpen] = useState(false);
+  const [osLoading, setOsLoading] = useState(false);
+  const [osSaving, setOsSaving] = useState(false);
+  const [osError, setOsError] = useState<string | null>(null);
+  const [osInfo, setOsInfo] = useState<string | null>(null);
+  const [osForm, setOsForm] = useState({ ...emptyOsForm });
+  const [osElementoId, setOsElementoId] = useState("");
+
   // Etapa 3 - Medição / Orçamento (sem persistência)
   const [medicaoModalOpen, setMedicaoModalOpen] = useState(false);
   const [medicaoTab, setMedicaoTab] = useState<"LM" | "LV">("LM");
@@ -366,6 +454,12 @@ export const WorkflowSteps = () => {
     LV: [],
   });
   const [savingMedicao, setSavingMedicao] = useState(false);
+  const [advancingEtapa4, setAdvancingEtapa4] = useState(false);
+  const [pdfGeradoPorModalidade, setPdfGeradoPorModalidade] = useState<Record<"LM" | "LV", boolean>>({
+    LM: false,
+    LV: false,
+  });
+  const [ultimoPdfGeradoEm, setUltimoPdfGeradoEm] = useState<string | null>(null);
   const [medicaoDetalhesAcionamento, setMedicaoDetalhesAcionamento] = useState<any | null>(null);
   const [medicaoEquipeSelecionada, setMedicaoEquipeSelecionada] = useState<Record<EquipeLinha, string>>({
     LM: "",
@@ -394,6 +488,30 @@ export const WorkflowSteps = () => {
   const modalidadeSelecionada = (selectedItem?.modalidade || "LM").toUpperCase();
   const modalSuportaLM = modalidadeSelecionada !== "LV";
   const modalSuportaLV = modalidadeSelecionada !== "LM";
+  const pdfGeracaoIndisponivel =
+    savingMedicao ||
+    (medicaoEquipeOpcoes[medicaoTab]?.length || 0) === 0 ||
+    !equipeValidaParaLinha(medicaoTab);
+  const etapaAtualSelecionada = Number(selectedItem?.etapa_atual || 0);
+  const etapa4Liberada = etapaAtualSelecionada >= 4;
+  const possuiItensLM = (medicaoItens.LM || []).length > 0;
+  const possuiItensLV = (medicaoItens.LV || []).length > 0;
+  const pendenciaPdfLM = possuiItensLM && !pdfGeradoPorModalidade.LM;
+  const pendenciaPdfLV = possuiItensLV && !pdfGeradoPorModalidade.LV;
+  const pendenciaPdf = pendenciaPdfLM || pendenciaPdfLV;
+  const pendenciaPdfDescricao = (() => {
+    if (!pendenciaPdf) return "";
+    const faltantes = [
+      pendenciaPdfLM ? "Linha Morta" : null,
+      pendenciaPdfLV ? "Linha Viva" : null,
+    ].filter(Boolean);
+    return faltantes.join(" e ");
+  })();
+  const podeConcluirEtapa3 =
+    !etapa4Liberada && !advancingEtapa4 && !pdfGeracaoIndisponivel && !pendenciaPdf;
+  const osAcionamentoCodigo =
+    selectedItem?.codigo_acionamento || selectedItem?.id_acionamento || "--";
+  const osElementoDisplay = osElementoId || selectedItem?.elemento_id || "--";
 
   const emptyExec = {
 
@@ -475,6 +593,12 @@ export const WorkflowSteps = () => {
     return d.toISOString().slice(0, 16);
   };
 
+  const fromInputDateTime = (value?: string | null) => {
+    if (!value) return null;
+    const parsed = new Date(value);
+    return isNaN(parsed.getTime()) ? null : parsed.toISOString();
+  };
+
   const enrichMateriais = async (lista: any[]) => {
     if (!lista || lista.length === 0) return [];
     const codigos = Array.from(new Set(lista.map((p: any) => p.codigo_material).filter(Boolean)));
@@ -527,6 +651,8 @@ export const WorkflowSteps = () => {
     setMedicaoEquipeSelecionada({ LM: "", LV: "" });
     setMedicaoEquipeOpcoes({ LM: [], LV: [] });
     setMedicaoEquipeMetaPorCodigo({});
+    setPdfGeradoPorModalidade({ LM: false, LV: false });
+    setUltimoPdfGeradoEm(null);
     setMedicaoModalOpen(true);
 
     let detalhesAcionamento: any = null;
@@ -770,9 +896,10 @@ export const WorkflowSteps = () => {
     }
   };
 
-  const aplicarPercentualFinal = (valorBase: number) => {
+  const aplicarPercentualFinal = (valorBase: number, foraHorario?: boolean) => {
     if (!valorBase) return 0;
-    const percentual = medicaoForaHC ? 0.3 : 0.12;
+    const fora = typeof foraHorario === "boolean" ? foraHorario : medicaoForaHC;
+    const percentual = fora ? 0.3 : 0.12;
     return valorBase * (1 + percentual);
   };
 
@@ -850,23 +977,23 @@ export const WorkflowSteps = () => {
     });
   };
 
-  const salvarMedicao = async () => {
+  const salvarMedicao = async (options?: { silent?: boolean }): Promise<boolean> => {
     if (!selectedItem) {
       alert("❌ Nenhum acionamento selecionado.");
-      return;
+      return false;
     }
 
     const idAcionamento = selectedItem.id_acionamento || selectedItem.id;
     if (!idAcionamento) {
       alert("❌ ID do acionamento não encontrado.");
-      return;
+      return false;
     }
 
     const itensLM = medicaoItens.LM || [];
     const itensLV = medicaoItens.LV || [];
     if (itensLM.length === 0 && itensLV.length === 0) {
       alert("⚠️ Adicione ao menos um item antes de salvar o rascunho.");
-      return;
+      return false;
     }
 
     const baseLM = totalBaseMedicao("LM");
@@ -892,161 +1019,506 @@ export const WorkflowSteps = () => {
         .from("medicao_orcamentos")
         .upsert(payload, { onConflict: "id_acionamento" });
       if (error) throw error;
-      alert("✅ Rascunho salvo com sucesso!");
+      if (!options?.silent) {
+        alert("✅ Rascunho salvo com sucesso!");
+      }
+      return true;
     } catch (err: any) {
       console.error("Erro ao salvar medição", err);
       alert(`❌ Erro ao salvar medição: ${err?.message || err}`);
+      return false;
     } finally {
       setSavingMedicao(false);
     }
   };
 
-  const gerarOrcamento = async () => {
+  const avancarParaEtapa4 = async () => {
+    if (!selectedItem) {
+      alert("❌ Nenhum acionamento selecionado.");
+      return;
+    }
+    if (etapa4Liberada) {
+      alert("ℹ️ Este acionamento já está na Etapa 4 ou posterior.");
+      return;
+    }
+    if (pendenciaPdf) {
+      const descricao = pendenciaPdfDescricao || "mão de obra";
+      alert(`⚠️ Gere o PDF dos itens de ${descricao} antes de concluir a etapa.`);
+      return;
+    }
+
+    const salvou = await salvarMedicao({ silent: true });
+    if (!salvou) return;
+
+    const idAcionamento = selectedItem.id_acionamento || selectedItem.id;
+    if (!idAcionamento) {
+      alert("❌ ID do acionamento não encontrado.");
+      return;
+    }
+
+    setAdvancingEtapa4(true);
     try {
-      if (!selectedItem) {
-        alert("❌ Nenhum acionamento selecionado");
-        return;
-      }
-      
-      const idAcionamento = selectedItem.id_acionamento || selectedItem.id;
-      if (!idAcionamento) {
-        alert("❌ ID do acionamento não encontrado");
-        return;
-      }
+      const agora = new Date().toISOString();
+      const { error } = await supabase
+        .from("acionamentos")
+        .update({ etapa_atual: 4, medicao_registrada_em: agora })
+        .eq("id_acionamento", idAcionamento);
+      if (error) throw error;
 
-      const pdfModalidade: "LM" | "LV" = medicaoTab === "LM" ? "LM" : "LV";
-      if (!equipeValidaParaLinha(pdfModalidade)) {
-        alert(
-          `⚠️ Selecione uma equipe de ${pdfModalidade === "LM" ? "Linha Morta" : "Linha Viva"} válida antes de gerar o PDF.`
-        );
-        return;
-      }
+      setSelectedItem((prev: any) =>
+        prev
+          ? {
+              ...prev,
+              etapa_atual: 4,
+              medicao_registrada_em: agora,
+            }
+          : prev
+      );
+      setItems((prev) => prev.filter((item) => item.id_acionamento !== idAcionamento));
+      setSteps((prev) =>
+        prev.map((step) => {
+          if (step.id === 3) {
+            return { ...step, count: Math.max(0, step.count - 1) };
+          }
+          if (step.id === 4) {
+            return { ...step, count: step.count + 1 };
+          }
+          return step;
+        })
+      );
+      alert("✅ Etapa avançada para 4. Registre a OS no sistema.");
+    } catch (err: any) {
+      console.error("Erro ao avançar etapa", err);
+      alert(`❌ Erro ao avançar etapa: ${err?.message || err}`);
+    } finally {
+      setAdvancingEtapa4(false);
+    }
+  };
 
-      alert("⏰ Iniciando geração de PDF...");
-      
-      let dadosExec: any = null;
+  const prepararOrcamentoContext = async (
+    idAcionamento: string,
+    pdfModalidade: "LM" | "LV"
+  ): Promise<OrcamentoPdfContext | null> => {
+    if (!selectedItem) return null;
+
+    let dadosExec: any = null;
+    try {
+      const { data } = await supabase
+        .from("acionamento_execucao")
+        .select("*")
+        .eq("id_acionamento", idAcionamento)
+        .maybeSingle();
+      dadosExec = data;
+    } catch (err) {
+      console.warn("⚠️ Dados de execução não encontrados");
+    }
+
+    let detalhesAcionamento: any =
+      medicaoDetalhesAcionamento && medicaoDetalhesAcionamento.id_acionamento === idAcionamento
+        ? medicaoDetalhesAcionamento
+        : null;
+    if (!detalhesAcionamento) {
       try {
         const { data } = await supabase
-          .from("acionamento_execucao")
+          .from("acionamentos")
           .select("*")
           .eq("id_acionamento", idAcionamento)
           .maybeSingle();
-        dadosExec = data;
+        detalhesAcionamento = data;
       } catch (err) {
-        console.warn("⚠️ Dados de execução não encontrados");
+        console.warn("⚠️ Detalhes do acionamento não encontrados");
       }
+    }
 
-      let detalhesAcionamento: any =
-        medicaoDetalhesAcionamento && medicaoDetalhesAcionamento.id_acionamento === idAcionamento
-          ? medicaoDetalhesAcionamento
-          : null;
-      if (!detalhesAcionamento) {
-        try {
-          const { data } = await supabase
-            .from("acionamentos")
-            .select("*")
-            .eq("id_acionamento", idAcionamento)
-            .maybeSingle();
-          detalhesAcionamento = data;
-        } catch (err) {
-          console.warn("⚠️ Detalhes do acionamento não encontrados");
-        }
+    let equipesRelacionadas: { id_equipe?: string | null; papel?: string | null; encarregado_nome?: string | null }[] = [];
+    try {
+      const { data } = await supabase
+        .from("acionamento_equipes")
+        .select("id_equipe,papel,encarregado_nome")
+        .eq("id_acionamento", idAcionamento);
+      equipesRelacionadas = data || [];
+    } catch (err) {
+      console.warn("⚠️ Equipes adicionais não encontradas", err);
+    }
+
+    const rawEquipeRefs = new Set<string>();
+    const registrarEquipe = (valor?: string | null) => {
+      if (!valor) return;
+      const texto = String(valor).trim();
+      if (!texto) return;
+      rawEquipeRefs.add(texto);
+    };
+
+    registrarEquipe(detalhesAcionamento?.id_equipe);
+    registrarEquipe(detalhesAcionamento?.codigo_equipe);
+    registrarEquipe(detalhesAcionamento?.equipe);
+    registrarEquipe(detalhesAcionamento?.equipe_lm);
+    registrarEquipe(detalhesAcionamento?.nome_equipe);
+    registrarEquipe((selectedItem as any)?.id_equipe);
+    registrarEquipe((selectedItem as any)?.equipe);
+    registrarEquipe((selectedItem as any)?.equipe_lm);
+    equipesRelacionadas.forEach((rel) => registrarEquipe(rel?.id_equipe));
+
+    const equipeCodigos = new Set<string>();
+    const equipeUuids = new Set<string>();
+    rawEquipeRefs.forEach((valor) => {
+      if (isUuidValue(valor)) {
+        equipeUuids.add(valor);
+      } else {
+        equipeCodigos.add(valor.toUpperCase());
       }
+    });
 
-      let equipesRelacionadas: { id_equipe?: string | null; papel?: string | null; encarregado_nome?: string | null }[] = [];
+    const equipeCatalogo = new Map<string, { nome: string; linha?: "LM" | "LV" }>();
+    equipeCodigos.forEach((codigo) => {
+      const info = getEquipeInfoByCodigo(codigo);
+      if (info) {
+        equipeCatalogo.set(codigo, info);
+      } else {
+        equipeCatalogo.set(codigo, { nome: codigo });
+      }
+    });
+
+    if (equipeUuids.size > 0) {
       try {
         const { data } = await supabase
-          .from("acionamento_equipes")
-          .select("id_equipe,papel,encarregado_nome")
-          .eq("id_acionamento", idAcionamento);
-        equipesRelacionadas = data || [];
-      } catch (err) {
-        console.warn("⚠️ Equipes adicionais não encontradas", err);
-      }
-      const rawEquipeRefs = new Set<string>();
-      const registrarEquipe = (valor?: string | null) => {
-        if (!valor) return;
-        const texto = String(valor).trim();
-        if (!texto) return;
-        rawEquipeRefs.add(texto);
-      };
-
-      registrarEquipe(detalhesAcionamento?.id_equipe);
-      registrarEquipe(detalhesAcionamento?.codigo_equipe);
-      registrarEquipe(detalhesAcionamento?.equipe);
-      registrarEquipe(detalhesAcionamento?.equipe_lm);
-      registrarEquipe(detalhesAcionamento?.nome_equipe);
-      registrarEquipe((selectedItem as any)?.id_equipe);
-      registrarEquipe((selectedItem as any)?.equipe);
-      registrarEquipe((selectedItem as any)?.equipe_lm);
-      equipesRelacionadas.forEach((rel) => registrarEquipe(rel?.id_equipe));
-
-      const equipeCodigos = new Set<string>();
-      const equipeUuids = new Set<string>();
-      rawEquipeRefs.forEach((valor) => {
-        if (isUuidValue(valor)) {
-          equipeUuids.add(valor);
-        } else {
-          equipeCodigos.add(valor.toUpperCase());
-        }
-      });
-
-      const equipeCatalogo = new Map<string, { nome: string; linha?: "LM" | "LV" }>();
-      equipeCodigos.forEach((codigo) => {
-        const info = getEquipeInfoByCodigo(codigo);
-        if (info) {
-          equipeCatalogo.set(codigo, info);
-        } else {
-          equipeCatalogo.set(codigo, { nome: codigo });
-        }
-      });
-
-      if (equipeUuids.size > 0) {
-        try {
-          const { data } = await supabase
-            .from("equipes")
-            .select("id_equipe,nome_equipe,linha")
-            .in("id_equipe", Array.from(equipeUuids));
-          (data || []).forEach((eq: any) => {
-            const nome = eq?.nome_equipe || String(eq?.id_equipe || "");
-            equipeCatalogo.set(String(eq.id_equipe), {
-              nome,
-              linha:
-                normalizeLinha(eq?.linha) || inferLinhaPorCodigo(nome) || inferLinhaPorEncarregado(eq?.encarregado_nome),
-            });
+          .from("equipes")
+          .select("id_equipe,nome_equipe,linha")
+          .in("id_equipe", Array.from(equipeUuids));
+        (data || []).forEach((eq: any) => {
+          const nome = eq?.nome_equipe || String(eq?.id_equipe || "");
+          equipeCatalogo.set(String(eq.id_equipe), {
+            nome,
+            linha:
+              normalizeLinha(eq?.linha) || inferLinhaPorCodigo(nome) || inferLinhaPorEncarregado(eq?.encarregado_nome),
           });
-        } catch (err) {
-          console.warn("⚠️ Nomes das equipes não encontrados", err);
+        });
+      } catch (err) {
+        console.warn("⚠️ Nomes das equipes não encontrados", err);
+      }
+    }
+
+    const obterInfoEquipe = (valor?: string | null, encarregado?: string | null) => {
+      if (valor) {
+        const texto = valor.trim();
+        if (texto) {
+          const info =
+            equipeCatalogo.get(texto) ||
+            equipeCatalogo.get(texto.toUpperCase()) ||
+            equipeCatalogo.get(texto.toLowerCase());
+          if (info) {
+            return info;
+          }
         }
       }
-
-      const obterInfoEquipe = (valor?: string | null, encarregado?: string | null) => {
-        if (valor) {
-          const texto = valor.trim();
-          if (texto) {
-            const info =
-              equipeCatalogo.get(texto) ||
-              equipeCatalogo.get(texto.toUpperCase()) ||
-              equipeCatalogo.get(texto.toLowerCase());
-            if (info) {
-              return info;
+      if (encarregado) {
+        const deducao = inferEquipePorEncarregado(encarregado);
+        if (deducao) {
+          return (
+            equipeCatalogo.get(deducao.codigo) || {
+              nome: deducao.codigo,
+              linha: deducao.linha,
             }
-          }
+          );
         }
-        if (encarregado) {
-          const deducao = inferEquipePorEncarregado(encarregado);
-          if (deducao) {
-            return (
-              equipeCatalogo.get(deducao.codigo) || {
-                nome: deducao.codigo,
-                linha: deducao.linha,
-              }
-            );
-          }
+      }
+      return undefined;
+    };
+
+    const headerBase = {
+      ...(selectedItem || {}),
+      ...(detalhesAcionamento || {}),
+      modalidade: pdfModalidade,
+    };
+
+    const dataExecucaoFonte = pickValue(
+      dadosExec?.inicio_servico,
+      headerBase.data_execucao,
+      headerBase.data_execucao_lm,
+      headerBase.data_despacho,
+      headerBase.data_abertura
+    );
+    const dataExecucaoTexto = formatDateTimeBr(dataExecucaoFonte);
+    const codigoAcionamento = headerBase.codigo_acionamento || "--";
+    const numeroSigod = pickValue(
+      dadosExec?.numero_intervencao,
+      headerBase.numero_intervencao,
+      headerBase.numero_os
+    );
+    const numeroSs = pickValue(dadosExec?.ss_nota, headerBase.ss_nota);
+    const numeroIntervencaoTexto =
+      [numeroSigod ? `SIGOD: ${numeroSigod}` : null, numeroSs ? `SS: ${numeroSs}` : null]
+        .filter(Boolean)
+        .join(" | ") || "--";
+
+    const equipeEntries: EquipeEntry[] = [];
+    const adicionarEntradaEquipe = (
+      valor?: string | null,
+      linhaSugestao?: "LM" | "LV",
+      encarregadoRelacionado?: string | null
+    ) => {
+      if (!valor && !encarregadoRelacionado) return;
+      const info = obterInfoEquipe(valor, encarregadoRelacionado);
+      if (info?.nome) {
+        equipeEntries.push({ nome: info.nome, linha: info.linha || linhaSugestao, encarregado: encarregadoRelacionado });
+        return;
+      }
+      const texto = valor?.trim() || "";
+      if (!texto || isUuidValue(texto)) return;
+      equipeEntries.push({ nome: texto, linha: linhaSugestao, encarregado: encarregadoRelacionado });
+    };
+
+    const principalLinhaInferida =
+      inferLinhaPorCodigo(detalhesAcionamento?.codigo_equipe) ||
+      inferLinhaPorCodigo(detalhesAcionamento?.equipe_lm) ||
+      inferLinhaPorEncarregado(
+        detalhesAcionamento?.encarregado_lm ||
+          detalhesAcionamento?.encarregado ||
+          headerBase.encarregado_lm ||
+          headerBase.encarregado
+      );
+
+    const encarregadoPrincipal =
+      detalhesAcionamento?.encarregado_lm ||
+      detalhesAcionamento?.encarregado ||
+      headerBase.encarregado_lm ||
+      headerBase.encarregado;
+
+    adicionarEntradaEquipe(detalhesAcionamento?.id_equipe, principalLinhaInferida, encarregadoPrincipal);
+    adicionarEntradaEquipe(detalhesAcionamento?.codigo_equipe, principalLinhaInferida, encarregadoPrincipal);
+    adicionarEntradaEquipe(detalhesAcionamento?.equipe_lm, principalLinhaInferida, encarregadoPrincipal);
+
+    equipesRelacionadas.forEach((rel) => {
+      const linhaRel =
+        normalizeLinha(rel?.papel) || inferLinhaPorCodigo(rel?.id_equipe) || inferLinhaPorEncarregado(rel?.encarregado_nome);
+      adicionarEntradaEquipe(rel?.id_equipe, linhaRel, rel?.encarregado_nome || encarregadoPrincipal);
+    });
+
+    const uniqueEquipes = equipeEntries.filter((item, index, arr) => {
+      const key = `${item.nome}::${item.linha || ""}`;
+      return arr.findIndex((target) => `${target.nome}::${target.linha || ""}` === key) === index;
+    });
+
+    const preferenciaLinha = pdfModalidade === "LM" ? "LM" : pdfModalidade === "LV" ? "LV" : undefined;
+    const preferidas =
+      preferenciaLinha != null
+        ? uniqueEquipes.filter((eq) => eq.linha === preferenciaLinha)
+        : uniqueEquipes;
+    const equipesParaMostrar =
+      preferidas.length > 0 ? preferidas : uniqueEquipes.length > 0 ? uniqueEquipes : [];
+
+    const equipeSelecionadaCodigo = medicaoEquipeSelecionada[pdfModalidade];
+    const equipeSelecionadaInfo = equipeSelecionadaCodigo
+      ? medicaoEquipeMetaPorCodigo[equipeSelecionadaCodigo] ||
+        getEquipeInfoByCodigo(equipeSelecionadaCodigo) || {
+          nome: equipeSelecionadaCodigo,
+          linha: inferLinhaPorCodigo(equipeSelecionadaCodigo),
         }
-        return undefined;
+      : undefined;
+    const equipeSelecionadaLinha =
+      equipeSelecionadaInfo?.linha || inferLinhaPorCodigo(equipeSelecionadaCodigo);
+    const equipeSelecionadaEncarregado = equipeSelecionadaInfo?.encarregado?.trim();
+    const equipeListaTexto = equipesParaMostrar
+      .map((eq) => formatEquipeDisplay(eq, pdfModalidade))
+      .join(" | ");
+
+    const formatarCampoEquipe = (valor?: string | null, encarregadoFallback?: string | null) => {
+      const info = obterInfoEquipe(valor, encarregadoFallback || encarregadoPrincipal);
+      if (info) {
+        return formatEquipeDisplay(info, pdfModalidade);
+      }
+      if (!valor) return undefined;
+      const texto = valor.trim();
+      if (!texto || isUuidValue(texto)) return undefined;
+      return texto;
+    };
+
+    let equipeTexto =
+      pickValue(
+        equipeListaTexto,
+        formatarCampoEquipe(headerBase.equipe),
+        formatarCampoEquipe(headerBase.equipe_nome),
+        formatarCampoEquipe(headerBase.nome_equipe),
+        formatarCampoEquipe(headerBase.equipe_lm),
+        formatarCampoEquipe(headerBase.codigo_equipe)
+      ) || "--";
+
+    if (equipeSelecionadaCodigo) {
+      const manualLabel = formatEquipeDisplay(equipeSelecionadaInfo, pdfModalidade);
+      if (manualLabel) {
+        equipeTexto = manualLabel;
+      }
+    }
+
+    const getEncarregadoByLinha = (linha?: "LM" | "LV") => {
+      if (!linha) return undefined;
+      if (equipeSelecionadaLinha === linha && equipeSelecionadaEncarregado) {
+        return equipeSelecionadaEncarregado;
+      }
+      const relMatch = equipesRelacionadas.find(
+        (rel) => normalizeLinha(rel?.papel) === linha && (rel?.encarregado_nome || "").trim()
+      );
+      if (relMatch?.encarregado_nome) {
+        return relMatch.encarregado_nome.trim();
+      }
+      const entryMatch = uniqueEquipes.find(
+        (eq) => eq.linha === linha && (eq.encarregado || "").trim().length > 0
+      );
+      if (entryMatch?.encarregado) {
+        return entryMatch.encarregado.trim();
+      }
+      if (linha === principalLinhaInferida && (encarregadoPrincipal || "").trim()) {
+        return (encarregadoPrincipal || "").trim();
+      }
+      return undefined;
+    };
+
+    const encarregadoLinhaLM = getEncarregadoByLinha("LM");
+    const encarregadoLinhaLV = getEncarregadoByLinha("LV");
+    const encarregadoManualLinha = equipeSelecionadaLinha === pdfModalidade ? equipeSelecionadaEncarregado : undefined;
+    const encarregadoPreferencias =
+      pdfModalidade === "LV"
+        ? [encarregadoLinhaLV, headerBase.encarregado_lv, headerBase.encarregado, headerBase.encarregado_nome]
+        : [encarregadoLinhaLM, headerBase.encarregado_lm, headerBase.encarregado, headerBase.encarregado_nome];
+    const encarregadoTexto =
+      pickValue(
+        encarregadoManualLinha,
+        ...encarregadoPreferencias,
+        encarregadoSelecionado,
+        encarregadoNome
+      ) || "--";
+    const tecnicoTexto =
+      pickValue(
+        headerBase.tecnico,
+        headerBase.tecnico_responsavel,
+        headerBase.tecnico_nome,
+        currentUserName
+      ) || "--";
+    const enderecoTexto = (() => {
+      const direto = pickValue(headerBase.endereco, headerBase.endereco_completo);
+      if (direto) return direto;
+      const partes = [
+        headerBase.logradouro,
+        headerBase.numero,
+        headerBase.bairro,
+        headerBase.municipio || headerBase.cidade,
+        headerBase.uf,
+      ]
+        .filter((parte) => typeof parte === "string" && parte.trim().length > 0)
+        .join(", ");
+      return partes || "--";
+    })();
+    const alimentadorTexto = pickValue(dadosExec?.alimentador, headerBase.alimentador) || "--";
+    const subestacaoTexto = pickValue(dadosExec?.subestacao, headerBase.subestacao) || "--";
+    const alimentadorSubTexto = `${alimentadorTexto} / ${subestacaoTexto}`;
+    const osTabletTexto = pickValue(dadosExec?.os_tablet, headerBase.os_tablet) || "--";
+
+    return {
+      idAcionamento,
+      pdfModalidade,
+      selectedItemSnapshot: { ...selectedItem },
+      dadosExec,
+      detalhesAcionamento,
+      headerBase,
+      numeroIntervencaoTexto,
+      dataExecucaoTexto,
+      codigoAcionamento,
+      equipeTexto,
+      encarregadoTexto,
+      tecnicoTexto,
+      enderecoTexto,
+      alimentadorTexto,
+      subestacaoTexto,
+      alimentadorSubTexto,
+      osTabletTexto,
+      itensMO: (medicaoItens[pdfModalidade] || []).map((item) => ({ ...item })),
+      consumo: (consumo || []).map((item) => ({ ...item })),
+      sucata: (sucata || []).map((item) => ({ ...item })),
+      medicaoValorUpsLM,
+      medicaoValorUpsLV,
+      medicaoForaHC,
+      medicaoItensSnapshot: { ...medicaoItens },
+      medicaoTab: pdfModalidade,
+      currentUserNameSnapshot: currentUserName,
+      numeroSigod,
+      numeroSs,
+      equipeInfo: {
+        codigoSelecionado: equipeSelecionadaCodigo,
+        linhaSelecionada: equipeSelecionadaLinha,
+        encarregadoSelecionado: equipeSelecionadaEncarregado,
+      },
+      detalhesEquipes: {
+        encarregadoLinhaLM,
+        encarregadoLinhaLV,
+        encarregadoPrincipal,
+        principalLinhaInferida,
+      },
+    };
+  };
+
+  const calcularResumoMaoDeObra = (contexto: OrcamentoPdfContext): MaoDeObraResumo => {
+    const itensOrigem = contexto.itensMO || [];
+    const valorReferencia = contexto.medicaoTab === "LM" ? contexto.medicaoValorUpsLM : contexto.medicaoValorUpsLV;
+    const itensCalculados = itensOrigem.map((item, idx) => {
+      const upsQtd = Number(item.valorUps ?? item.ups ?? 0);
+      const quantidade = Number(item.quantidade) || 0;
+      const subtotal = quantidade * upsQtd * valorReferencia;
+      return {
+        index: idx + 1,
+        codigo: item.codigo,
+        descricao: item.descricao,
+        unidade: item.unidade || "UN",
+        operacao: item.operacao || "-",
+        upsQtd,
+        quantidade,
+        subtotal,
       };
-      
+    });
+    const totalBase = itensCalculados.reduce((acc, row) => acc + row.subtotal, 0);
+    const totalComAdicional = aplicarPercentualFinal(totalBase, contexto.medicaoForaHC);
+    const acrescimoValor = totalComAdicional - totalBase;
+    const acrescimoInfo = contexto.medicaoForaHC
+      ? {
+          codigo: "26376",
+          descricao: "SERV. EMERG. FORA DO HORÁRIO COMERCIAL – ADICIONAL 30%",
+        }
+      : {
+          codigo: "92525",
+          descricao: "SERV. EMERG. HORÁRIO COMERCIAL – ADICIONAL 12%",
+        };
+
+    return { itensCalculados, totalBase, totalComAdicional, acrescimoValor, acrescimoInfo };
+  };
+
+  const registrarPdfGerado = (modalidade: "LM" | "LV") => {
+    setPdfGeradoPorModalidade((prev) => ({ ...prev, [modalidade]: true }));
+    setUltimoPdfGeradoEm(new Date().toISOString());
+  };
+
+  const gerarOrcamento = async () => {
+    if (!selectedItem) {
+      alert("❌ Nenhum acionamento selecionado");
+      return;
+    }
+    const idAcionamento = selectedItem.id_acionamento || selectedItem.id;
+    if (!idAcionamento) {
+      alert("❌ ID do acionamento não encontrado");
+      return;
+    }
+
+    const pdfModalidade: "LM" | "LV" = medicaoTab === "LM" ? "LM" : "LV";
+    if (!equipeValidaParaLinha(pdfModalidade)) {
+      alert(`⚠️ Selecione uma equipe de ${pdfModalidade === "LM" ? "Linha Morta" : "Linha Viva"} válida antes de gerar o PDF.`);
+      return;
+    }
+
+    alert("⏰ Iniciando geração de PDF...");
+
+    try {
+      const contexto = await prepararOrcamentoContext(idAcionamento, pdfModalidade);
+      if (!contexto) return;
+      const resumoMO = calcularResumoMaoDeObra(contexto);
+
       const doc = new jsPDF("landscape");
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
@@ -1080,17 +1552,17 @@ export const WorkflowSteps = () => {
       } catch (err) {
         console.warn("Logo não pôde ser carregada", err);
       }
-      const headerBase = {
-        ...(selectedItem || {}),
-        ...(detalhesAcionamento || {}),
-        modalidade: pdfModalidade,
-      };
+      const headerBase = contexto.headerBase;
+      const detalhesAcionamento = contexto.detalhesAcionamento;
+      const dadosExec = contexto.dadosExec;
+      const selectedSnapshot = contexto.selectedItemSnapshot;
+      const medicaoTabAtual = contexto.medicaoTab;
       const modalidadeLabel =
-        pdfModalidade === "LM"
+        contexto.pdfModalidade === "LM"
           ? "Linha Morta"
-          : pdfModalidade === "LV"
+          : contexto.pdfModalidade === "LV"
           ? "Linha Viva"
-          : pdfModalidade;
+          : contexto.pdfModalidade;
       const reportTitle = `Fechamento de OS - ${modalidadeLabel}`;
 
       // Título centralizado abaixo da logo
@@ -1112,195 +1584,15 @@ export const WorkflowSteps = () => {
       doc.text("CABEÇALHO OPERACIONAL", 10, yPos + 4);
       yPos += 8;
 
-      const pickValue = (...values: Array<string | null | undefined>) => {
-        for (const value of values) {
-          if (typeof value === "string" && value.trim().length > 0) {
-            return value.trim();
-          }
-        }
-        return undefined;
-      };
-
-      const dataExecucaoFonte = pickValue(
-        dadosExec?.inicio_servico,
-        headerBase.data_execucao,
-        headerBase.data_execucao_lm,
-        headerBase.data_despacho,
-        headerBase.data_abertura
-      );
-      const dataExecucaoTexto = formatDateTimeBr(dataExecucaoFonte);
-      const codigoAcionamento = headerBase.codigo_acionamento || "--";
-      const numeroSigod = pickValue(
-        dadosExec?.numero_intervencao,
-        headerBase.numero_intervencao,
-        headerBase.numero_os
-      );
-      const numeroSs = pickValue(dadosExec?.ss_nota, headerBase.ss_nota);
-      const numeroIntervencaoTexto =
-        [numeroSigod ? `SIGOD: ${numeroSigod}` : null, numeroSs ? `SS: ${numeroSs}` : null]
-          .filter(Boolean)
-          .join(" | ") || "--";
-
-      const equipeEntries: EquipeEntry[] = [];
-      const adicionarEntradaEquipe = (
-        valor?: string | null,
-        linhaSugestao?: "LM" | "LV",
-        encarregadoRelacionado?: string | null
-      ) => {
-        if (!valor && !encarregadoRelacionado) return;
-        const info = obterInfoEquipe(valor, encarregadoRelacionado);
-        if (info?.nome) {
-          equipeEntries.push({ nome: info.nome, linha: info.linha || linhaSugestao, encarregado: encarregadoRelacionado });
-          return;
-        }
-        const texto = valor?.trim() || "";
-        if (!texto || isUuidValue(texto)) return;
-        equipeEntries.push({ nome: texto, linha: linhaSugestao, encarregado: encarregadoRelacionado });
-      };
-
-      const principalLinhaInferida =
-        inferLinhaPorCodigo(detalhesAcionamento?.codigo_equipe) ||
-        inferLinhaPorCodigo(detalhesAcionamento?.equipe_lm) ||
-        inferLinhaPorEncarregado(
-          detalhesAcionamento?.encarregado_lm ||
-            detalhesAcionamento?.encarregado ||
-            headerBase.encarregado_lm ||
-            headerBase.encarregado
-        );
-
-      const encarregadoPrincipal =
-        detalhesAcionamento?.encarregado_lm ||
-        detalhesAcionamento?.encarregado ||
-        headerBase.encarregado_lm ||
-        headerBase.encarregado;
-
-      adicionarEntradaEquipe(detalhesAcionamento?.id_equipe, principalLinhaInferida, encarregadoPrincipal);
-      adicionarEntradaEquipe(detalhesAcionamento?.codigo_equipe, principalLinhaInferida, encarregadoPrincipal);
-      adicionarEntradaEquipe(detalhesAcionamento?.equipe_lm, principalLinhaInferida, encarregadoPrincipal);
-
-      equipesRelacionadas.forEach((rel) => {
-        const linhaRel =
-          normalizeLinha(rel?.papel) || inferLinhaPorCodigo(rel?.id_equipe) || inferLinhaPorEncarregado(rel?.encarregado_nome);
-        adicionarEntradaEquipe(rel?.id_equipe, linhaRel, rel?.encarregado_nome || encarregadoPrincipal);
-      });
-
-      const uniqueEquipes = equipeEntries.filter((item, index, arr) => {
-        const key = `${item.nome}::${item.linha || ""}`;
-        return arr.findIndex((target) => `${target.nome}::${target.linha || ""}` === key) === index;
-      });
-
-      const preferenciaLinha = pdfModalidade === "LM" ? "LM" : pdfModalidade === "LV" ? "LV" : undefined;
-      const preferidas =
-        preferenciaLinha != null
-          ? uniqueEquipes.filter((eq) => eq.linha === preferenciaLinha)
-          : uniqueEquipes;
-      const equipesParaMostrar =
-        preferidas.length > 0 ? preferidas : uniqueEquipes.length > 0 ? uniqueEquipes : [];
-
-      const getEncarregadoByLinha = (linha?: "LM" | "LV") => {
-        if (!linha) return undefined;
-        if (equipeSelecionadaLinha === linha && equipeSelecionadaEncarregado) {
-          return equipeSelecionadaEncarregado;
-        }
-        const relMatch = equipesRelacionadas.find(
-          (rel) => normalizeLinha(rel?.papel) === linha && (rel?.encarregado_nome || "").trim()
-        );
-        if (relMatch?.encarregado_nome) {
-          return relMatch.encarregado_nome.trim();
-        }
-        const entryMatch = uniqueEquipes.find(
-          (eq) => eq.linha === linha && (eq.encarregado || "").trim().length > 0
-        );
-        if (entryMatch?.encarregado) {
-          return entryMatch.encarregado.trim();
-        }
-        if (linha === principalLinhaInferida && (encarregadoPrincipal || "").trim()) {
-          return (encarregadoPrincipal || "").trim();
-        }
-        return undefined;
-      };
-
-      const equipeListaTexto = equipesParaMostrar
-        .map((eq) => formatEquipeDisplay(eq, pdfModalidade))
-        .join(" | ");
-
-      const formatarCampoEquipe = (valor?: string | null, encarregadoFallback?: string | null) => {
-        const info = obterInfoEquipe(valor, encarregadoFallback || encarregadoPrincipal);
-        if (info) {
-          return formatEquipeDisplay(info, pdfModalidade);
-        }
-        if (!valor) return undefined;
-        const texto = valor.trim();
-        if (!texto || isUuidValue(texto)) return undefined;
-        return texto;
-      };
-
-      let equipeTexto =
-        pickValue(
-          equipeListaTexto,
-          formatarCampoEquipe(headerBase.equipe),
-          formatarCampoEquipe(headerBase.equipe_nome),
-          formatarCampoEquipe(headerBase.nome_equipe),
-          formatarCampoEquipe(headerBase.equipe_lm),
-          formatarCampoEquipe(headerBase.codigo_equipe)
-        ) || "--";
-
-      const equipeSelecionadaCodigo = medicaoEquipeSelecionada[pdfModalidade];
-      const equipeSelecionadaInfo = equipeSelecionadaCodigo
-        ? medicaoEquipeMetaPorCodigo[equipeSelecionadaCodigo] ||
-          getEquipeInfoByCodigo(equipeSelecionadaCodigo) || {
-            nome: equipeSelecionadaCodigo,
-            linha: inferLinhaPorCodigo(equipeSelecionadaCodigo),
-          }
-        : undefined;
-      const equipeSelecionadaLinha = equipeSelecionadaInfo?.linha || inferLinhaPorCodigo(equipeSelecionadaCodigo);
-      const equipeSelecionadaEncarregado = equipeSelecionadaInfo?.encarregado?.trim();
-      if (equipeSelecionadaCodigo) {
-        const manualLabel = formatEquipeDisplay(equipeSelecionadaInfo, pdfModalidade);
-        if (manualLabel) {
-          equipeTexto = manualLabel;
-        }
-      }
-      const encarregadoLinhaLM = getEncarregadoByLinha("LM");
-      const encarregadoLinhaLV = getEncarregadoByLinha("LV");
-      const encarregadoManualLinha =
-        equipeSelecionadaLinha === pdfModalidade ? equipeSelecionadaEncarregado : undefined;
-      const encarregadoPreferencias =
-        pdfModalidade === "LV"
-          ? [encarregadoLinhaLV, headerBase.encarregado_lv, headerBase.encarregado, headerBase.encarregado_nome]
-          : [encarregadoLinhaLM, headerBase.encarregado_lm, headerBase.encarregado, headerBase.encarregado_nome];
-      const encarregadoTexto =
-        pickValue(
-          encarregadoManualLinha,
-          ...encarregadoPreferencias,
-          encarregadoSelecionado,
-          encarregadoNome
-        ) || "--";
-      const tecnicoTexto =
-        pickValue(
-          headerBase.tecnico,
-          headerBase.tecnico_responsavel,
-          headerBase.tecnico_nome,
-          currentUserName
-        ) || "--";
-      const enderecoTexto = (() => {
-        const direto = pickValue(headerBase.endereco, headerBase.endereco_completo);
-        if (direto) return direto;
-        const partes = [
-          headerBase.logradouro,
-          headerBase.numero,
-          headerBase.bairro,
-          headerBase.municipio || headerBase.cidade,
-          headerBase.uf,
-        ]
-          .filter((parte) => typeof parte === "string" && parte.trim().length > 0)
-          .join(", ");
-        return partes || "--";
-      })();
-      const alimentadorTexto = pickValue(dadosExec?.alimentador, headerBase.alimentador) || "--";
-      const subestacaoTexto = pickValue(dadosExec?.subestacao, headerBase.subestacao) || "--";
-      const alimentadorSubTexto = `${alimentadorTexto} / ${subestacaoTexto}`;
-      const osTabletTexto = pickValue(dadosExec?.os_tablet, headerBase.os_tablet) || "--";
+      const dataExecucaoTexto = contexto.dataExecucaoTexto;
+      const codigoAcionamento = contexto.codigoAcionamento;
+      const numeroIntervencaoTexto = contexto.numeroIntervencaoTexto;
+      const equipeTexto = contexto.equipeTexto;
+      const encarregadoTexto = contexto.encarregadoTexto;
+      const tecnicoTexto = contexto.tecnicoTexto;
+      const enderecoTexto = contexto.enderecoTexto;
+      const alimentadorSubTexto = contexto.alimentadorSubTexto;
+      const osTabletTexto = contexto.osTabletTexto;
 
       const headerMarginX = 10;
       const headerWidth = pageWidth - headerMarginX * 2;
@@ -1445,36 +1737,24 @@ export const WorkflowSteps = () => {
       doc.setFont("helvetica", "bold");
       doc.setFontSize(9);
       doc.setTextColor(255, 255, 255);
-      doc.text(`MÃO DE OBRA - ${medicaoTab}`, 10, yPos + 4);
+      doc.text(`MÃO DE OBRA - ${medicaoTabAtual}`, 10, yPos + 4);
       yPos += 6;
 
-      const itensMO = medicaoItens[medicaoTab] || [];
-      const totalBaseMO = itensMO.reduce((acc, item) => {
-        const valorUni = (Number(item.valorUps) || 0) * (medicaoTab === "LM" ? medicaoValorUpsLM : medicaoValorUpsLV);
-        const total = Number(item.quantidade) || 0;
-        const subtotal = total > 0 ? total * valorUni : 0;
-        return acc + subtotal;
-      }, 0);
-      const totalMO = aplicarPercentualFinal(totalBaseMO);
+      const itensMOCalculados = resumoMO.itensCalculados;
+      const totalBaseMO = resumoMO.totalBase;
+      const totalMO = resumoMO.totalComAdicional;
 
-      if (itensMO.length > 0) {
-        const bodyMO = itensMO.map((item, idx) => {
-          const upsQtd = Number(item.valorUps ?? item.ups ?? 0);
-          const valorUni = upsQtd * (medicaoTab === "LM" ? medicaoValorUpsLM : medicaoValorUpsLV);
-          const inst = Number(item.quantidade) || 0;
-          const subtotal = inst > 0 ? inst * valorUni : 0;
-          
-          return [
-            idx + 1,
-            item.codigo,
-            item.descricao,
-            item.operacao || "-",
-            item.unidade,
-            `${upsQtd.toFixed(2)}`,
-            `${inst.toFixed(2)}`,
-            `${subtotal.toFixed(2)}`
-          ];
-        });
+      if (itensMOCalculados.length > 0) {
+        const bodyMO = itensMOCalculados.map((item) => [
+          item.index,
+          item.codigo,
+          item.descricao,
+          item.operacao,
+          item.unidade,
+          `${item.upsQtd.toFixed(2)}`,
+          `${item.quantidade.toFixed(2)}`,
+          `${item.subtotal.toFixed(2)}`,
+        ]);
 
         if (totalBaseMO > 0.005) {
           bodyMO.push([
@@ -1485,25 +1765,20 @@ export const WorkflowSteps = () => {
             "",
             "",
             "",
-            `${totalBaseMO.toFixed(2)}`
+            `${totalBaseMO.toFixed(2)}`,
           ]);
         }
 
-        const acrescimoValor = totalMO - totalBaseMO;
-        if (acrescimoValor > 0.005) {
-          const acrescimoCodigo = medicaoForaHC ? "26376" : "92525";
-          const acrescimoDescricao = medicaoForaHC
-            ? "SERV. EMERG. FORA DO HORARIO COMERCIAL-ADICIONAL 30%"
-            : "SERV. EMERG. HORARIO COMERCIAL - ADICIONAL 12%";
+        if (resumoMO.acrescimoValor > 0.005) {
           bodyMO.push([
             "",
-            acrescimoCodigo,
-            acrescimoDescricao,
+            resumoMO.acrescimoInfo.codigo,
+            resumoMO.acrescimoInfo.descricao,
             "-",
             "UN",
             "1.00",
-            `${acrescimoValor.toFixed(2)}`,
-            `${acrescimoValor.toFixed(2)}`
+            `${resumoMO.acrescimoValor.toFixed(2)}`,
+            `${resumoMO.acrescimoValor.toFixed(2)}`,
           ]);
         }
         
@@ -1554,7 +1829,7 @@ export const WorkflowSteps = () => {
       yPos += totalBoxHeight + 4;
 
       // ==================== MATERIAL APLICADO ====================
-      if (consumo.length > 0) {
+      if (contexto.consumo.length > 0) {
         if (yPos > pageHeight - 60) {
           doc.addPage("landscape");
           yPos = 10;
@@ -1568,7 +1843,7 @@ export const WorkflowSteps = () => {
         doc.text("MATERIAL APLICADO", 10, yPos + 5);
         yPos += 7;
 
-        const bodyConsumo = consumo.map((c, idx) => [
+        const bodyConsumo = contexto.consumo.map((c, idx) => [
           idx + 1,
           c.codigo_material,
           c.descricao_item || "",
@@ -1608,7 +1883,7 @@ export const WorkflowSteps = () => {
       }
 
       // ==================== MATERIAL RETIRADO ====================
-      if (sucata.length > 0) {
+      if (contexto.sucata.length > 0) {
         if (yPos > pageHeight - 60) {
           doc.addPage("landscape");
           yPos = 10;
@@ -1622,7 +1897,7 @@ export const WorkflowSteps = () => {
         doc.text("MATERIAL RETIRADO / SUCATA", 10, yPos + 5);
         yPos += 7;
 
-        const bodySucata = sucata.map((s, idx) => [
+        const bodySucata = contexto.sucata.map((s, idx) => [
           idx + 1,
           s.codigo_material,
           s.descricao_item || "",
@@ -1690,7 +1965,7 @@ export const WorkflowSteps = () => {
       doc.text(rodape, pageWidth / 2, pageHeight - 3, { align: "center" });
 
       console.log("💾 Salvando PDF...");
-      const nomeArquivo = `Orcamento_${selectedItem.codigo_acionamento || "acionamento"}_${medicaoTab}_${new Date().getTime()}.pdf`;
+      const nomeArquivo = `Orcamento_${selectedSnapshot.codigo_acionamento || "acionamento"}_${medicaoTabAtual}_${new Date().getTime()}.pdf`;
       
       const pdfBlob = doc.output("blob");
       const link = document.createElement("a");
@@ -1704,10 +1979,431 @@ export const WorkflowSteps = () => {
       alert("✅ PDF gerado com sucesso! Verifique Downloads");
       console.log("✅ PDF SALVO!");
       setMaterialInfo("✅ PDF gerado com sucesso!");
+      registrarPdfGerado(pdfModalidade);
     } catch (error: any) {
       alert(`❌ ERRO: ${error?.message}`);
       console.error("❌ ERRO:", error);
       setMaterialInfo(`❌ Erro: ${error?.message}`);
+    }
+  };
+
+  const gerarOrcamentoLayoutEng = async () => {
+    if (!selectedItem) {
+      alert("❌ Nenhum acionamento selecionado");
+      return;
+    }
+    const idAcionamento = selectedItem.id_acionamento || selectedItem.id;
+    if (!idAcionamento) {
+      alert("❌ ID do acionamento não encontrado");
+      return;
+    }
+
+    const pdfModalidade: "LM" | "LV" = medicaoTab === "LM" ? "LM" : "LV";
+    if (!equipeValidaParaLinha(pdfModalidade)) {
+      alert(`⚠️ Selecione uma equipe de ${pdfModalidade === "LM" ? "Linha Morta" : "Linha Viva"} válida antes de gerar o PDF.`);
+      return;
+    }
+
+    alert("⏰ Iniciando geração de PDF (layout EngElétrica)...");
+
+    try {
+      const contexto = await prepararOrcamentoContext(idAcionamento, pdfModalidade);
+      if (!contexto) return;
+      const resumoMO = calcularResumoMaoDeObra(contexto);
+
+      const doc = new jsPDF("p", "mm", "a4");
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const marginX = 10;
+      let cursorY = 15;
+      const isLinhaViva = contexto.pdfModalidade === "LV";
+      const primary = isLinhaViva ? { r: 18, g: 92, b: 68 } : { r: 204, g: 0, b: 0 };
+      const accent = isLinhaViva ? { r: 240, g: 252, b: 246 } : { r: 250, g: 250, b: 250 };
+      const secondary = isLinhaViva ? { r: 12, g: 64, b: 46 } : { r: 140, g: 0, b: 0 };
+
+      const ensureSpace = (minHeight = 40) => {
+        if (cursorY + minHeight > pageHeight - 15) {
+          doc.addPage();
+          cursorY = 15;
+        }
+      };
+
+      const drawFooter = () => {
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9);
+        doc.setTextColor(secondary.r, secondary.g, secondary.b);
+        doc.text("EngElétrica Assessoria Projetos e Construção LTDA", pageWidth / 2, pageHeight - 8, {
+          align: "center",
+        });
+      };
+
+      const drawSectionHeader = (title: string) => {
+        ensureSpace();
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(11);
+        doc.setTextColor(primary.r, primary.g, primary.b);
+        doc.text(title.toUpperCase(), marginX, cursorY);
+        doc.setDrawColor(primary.r, primary.g, primary.b);
+        doc.setLineWidth(0.4);
+        doc.line(marginX, cursorY + 1.5, pageWidth - marginX, cursorY + 1.5);
+        cursorY += 6;
+      };
+
+      const drawCampo = (label: string, value: string, x: number, y: number, width: number) => {
+        const texto = value && value.trim() ? value : "--";
+        doc.setFillColor(accent.r, accent.g, accent.b);
+        doc.setDrawColor(217, 217, 217);
+        const linhas = doc.splitTextToSize(texto, width - 6);
+        const height = Math.max(12, 6 + linhas.length * 4);
+        doc.rect(x, y, width, height, "F");
+        doc.setFillColor(primary.r, primary.g, primary.b);
+        doc.rect(x, y, 2, height, "F");
+        doc.setTextColor(0);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(7);
+        doc.text(label.toUpperCase(), x + 3, y + 4);
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9);
+        let textY = y + 9;
+        linhas.forEach((linha) => {
+          doc.text(linha, x + 3, textY);
+          textY += 4;
+        });
+        return height + 3;
+      };
+
+      const drawCamposGrid = (fields: { label: string; value: string; span?: number }[], columns = 3) => {
+        const contentWidth = pageWidth - marginX * 2;
+        const gap = 4;
+        const colWidth = (contentWidth - gap * (columns - 1)) / columns;
+        let rowY = cursorY;
+        let currentCol = 0;
+        let rowHeight = 0;
+
+        fields.forEach((field) => {
+          const span = Math.min(field.span || 1, columns);
+          if (span === columns) {
+            if (currentCol !== 0) {
+              rowY += rowHeight;
+              currentCol = 0;
+              rowHeight = 0;
+            }
+          } else if (currentCol + span > columns) {
+            rowY += rowHeight;
+            currentCol = 0;
+            rowHeight = 0;
+          }
+
+          const width = span === columns ? contentWidth : colWidth * span + gap * (span - 1);
+          const x = marginX + currentCol * (colWidth + gap);
+          const heightUsed = drawCampo(field.label, field.value, x, rowY, width);
+          rowHeight = Math.max(rowHeight, heightUsed);
+          currentCol += span;
+          if (currentCol >= columns) {
+            rowY += rowHeight;
+            currentCol = 0;
+            rowHeight = 0;
+          }
+        });
+
+        if (currentCol !== 0) {
+          rowY += rowHeight;
+        }
+        cursorY = rowY + 4;
+      };
+
+      // Header logo/title
+      try {
+        const logoImg = await loadImageElement(logoEngeletrica);
+        doc.addImage(logoImg, "PNG", marginX, cursorY, 35, 15);
+      } catch (error) {
+        console.warn("Logo não pôde ser carregada no layout EngElétrica", error);
+      }
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(18);
+      doc.setTextColor(primary.r, primary.g, primary.b);
+      doc.text(
+        `Fechamento ${contexto.pdfModalidade === "LV" ? "Linha Viva (LV)" : "Linha Morta (LM)"}`,
+        pageWidth / 2,
+        cursorY + 12,
+        { align: "center" }
+      );
+      doc.setLineWidth(1.2);
+      doc.setDrawColor(primary.r, primary.g, primary.b);
+      doc.line(marginX, cursorY + 18, pageWidth - marginX, cursorY + 18);
+      cursorY += 24;
+
+      // Dados da ordem
+      drawSectionHeader("Dados da Ordem");
+      drawCamposGrid(
+        [
+          { label: "Nº Intervenção", value: contexto.numeroSigod || contexto.numeroIntervencaoTexto || "--" },
+          { label: "Cód Acionamento", value: contexto.codigoAcionamento },
+          { label: "OS Tablet", value: contexto.osTabletTexto },
+          { label: "Endereço", value: contexto.enderecoTexto, span: 3 },
+        ]
+      );
+
+      // Equipe e logística
+      const dadosExec = contexto.dadosExec;
+      const formatDuracao = (inicio?: string | null, fim?: string | null) => {
+        if (!inicio || !fim) return "--";
+        const start = new Date(inicio);
+        const end = new Date(fim);
+        if (isNaN(start.getTime()) || isNaN(end.getTime())) return "--";
+        const diff = end.getTime() - start.getTime();
+        if (diff <= 0) return "--";
+        const horas = Math.floor(diff / 3600000);
+        const minutos = Math.floor((diff % 3600000) / 60000);
+        return `${String(horas).padStart(2, "0")}:${String(minutos).padStart(2, "0")}`;
+      };
+      const formatKmValor = (valor?: string | number | null) => {
+        if (valor === null || valor === undefined || valor === "") return "--";
+        const numero = Number(valor);
+        if (!isNaN(numero)) return `${numero.toFixed(2)} km`;
+        if (typeof valor === "string" && valor.trim().length > 0) return valor.trim();
+        return "--";
+      };
+
+      const kmInicial = formatKmValor(dadosExec?.km_inicial);
+      const kmFinal = formatKmValor(dadosExec?.km_final);
+      const saidaBaseTexto = formatDateTimeBr(dadosExec?.saida_base);
+      const retornoBaseTexto = formatDateTimeBr(dadosExec?.retorno_base);
+      const inicioServicoTexto = formatDateTimeBr(dadosExec?.inicio_servico);
+      const retornoServicoTexto = formatDateTimeBr(dadosExec?.retorno_servico);
+      const kmRodados = (() => {
+        const kmTotal = Number(dadosExec?.km_total);
+        if (!isNaN(kmTotal) && kmTotal > 0) return `${kmTotal.toFixed(2)} km`;
+        const inicial = Number(dadosExec?.km_inicial);
+        const final = Number(dadosExec?.km_final);
+        if (!isNaN(inicial) && !isNaN(final) && final > inicial) {
+          return `${(final - inicial).toFixed(2)} km`;
+        }
+        return "--";
+      })();
+      drawSectionHeader("Equipe e Logística");
+      drawCamposGrid(
+        [
+          { label: "Equipe", value: contexto.equipeTexto },
+          { label: "Encarregado", value: contexto.encarregadoTexto },
+          { label: "Técnico Eng.", value: contexto.tecnicoTexto || contexto.currentUserNameSnapshot || "--" },
+          { label: "Data", value: contexto.dataExecucaoTexto },
+          { label: "Saída Base", value: saidaBaseTexto },
+          { label: "Retorno Base", value: retornoBaseTexto },
+          { label: "Tempo Base", value: formatDuracao(dadosExec?.saida_base, dadosExec?.retorno_base) },
+          { label: "Início Serviço", value: inicioServicoTexto },
+          { label: "Retorno Serviço", value: retornoServicoTexto },
+          { label: "Tempo Serviço", value: formatDuracao(dadosExec?.inicio_servico, dadosExec?.retorno_servico) },
+          { label: "KM Inicial", value: kmInicial },
+          { label: "KM Final", value: kmFinal },
+          { label: "KM Rodados", value: kmRodados },
+        ]
+      );
+
+      const possuiInfoTransformador = (() => {
+        if (dadosExec?.troca_transformador) return true;
+        const campos = [
+          dadosExec?.trafo_ret_marca,
+          dadosExec?.trafo_ret_potencia,
+          dadosExec?.trafo_ret_ano,
+          dadosExec?.trafo_ret_tensao_primaria,
+          dadosExec?.trafo_ret_tensao_secundaria,
+          dadosExec?.trafo_ret_numero_serie,
+          dadosExec?.trafo_ret_patrimonio,
+          dadosExec?.trafo_inst_potencia,
+          dadosExec?.trafo_inst_marca,
+          dadosExec?.trafo_inst_ano,
+          dadosExec?.trafo_inst_tensao_primaria,
+          dadosExec?.trafo_inst_tensao_secundaria,
+          dadosExec?.trafo_inst_numero_serie,
+          dadosExec?.trafo_inst_patrimonio,
+        ];
+        return campos.some((valor) => typeof valor === "number" || (typeof valor === "string" && valor.trim().length > 0));
+      })();
+
+      if (possuiInfoTransformador) {
+        drawSectionHeader("Transformador Retirado / Instalado");
+        const trafoRows = [
+          ["Marca", dadosExec?.trafo_ret_marca || "-", dadosExec?.trafo_inst_marca || "-"],
+          ["Potência", dadosExec?.trafo_ret_potencia || "-", dadosExec?.trafo_inst_potencia || "-"],
+          ["Nº Série", dadosExec?.trafo_ret_numero_serie || "-", dadosExec?.trafo_inst_numero_serie || "-"],
+          ["Tensão Primária", dadosExec?.trafo_ret_tensao_primaria || "-", dadosExec?.trafo_inst_tensao_primaria || "-"],
+          ["Tensão Secundária", dadosExec?.trafo_ret_tensao_secundaria || "-", dadosExec?.trafo_inst_tensao_secundaria || "-"],
+          ["Fabricado", dadosExec?.trafo_ret_ano || "-", dadosExec?.trafo_inst_ano || "-"],
+          ["Patrimônio", dadosExec?.trafo_ret_patrimonio || "-", dadosExec?.trafo_inst_patrimonio || "-"],
+        ];
+        autoTable(doc, {
+          startY: cursorY,
+          head: [["Campo", "Retirado", "Instalado"]],
+          body: trafoRows,
+          styles: { fontSize: 8, cellPadding: 2 },
+          headStyles: { fillColor: [primary.r, primary.g, primary.b], textColor: 255 },
+          theme: "grid",
+          margin: { left: marginX, right: marginX },
+        });
+        cursorY = (doc as any).lastAutoTable.finalY + 6;
+      }
+
+      const possuiInfoTensoes = (() => {
+        const campos = [
+          dadosExec?.tensao_an,
+          dadosExec?.tensao_bn,
+          dadosExec?.tensao_cn,
+          dadosExec?.tensao_ab,
+          dadosExec?.tensao_bc,
+          dadosExec?.tensao_ca,
+        ];
+        return campos.some((valor) => typeof valor === "number" || (typeof valor === "string" && valor.trim().length > 0));
+      })();
+
+      if (possuiInfoTensoes) {
+        drawSectionHeader("Tensões Medidas");
+        drawCamposGrid(
+          [
+            { label: "A-N", value: dadosExec?.tensao_an || "--" },
+            { label: "B-N", value: dadosExec?.tensao_bn || "--" },
+            { label: "C-N", value: dadosExec?.tensao_cn || "--" },
+            { label: "A-B", value: dadosExec?.tensao_ab || "--" },
+            { label: "B-C", value: dadosExec?.tensao_bc || "--" },
+            { label: "A-C", value: dadosExec?.tensao_ca || "--" },
+          ],
+          3
+        );
+      }
+
+      // Mão de obra
+      drawSectionHeader("Mão de Obra");
+      const subtotalRowStyles = isLinhaViva
+        ? { fillColor: [225, 242, 236], textColor: [12, 64, 46], fontStyle: "bold" as const }
+        : { fillColor: [255, 245, 234], textColor: [120, 60, 0], fontStyle: "bold" as const };
+      const totalRowStyles = isLinhaViva
+        ? { fillColor: [12, 64, 46], textColor: [255, 255, 255], fontStyle: "bold" as const }
+        : { fillColor: [153, 0, 0], textColor: [255, 255, 255], fontStyle: "bold" as const };
+      const makeHighlightRow = (label: string, value: string, tipo: "subtotal" | "total" = "subtotal") => {
+        const baseStyles = tipo === "total" ? totalRowStyles : subtotalRowStyles;
+        const cells = Array.from({ length: 9 }, () => ({ content: "", styles: { ...baseStyles } }));
+        cells[2] = { content: label, styles: { ...baseStyles } };
+        cells[8] = { content: value, styles: { ...baseStyles, halign: "right" as const } };
+        return cells;
+      };
+
+      const formatMoeda = (valor: number) =>
+        new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(valor);
+
+      const bodyMO = resumoMO.itensCalculados.map((item) => {
+        const operacao = (item.operacao || "").toLowerCase();
+        const retQtd = operacao.includes("ret") ? item.quantidade.toFixed(2) : "";
+        const instQtd = !retQtd ? item.quantidade.toFixed(2) : "";
+        return [
+          item.index,
+          item.codigo,
+          item.descricao,
+          item.unidade,
+          item.upsQtd.toFixed(2),
+          retQtd,
+          instQtd || item.quantidade.toFixed(2),
+          item.quantidade.toFixed(2),
+          formatMoeda(item.subtotal),
+        ];
+      });
+      if (resumoMO.totalBase > 0.005) {
+        bodyMO.push(makeHighlightRow("Subtotal mão de obra", formatMoeda(resumoMO.totalBase), "subtotal"));
+      }
+      if (resumoMO.acrescimoValor > 0.005) {
+        const upsAdicionalLabel = formatMoeda(resumoMO.acrescimoValor);
+        bodyMO.push([
+          "",
+          resumoMO.acrescimoInfo.codigo,
+          resumoMO.acrescimoInfo.descricao,
+          "UN",
+          upsAdicionalLabel,
+          "",
+          "",
+          "1.00",
+          formatMoeda(resumoMO.acrescimoValor),
+        ]);
+      }
+      bodyMO.push(makeHighlightRow("TOTAL GERAL", formatMoeda(resumoMO.totalComAdicional), "total"));
+
+      autoTable(doc, {
+        startY: cursorY,
+        head: [["Item", "Cód", "Descrição", "Un", "UPS", "Ret", "Inst", "Qtd", "R$"]],
+        body: bodyMO,
+        styles: { fontSize: 8, cellPadding: 2 },
+        headStyles: { fillColor: [primary.r, primary.g, primary.b], textColor: 255 },
+        theme: "grid",
+        margin: { left: marginX, right: marginX },
+      });
+      cursorY = (doc as any).lastAutoTable.finalY + 10;
+
+      drawFooter();
+
+      // Página 2 - materiais
+      if (contexto.consumo.length > 0 || contexto.sucata.length > 0) {
+        doc.addPage();
+        cursorY = 15;
+
+        if (contexto.consumo.length > 0) {
+          drawSectionHeader("Material Aplicado");
+          autoTable(doc, {
+            startY: cursorY,
+            head: [["Item", "Cód", "Material", "UN", "Qtd"]],
+            body: contexto.consumo.map((c, idx) => [
+              idx + 1,
+              c.codigo_material,
+              c.descricao_item || "",
+              c.unidade_medida || "",
+              Number(c.quantidade || 0).toFixed(2),
+            ]),
+            styles: { fontSize: 8, cellPadding: 2 },
+            headStyles: { fillColor: [primary.r, primary.g, primary.b], textColor: 255 },
+            theme: "grid",
+            margin: { left: marginX, right: marginX },
+          });
+          cursorY = (doc as any).lastAutoTable.finalY + 8;
+        }
+
+        if (contexto.sucata.length > 0) {
+          drawSectionHeader("Material Retirado");
+          autoTable(doc, {
+            startY: cursorY,
+            head: [["Item", "Cód", "Material", "UN", "Class.", "Qtd"]],
+            body: contexto.sucata.map((s, idx) => [
+              idx + 1,
+              s.codigo_material,
+              s.descricao_item || "",
+              s.unidade_medida || "",
+              s.classificacao || "-",
+              Number(s.quantidade || 0).toFixed(2),
+            ]),
+            styles: { fontSize: 8, cellPadding: 2 },
+            headStyles: { fillColor: [primary.r, primary.g, primary.b], textColor: 255 },
+            theme: "grid",
+            margin: { left: marginX, right: marginX },
+          });
+          cursorY = (doc as any).lastAutoTable.finalY + 8;
+        }
+
+        drawFooter();
+      }
+
+      const nomeArquivo = `Fechamento_Eng_${contexto.selectedItemSnapshot.codigo_acionamento || "acionamento"}_${contexto.medicaoTab}_${Date.now()}.pdf`;
+      const pdfBlob = doc.output("blob");
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(pdfBlob);
+      link.download = nomeArquivo;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(link.href);
+
+      alert("✅ PDF (layout EngElétrica) gerado!");
+      setMaterialInfo("✅ PDF (layout EngElétrica) gerado!");
+      registrarPdfGerado(contexto.pdfModalidade);
+    } catch (error: any) {
+      alert(`❌ ERRO: ${error?.message}`);
+      console.error("❌ ERRO layout EngElétrica:", error);
+      setMaterialInfo(`❌ Erro (layout EngElétrica): ${error?.message}`);
     }
   };
 
@@ -1965,9 +2661,7 @@ export const WorkflowSteps = () => {
         .from("acionamentos")
 
         .select(
-
-          "id_acionamento,codigo_acionamento,numero_os,status,prioridade,municipio,modalidade,data_abertura,data_despacho,etapa_atual,encarregado,almox_conferido_em"
-
+          "id_acionamento,codigo_acionamento,numero_os,os_criada_em,elemento_id,status,prioridade,municipio,modalidade,data_abertura,data_despacho,etapa_atual,encarregado,almox_conferido_em"
         )
 
         .eq("etapa_atual", step.id)
@@ -2521,6 +3215,142 @@ export const WorkflowSteps = () => {
 
   };
 
+  const openOsModal = async (item: any) => {
+    setSelectedItem(item);
+    setOsElementoId(item.elemento_id || "");
+    setOsModalOpen(true);
+    setOsLoading(true);
+    setOsError(null);
+    setOsInfo(null);
+    setOsForm({
+      numero_os: "",
+      os_criada_em: toInputDateTime(new Date().toISOString()),
+      observacoes: "",
+    });
+
+    try {
+      const idAcionamento = item.id_acionamento || item.id;
+      if (!idAcionamento) {
+        throw new Error("ID do acionamento não encontrado.");
+      }
+      const { data, error } = await supabase
+        .from("acionamentos")
+        .select("numero_os,os_criada_em,observacao,elemento_id,codigo_acionamento")
+        .eq("id_acionamento", idAcionamento)
+        .maybeSingle();
+      if (error) throw error;
+      setOsForm({
+        numero_os: data?.numero_os || "",
+        os_criada_em: toInputDateTime(data?.os_criada_em || new Date().toISOString()),
+        observacoes: data?.observacao || "",
+      });
+      setOsElementoId(data?.elemento_id || item.elemento_id || "");
+      if (data) {
+        setSelectedItem((prev: any) => {
+          if (!prev) return prev;
+          const prevId = prev.id_acionamento || prev.id;
+          return prevId === idAcionamento
+            ? {
+                ...prev,
+                numero_os: data.numero_os,
+                os_criada_em: data.os_criada_em,
+                observacao: data.observacao,
+                elemento_id: data.elemento_id ?? prev.elemento_id,
+                codigo_acionamento: data.codigo_acionamento ?? prev.codigo_acionamento,
+              }
+            : prev;
+        });
+      }
+    } catch (err: any) {
+      setOsError(err.message || "Erro ao carregar dados da OS.");
+      setOsForm((prev) => ({ ...prev, os_criada_em: toInputDateTime(new Date().toISOString()) }));
+    } finally {
+      setOsLoading(false);
+    }
+  };
+
+  const handleOsFormChange = (field: keyof typeof emptyOsForm, value: string) => {
+    setOsForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const salvarDadosOs = async () => {
+    if (!selectedItem) {
+      setOsError("Nenhum acionamento selecionado.");
+      return;
+    }
+    const idAcionamento = selectedItem.id_acionamento || selectedItem.id;
+    if (!idAcionamento) {
+      setOsError("ID do acionamento não encontrado.");
+      return;
+    }
+    if (!osForm.numero_os.trim()) {
+      setOsError("Informe o número da OS.");
+      return;
+    }
+    const osDataIso = fromInputDateTime(osForm.os_criada_em);
+    if (!osDataIso) {
+      setOsError("Informe a data e hora em que a OS foi criada.");
+      return;
+    }
+
+    setOsSaving(true);
+    setOsError(null);
+    setOsInfo(null);
+
+    try {
+      const payload: any = {
+        numero_os: osForm.numero_os.trim(),
+        os_criada_em: osDataIso,
+        observacao: osForm.observacoes?.trim() ? osForm.observacoes.trim() : null,
+        etapa_atual: 5,
+      };
+
+      const { error } = await supabase
+        .from("acionamentos")
+        .update(payload)
+        .eq("id_acionamento", idAcionamento);
+      if (error) throw error;
+
+      setSelectedItem((prev: any) =>
+        prev
+          ? {
+              ...prev,
+              numero_os: payload.numero_os,
+              os_criada_em: payload.os_criada_em,
+              observacao: payload.observacao,
+              etapa_atual: 5,
+            }
+          : prev
+      );
+
+      setItems((prev) => prev.filter((it) => it.id_acionamento !== idAcionamento));
+
+      setSteps((prev) =>
+        prev.map((step) => {
+          if (step.id === 4) return { ...step, count: Math.max(0, step.count - 1) };
+          if (step.id === 5) return { ...step, count: step.count + 1 };
+          return step;
+        })
+      );
+
+      setOsInfo("OS registrada e etapa avançada para 5.");
+
+      setTimeout(closeOsModal, 800);
+    } catch (err: any) {
+      setOsError(err.message || "Erro ao salvar dados da OS.");
+    } finally {
+      setOsSaving(false);
+    }
+  };
+
+  const closeOsModal = () => {
+    setOsModalOpen(false);
+    setOsForm({ ...emptyOsForm });
+    setOsError(null);
+    setOsInfo(null);
+    setOsElementoId("");
+  };
+
 
 
   const openMaterialsModal = async (item: any) => {
@@ -3036,144 +3866,226 @@ export const WorkflowSteps = () => {
 
 
 
-  const exportPreListaPdf = () => {
-
-    if (!selectedItem) return;
+  const resolvePreListaPdfContext = (): PreListaPdfContext | null => {
+    if (!selectedItem) return null;
 
     if (preLista.length === 0) {
-
       setMaterialError("Nenhum item na pre-lista para gerar PDF.");
-
-      return;
-
+      return null;
     }
 
-
-
-    const encBaseTodos = uniqueEncarregados(
-
-      encarregadoNome || selectedItem?.encarregado || ""
-
-    );
-
-    const precisaEscolher = encBaseTodos.length > 1 && !encarregadoSelecionado;
+    const encBaseTodos = uniqueEncarregados(encarregadoNome || selectedItem?.encarregado || "");
+    const precisaEscolher =
+      (encBaseTodos.length > 1 && !encarregadoSelecionado) ||
+      (encBaseTodos.length === 0 && !encarregadoSelecionado);
 
     if (precisaEscolher) {
-
       setMaterialError("Selecione um encarregado antes de gerar o PDF.");
-
-      return;
-
+      return null;
     }
 
+    const encarregadoRaw = encarregadoSelecionado || encarregadoNome || selectedItem?.encarregado || "";
+    const encarregadoAss = uniqueEncarregados(encarregadoRaw)[0] || "________________";
+    const printedBy = currentUserName || "________________";
 
+    return {
+      acionamento: selectedItem,
+      encarregadoAss,
+      printedBy,
+    };
+  };
+
+  const exportPreListaPdf = () => {
+    const context = resolvePreListaPdfContext();
+    if (!context) return;
+
+    const { acionamento, encarregadoAss, printedBy } = context;
 
     const doc = new jsPDF();
-
     const width = doc.internal.pageSize.getWidth();
-
-    const titulo = `Acionamento ${selectedItem.codigo_acionamento || selectedItem.id_acionamento || "--"} - ${
-
-      selectedItem.municipio || "--"
-
+    const titulo = `Acionamento ${acionamento.codigo_acionamento || acionamento.id_acionamento || "--"} - ${
+      acionamento.municipio || "--"
     } - ${getDataTitulo()}`;
 
-
-
     doc.setFont("helvetica", "bold");
-
     doc.setFontSize(13);
-
     doc.setTextColor(40);
-
     doc.text(titulo, width / 2, 16, { align: "center" });
-
     doc.setTextColor(0);
 
-
-
     autoTable(doc, {
-
       startY: 24,
-
       head: [["Codigo", "Descricao", "Unidade", "Quantidade"]],
-
       body: preLista.map((p) => [
-
         p.codigo_material,
-
         p.descricao_item || "",
-
         p.unidade_medida || "",
-
         p.quantidade_prevista,
-
       ]),
-
       styles: { fontSize: 10 },
-
       headStyles: { fillColor: [220, 53, 69], textColor: 255 },
-
       alternateRowStyles: { fillColor: [245, 245, 245] },
-
       theme: "striped",
-
     });
-
-
 
     const finalY = (doc as any).lastAutoTable?.finalY || 24;
 
-
-
-    // Lista de encarregados em formato selecionvel
-
-    const encarregadoRaw = encarregadoSelecionado || encarregadoNome || selectedItem?.encarregado || "";
-
-    const encarregadoAss = (uniqueEncarregados(encarregadoRaw)[0]) || "________________";
-
-
-
-    // Assinaturas lado a lado
-
     const lineY = finalY + 28;
-
     const labelY = lineY + 5;
-
     const lineWidth = (width - 60) / 2;
 
-
-
-    const printedBy = currentUserName || "________________";
-
-
-
-    // Assinatura de quem imprimiu
-
     doc.setLineWidth(0.2);
-
     doc.line(30, lineY, 30 + lineWidth, lineY);
-
     doc.setFontSize(9);
-
     doc.text(printedBy, 30 + lineWidth / 2, labelY, { align: "center" });
 
-
-
-    // Assinatura do encarregado
-
     const rightStart = width - 30 - lineWidth;
-
     doc.line(rightStart, lineY, rightStart + lineWidth, lineY);
-
     doc.text(encarregadoAss, rightStart + lineWidth / 2, labelY, { align: "center" });
 
-
-
-    const fileName = `pre-lista-${selectedItem.codigo_acionamento || selectedItem.id_acionamento || "acionamento"}.pdf`;
-
+    const fileName = `pre-lista-${acionamento.codigo_acionamento || acionamento.id_acionamento || "acionamento"}.pdf`;
     doc.save(fileName);
+  };
 
+  const exportPreListaPdfLayoutB = async () => {
+    const context = resolvePreListaPdfContext();
+    if (!context) return;
+
+    const { acionamento, encarregadoAss, printedBy } = context;
+    const doc = new jsPDF("landscape");
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const primary: [number, number, number] = [21, 69, 120];
+    const accent: [number, number, number] = [236, 242, 252];
+    const subtleRow: [number, number, number] = [249, 251, 254];
+
+    doc.setFillColor(primary[0], primary[1], primary[2]);
+    doc.rect(0, 0, pageWidth, 28, "F");
+    try {
+      const logoImg = await loadImageElement(logoEngeletrica);
+      doc.addImage(logoImg, "PNG", 14, 6, 34, 14);
+    } catch (error) {
+      console.warn("Logo não pôde ser carregada para o layout alternativo da pré-lista", error);
+    }
+
+    doc.setTextColor(255, 255, 255);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(16);
+    doc.text("Pré-lista de Materiais", pageWidth / 2, 16, { align: "center" });
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.text("Layout B experimental", pageWidth / 2, 22, { align: "center" });
+
+    const statusLabel =
+      typeof acionamento.status === "string" && acionamento.status.trim().length > 0
+        ? acionamento.status.toUpperCase()
+        : "Sem status";
+
+    const infoBlocks = [
+      { label: "Acionamento", value: acionamento.codigo_acionamento || acionamento.id_acionamento || "--" },
+      { label: "Município", value: acionamento.municipio || "--" },
+      { label: "Data", value: getDataTitulo() },
+      { label: "Status", value: statusLabel },
+      { label: "Encarregado", value: encarregadoAss },
+      { label: "Responsável almox", value: printedBy },
+    ];
+
+    const blockWidth = (pageWidth - 34) / 2;
+    const blockHeight = 18;
+    const blockGap = 8;
+    const infoStartY = 36;
+
+    infoBlocks.forEach((block, index) => {
+      const col = index % 2;
+      const row = Math.floor(index / 2);
+      const x = 12 + col * (blockWidth + 10);
+      const y = infoStartY + row * (blockHeight + blockGap);
+      doc.setFillColor(accent[0], accent[1], accent[2]);
+      doc.setDrawColor(210, 218, 235);
+      doc.roundedRect(x, y, blockWidth, blockHeight, 3, 3, "FD");
+      doc.setTextColor(100, 112, 128);
+      doc.setFontSize(8);
+      doc.text(block.label.toUpperCase(), x + 4, y + 6);
+      doc.setTextColor(22, 28, 36);
+      doc.setFontSize(11);
+      const lines = doc.splitTextToSize(block.value || "--", blockWidth - 8) as string[];
+      doc.text(lines, x + 4, y + 13);
+    });
+
+    const infoRows = Math.ceil(infoBlocks.length / 2);
+    let sectionY = infoStartY + infoRows * (blockHeight + blockGap) + 6;
+
+    const descricaoServico =
+      acionamento.descricao_servico ||
+      acionamento.descricao ||
+      acionamento.resumo_servico ||
+      acionamento.resumo ||
+      acionamento.observacao ||
+      "Sem observações adicionais.";
+
+    doc.setTextColor(100, 112, 128);
+    doc.setFontSize(8);
+    doc.text("Resumo do serviço", 12, sectionY);
+    doc.setTextColor(33, 37, 41);
+    doc.setFontSize(10);
+    const resumoLines = doc.splitTextToSize(descricaoServico, pageWidth - 24) as string[];
+    doc.text(resumoLines, 12, sectionY + 5);
+    sectionY += 5 + resumoLines.length * 5 + 4;
+
+    autoTable(doc, {
+      startY: sectionY,
+      head: [["#", "Código", "Descrição", "UND", "Qtd"]],
+      body: preLista.map((p, index) => [
+        (index + 1).toString(),
+        p.codigo_material,
+        p.descricao_item || "",
+        p.unidade_medida || "",
+        p.quantidade_prevista,
+      ]),
+      styles: { fontSize: 9, cellPadding: 2 },
+      headStyles: { fillColor: primary, textColor: 255 },
+      alternateRowStyles: { fillColor: subtleRow },
+      theme: "striped",
+      columnStyles: {
+        0: { halign: "center", cellWidth: 12 },
+        3: { halign: "center", cellWidth: 22 },
+        4: { halign: "center", cellWidth: 22 },
+      },
+    });
+
+    let finalY = (doc as any).lastAutoTable?.finalY || sectionY;
+    if (finalY > pageHeight - 50) {
+      doc.addPage("landscape");
+      finalY = 30;
+    }
+
+    const signatureY = finalY + 24;
+    const signatureWidth = (pageWidth - 160) / 2;
+
+    doc.setDrawColor(190, 198, 210);
+    doc.line(60, signatureY, 60 + signatureWidth, signatureY);
+    doc.line(pageWidth - 60 - signatureWidth, signatureY, pageWidth - 60, signatureY);
+
+    doc.setFontSize(10);
+    doc.setTextColor(22, 28, 36);
+    doc.text(printedBy, 60 + signatureWidth / 2, signatureY + 5, { align: "center" });
+    doc.setFontSize(8);
+    doc.setTextColor(100, 112, 128);
+    doc.text("Responsável Almoxarifado", 60 + signatureWidth / 2, signatureY + 10, { align: "center" });
+
+    doc.setFontSize(10);
+    doc.setTextColor(22, 28, 36);
+    doc.text(encarregadoAss, pageWidth - 60 - signatureWidth / 2, signatureY + 5, { align: "center" });
+    doc.setFontSize(8);
+    doc.setTextColor(100, 112, 128);
+    doc.text("Encarregado", pageWidth - 60 - signatureWidth / 2, signatureY + 10, { align: "center" });
+
+    doc.setFontSize(8);
+    doc.setTextColor(120, 130, 140);
+    doc.text(`Exportado em ${getDataTitulo()} • Layout B`, 60, signatureY + 20);
+
+    const fileId = acionamento.codigo_acionamento || acionamento.id_acionamento || "acionamento";
+    doc.save(`pre-lista-layout-b-${fileId}.pdf`);
   };
 
 
@@ -3688,6 +4600,16 @@ export const WorkflowSteps = () => {
 
             </div>
 
+            {item.numero_os ? (
+              <div className="text-[11px] text-emerald-600 font-semibold">
+                OS registrada: {item.numero_os}
+              </div>
+            ) : selectedStep?.id === 4 ? (
+              <div className="text-[11px] text-amber-600">
+                OS pendente nesta etapa
+              </div>
+            ) : null}
+
           </div>
 
           <Badge variant="outline" className="capitalize">
@@ -3700,25 +4622,18 @@ export const WorkflowSteps = () => {
 
         <div className="flex flex-wrap gap-2">
 
-          <Button
-
-            size="sm"
-
-            variant="outline"
-
-            onClick={() => {
-
-              setSelectedItem(item);
-
-              openMaterialsModal(item);
-
-            }}
-
-          >
-
-            Lista de materiais
-
-          </Button>
+          {selectedStep?.id !== 4 && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setSelectedItem(item);
+                openMaterialsModal(item);
+              }}
+            >
+              Lista de materiais
+            </Button>
+          )}
 
           {selectedStep?.id === 3 && (
             <Button
@@ -3730,33 +4645,28 @@ export const WorkflowSteps = () => {
             </Button>
           )}
 
-          <Button
+          {selectedStep?.id === 4 && (
+            <Button size="sm" onClick={() => openOsModal(item)}>
+              Registrar OS
+            </Button>
+          )}
 
-            size="sm"
-
-            variant="outline"
-
-            onClick={() => {
-
-              if (selectedStep?.id === 2) {
-
-                openExecModal(item);
-
-              } else {
-
-                navigate(`/acionamentos/${item.codigo_acionamento || item.id_acionamento}`);
-
-                setOpen(false);
-
-              }
-
-            }}
-
-          >
-
-            Editar acionamento
-
-          </Button>
+          {selectedStep?.id !== 4 && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                if (selectedStep?.id === 2) {
+                  openExecModal(item);
+                } else {
+                  navigate(`/acionamentos/${item.codigo_acionamento || item.id_acionamento}`);
+                  setOpen(false);
+                }
+              }}
+            >
+              Editar acionamento
+            </Button>
+          )}
 
         </div>
 
@@ -4245,6 +5155,93 @@ export const WorkflowSteps = () => {
 
     </Dialog>
 
+      <Dialog
+        open={osModalOpen}
+        onOpenChange={(next) => {
+          if (!next) {
+            closeOsModal();
+          } else {
+            setOsModalOpen(true);
+          }
+        }}
+        modal
+      >
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Registrar dados da OS</DialogTitle>
+            <DialogDescription>
+              Informe o número da OS criada no sistema e confirme a data para liberar a próxima etapa.
+            </DialogDescription>
+          </DialogHeader>
+
+          {osError && <div className="text-sm text-destructive">{osError}</div>}
+          {osInfo && <div className="text-sm text-emerald-600">{osInfo}</div>}
+
+          {osLoading ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground py-6">
+              <Loader2 className="h-4 w-4 animate-spin" /> Carregando dados da OS...
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="rounded-md border px-3 py-2 bg-muted/50">
+                  <Label className="text-xs font-semibold text-muted-foreground">Acionamento</Label>
+                  <div className="text-sm font-semibold text-foreground mt-1">{osAcionamentoCodigo}</div>
+                </div>
+                <div className="rounded-md border px-3 py-2 bg-muted/50">
+                  <Label className="text-xs font-semibold text-muted-foreground">Elemento</Label>
+                  <div className="text-sm font-semibold text-foreground mt-1">{osElementoDisplay || "--"}</div>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <Label>Número da OS</Label>
+                  <Input
+                    value={osForm.numero_os}
+                    disabled={osSaving}
+                    onChange={(e) => handleOsFormChange("numero_os", e.target.value)}
+                    placeholder="Ex: 12345/2024"
+                  />
+                </div>
+                <div>
+                  <Label>Data/hora da criação</Label>
+                  <Input
+                    type="datetime-local"
+                    value={osForm.os_criada_em}
+                    disabled={osSaving}
+                    onChange={(e) => handleOsFormChange("os_criada_em", e.target.value)}
+                  />
+                </div>
+              </div>
+              <div>
+                <Label>Observações</Label>
+                <textarea
+                  className="w-full border rounded-md px-3 py-2 text-sm min-h-[90px]"
+                  value={osForm.observacoes}
+                  disabled={osSaving}
+                  onChange={(e) => handleOsFormChange("observacoes", e.target.value)}
+                  placeholder="Detalhes adicionais, vínculos ou procedimentos realizados."
+                />
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="flex gap-2 justify-end">
+            <Button variant="outline" onClick={closeOsModal} disabled={osSaving}>
+              Fechar
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={salvarDadosOs}
+              disabled={osSaving || osLoading}
+            >
+              {osSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+              Salvar OS
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={medicaoModalOpen} onOpenChange={setMedicaoModalOpen} modal>
         <DialogContent className="w-[98vw] max-w-7xl h-[92vh] flex flex-col p-0 overflow-hidden">
           <div className="flex flex-col flex-1 overflow-hidden">
@@ -4498,22 +5495,57 @@ export const WorkflowSteps = () => {
                   ? `Equipe validada para ${medicaoTab === "LM" ? "Linha Morta" : "Linha Viva"}.`
                   : `Selecione uma equipe de ${medicaoTab === "LM" ? "Linha Morta" : "Linha Viva"} para liberar o PDF.`}
               </div>
-              <div className="flex gap-2">
-                <Button variant="outline" onClick={salvarMedicao} disabled={savingMedicao} className="gap-2">
+              <div className="flex flex-col items-end gap-2">
+                <div className="flex gap-2 flex-wrap">
+                  <Button variant="outline" onClick={() => salvarMedicao()} disabled={savingMedicao} className="gap-2">
                   {savingMedicao ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                   {savingMedicao ? "Salvando..." : "Salvar"}
                 </Button>
                 <Button
-                  disabled={
-                    savingMedicao ||
-                    (medicaoEquipeOpcoes[medicaoTab]?.length || 0) === 0 ||
-                    !equipeValidaParaLinha(medicaoTab)
-                  }
+                  disabled={pdfGeracaoIndisponivel}
                   onClick={gerarOrcamento}
                   className="bg-red-600 hover:bg-red-700"
                 >
-                  Gerar orçamento (PDF)
+                  Layout atual (PDF)
                 </Button>
+                <Button
+                  disabled={pdfGeracaoIndisponivel}
+                  variant="outline"
+                  onClick={gerarOrcamentoLayoutEng}
+                  className="border-red-600 text-red-600 hover:bg-red-600 hover:text-white"
+                >
+                  <LayoutGrid className="h-4 w-4 mr-2" />
+                  Layout EngElétrica
+                </Button>
+                <Button
+                  disabled={!podeConcluirEtapa3}
+                  onClick={avancarParaEtapa4}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
+                  title={
+                    pendenciaPdf
+                      ? `Gere o PDF de ${pendenciaPdfDescricao || "mão de obra"} para liberar a etapa.`
+                      : etapa4Liberada
+                      ? "Etapa já liberada."
+                      : undefined
+                  }
+                >
+                  {advancingEtapa4 ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="h-4 w-4" />
+                  )}
+                  {etapa4Liberada ? "Etapa 4 liberada" : "Concluir Etapa 3"}
+                </Button>
+                </div>
+                {pendenciaPdf ? (
+                  <p className="text-xs text-amber-600 font-semibold text-right">
+                    Gere o PDF de {pendenciaPdfDescricao || "mão de obra"} para liberar o avanço.
+                  </p>
+                ) : ultimoPdfGeradoEm ? (
+                  <p className="text-[11px] text-muted-foreground text-right">
+                    Último PDF gerado em {formatDateTimeBr(ultimoPdfGeradoEm)}
+                  </p>
+                ) : null}
               </div>
             </div>
           </DialogFooter>
@@ -4834,25 +5866,53 @@ export const WorkflowSteps = () => {
 
                         (encList.length === 0 && !encarregadoSelecionado);
 
+                      const tooltip = precisaEscolher
+
+                        ? "Selecione um encarregado para gerar o PDF"
+
+                        : "Gere o PDF com o layout desejado";
+
                       return (
 
-                        <Button
+                        <div className="flex flex-wrap gap-2 justify-end">
 
-                          variant="outline"
+                          <Button
 
-                          onClick={exportPreListaPdf}
+                            variant="outline"
 
-                          disabled={preLista.length === 0 || precisaEscolher}
+                            onClick={exportPreListaPdf}
 
-                          title={precisaEscolher ? "Selecione um encarregado para gerar o PDF" : ""}
+                            disabled={preLista.length === 0 || precisaEscolher}
 
-                        >
+                            title={tooltip}
 
-                          <FileDown className="h-4 w-4 mr-2" />
+                          >
 
-                          Exportar PDF
+                            <FileDown className="h-4 w-4 mr-2" />
 
-                        </Button>
+                            Exportar PDF
+
+                          </Button>
+
+                          <Button
+
+                            variant="outline"
+
+                            onClick={exportPreListaPdfLayoutB}
+
+                            disabled={preLista.length === 0 || precisaEscolher}
+
+                            title={tooltip}
+
+                          >
+
+                            <LayoutGrid className="h-4 w-4 mr-2" />
+
+                            Layout B
+
+                          </Button>
+
+                        </div>
 
                       );
 
