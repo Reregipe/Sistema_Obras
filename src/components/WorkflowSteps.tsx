@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
+import logoEngeletrica from "@/assets/logo-engeletrica.png";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -33,7 +34,7 @@ import {
   inferLinhaPorEncarregado,
 } from "@/data/equipesCatalog";
 
-type EquipeEntry = { nome: string; linha?: EquipeLinha };
+type EquipeEntry = { nome: string; linha?: EquipeLinha; encarregado?: string | null };
 
 const isUuidValue = (value: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
@@ -66,6 +67,15 @@ const formatEquipeDisplay = (info?: EquipeEntry, modalidade: EquipeLinha = "LM")
   }
   return sigla;
 };
+
+const loadImageElement = (src: string) =>
+  new Promise<HTMLImageElement>((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "Anonymous";
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
 
 const extrairCandidatosEquipe = (fonte?: any): string[] => {
   if (!fonte) return [];
@@ -633,7 +643,7 @@ export const WorkflowSteps = () => {
         ? `${nomeBase} - ${meta.encarregado.trim()}`
         : nomeBase;
       opcoesPorLinha[linhaInferida].push({ value: original, label });
-      metaPorCodigo[original] = { nome: label, linha: linhaInferida };
+      metaPorCodigo[original] = { nome: label, linha: linhaInferida, encarregado: meta.encarregado?.trim() };
     });
 
     setMedicaoEquipeOpcoes(opcoesPorLinha);
@@ -1040,23 +1050,35 @@ export const WorkflowSteps = () => {
       const doc = new jsPDF("landscape");
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
-      const mainColor: [number, number, number] = [51, 102, 153];
-      const headerBg: [number, number, number] = [230, 240, 250];
-      const altRowBg: [number, number, number] = [245, 250, 255];
+      const palette =
+        pdfModalidade === "LV"
+          ? {
+              main: [16, 95, 64] as [number, number, number],
+              header: [224, 244, 235] as [number, number, number],
+              alt: [237, 249, 243] as [number, number, number],
+            }
+          : {
+              main: [51, 102, 153] as [number, number, number],
+              header: [230, 240, 250] as [number, number, number],
+              alt: [245, 250, 255] as [number, number, number],
+            };
+      const mainColor = palette.main;
+      const headerBg = palette.header;
+      const altRowBg = palette.alt;
       
       // ==================== CABEÇALHO COM LOGO ====================
       // Fundo azul cabeçalho
       doc.setFillColor(mainColor[0], mainColor[1], mainColor[2]);
       doc.rect(0, 0, pageWidth, 30, "F");
       // Logo centralizada e maior
-      const logoUrl = "/src/assets/logo-engeletrica.png";
       try {
+        const logoImg = await loadImageElement(logoEngeletrica);
         const logoWidth = 38;
         const logoHeight = 16;
         const logoX = (pageWidth - logoWidth) / 2;
-        doc.addImage(logoUrl, "PNG", logoX, 5, logoWidth, logoHeight);
+        doc.addImage(logoImg, "PNG", logoX, 5, logoWidth, logoHeight);
       } catch (err) {
-        console.warn("Logo não pôde ser carregada");
+        console.warn("Logo não pôde ser carregada", err);
       }
       const headerBase = {
         ...(selectedItem || {}),
@@ -1128,12 +1150,12 @@ export const WorkflowSteps = () => {
         if (!valor && !encarregadoRelacionado) return;
         const info = obterInfoEquipe(valor, encarregadoRelacionado);
         if (info?.nome) {
-          equipeEntries.push({ nome: info.nome, linha: info.linha || linhaSugestao });
+          equipeEntries.push({ nome: info.nome, linha: info.linha || linhaSugestao, encarregado: encarregadoRelacionado });
           return;
         }
         const texto = valor?.trim() || "";
         if (!texto || isUuidValue(texto)) return;
-        equipeEntries.push({ nome: texto, linha: linhaSugestao });
+        equipeEntries.push({ nome: texto, linha: linhaSugestao, encarregado: encarregadoRelacionado });
       };
 
       const principalLinhaInferida =
@@ -1175,6 +1197,29 @@ export const WorkflowSteps = () => {
       const equipesParaMostrar =
         preferidas.length > 0 ? preferidas : uniqueEquipes.length > 0 ? uniqueEquipes : [];
 
+      const getEncarregadoByLinha = (linha?: "LM" | "LV") => {
+        if (!linha) return undefined;
+        if (equipeSelecionadaLinha === linha && equipeSelecionadaEncarregado) {
+          return equipeSelecionadaEncarregado;
+        }
+        const relMatch = equipesRelacionadas.find(
+          (rel) => normalizeLinha(rel?.papel) === linha && (rel?.encarregado_nome || "").trim()
+        );
+        if (relMatch?.encarregado_nome) {
+          return relMatch.encarregado_nome.trim();
+        }
+        const entryMatch = uniqueEquipes.find(
+          (eq) => eq.linha === linha && (eq.encarregado || "").trim().length > 0
+        );
+        if (entryMatch?.encarregado) {
+          return entryMatch.encarregado.trim();
+        }
+        if (linha === principalLinhaInferida && (encarregadoPrincipal || "").trim()) {
+          return (encarregadoPrincipal || "").trim();
+        }
+        return undefined;
+      };
+
       const equipeListaTexto = equipesParaMostrar
         .map((eq) => formatEquipeDisplay(eq, pdfModalidade))
         .join(" | ");
@@ -1201,23 +1246,33 @@ export const WorkflowSteps = () => {
         ) || "--";
 
       const equipeSelecionadaCodigo = medicaoEquipeSelecionada[pdfModalidade];
-      if (equipeSelecionadaCodigo) {
-        const equipeInfoManual =
-          medicaoEquipeMetaPorCodigo[equipeSelecionadaCodigo] ||
+      const equipeSelecionadaInfo = equipeSelecionadaCodigo
+        ? medicaoEquipeMetaPorCodigo[equipeSelecionadaCodigo] ||
           getEquipeInfoByCodigo(equipeSelecionadaCodigo) || {
             nome: equipeSelecionadaCodigo,
             linha: inferLinhaPorCodigo(equipeSelecionadaCodigo),
-          };
-        const manualLabel = formatEquipeDisplay(equipeInfoManual, pdfModalidade);
+          }
+        : undefined;
+      const equipeSelecionadaLinha = equipeSelecionadaInfo?.linha || inferLinhaPorCodigo(equipeSelecionadaCodigo);
+      const equipeSelecionadaEncarregado = equipeSelecionadaInfo?.encarregado?.trim();
+      if (equipeSelecionadaCodigo) {
+        const manualLabel = formatEquipeDisplay(equipeSelecionadaInfo, pdfModalidade);
         if (manualLabel) {
           equipeTexto = manualLabel;
         }
       }
+      const encarregadoLinhaLM = getEncarregadoByLinha("LM");
+      const encarregadoLinhaLV = getEncarregadoByLinha("LV");
+      const encarregadoManualLinha =
+        equipeSelecionadaLinha === pdfModalidade ? equipeSelecionadaEncarregado : undefined;
+      const encarregadoPreferencias =
+        pdfModalidade === "LV"
+          ? [encarregadoLinhaLV, headerBase.encarregado_lv, headerBase.encarregado, headerBase.encarregado_nome]
+          : [encarregadoLinhaLM, headerBase.encarregado_lm, headerBase.encarregado, headerBase.encarregado_nome];
       const encarregadoTexto =
         pickValue(
-          headerBase.encarregado_lm,
-          headerBase.encarregado,
-          headerBase.encarregado_nome,
+          encarregadoManualLinha,
+          ...encarregadoPreferencias,
           encarregadoSelecionado,
           encarregadoNome
         ) || "--";
