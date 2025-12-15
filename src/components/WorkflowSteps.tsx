@@ -3101,35 +3101,44 @@ export const WorkflowSteps = () => {
 
     if (f.troca_transformador) {
 
-      const trafoFields = [
+      const trafoRequired = [
 
         "trafo_ret_potencia",
 
         "trafo_ret_marca",
 
-        "trafo_ret_ano",
-
         "trafo_ret_tensao_secundaria",
 
         "trafo_ret_tensao_primaria",
 
-        "trafo_ret_numero_serie",
-
-        "trafo_ret_patrimonio",
-
         "trafo_inst_potencia",
-
-        "trafo_inst_marca",
-
-        "trafo_inst_ano",
 
         "trafo_inst_tensao_secundaria",
 
         "trafo_inst_tensao_primaria",
 
-        "trafo_inst_numero_serie",
+      ];
 
-        "trafo_inst_patrimonio",
+      for (const key of trafoRequired) {
+
+        if (!f[key] && f[key] !== 0) {
+
+          return "Preencha os dados essenciais do transformador informado.";
+
+        }
+
+      }
+
+      const temValor = (valor: any) => {
+        if (valor === 0) return true;
+        if (valor === null || valor === undefined) return false;
+        if (typeof valor === "string") {
+          return valor.trim().length > 0;
+        }
+        return true;
+      };
+
+      const tensaoFields = [
 
         "tensao_an",
 
@@ -3145,20 +3154,29 @@ export const WorkflowSteps = () => {
 
       ];
 
-      for (const key of trafoFields) {
-
-        if (!f[key] && f[key] !== 0) {
-
-          return "Preencha todos os dados do transformador e tenses.";
-
+      const algumaTensaoPreenchida = tensaoFields.some((key) => temValor(f[key]));
+      if (algumaTensaoPreenchida) {
+        const tensaoIncompleta = tensaoFields.some((key) => !temValor(f[key]));
+        if (tensaoIncompleta) {
+          return "Informe todas as tensões (AN/BN/CN/AB/BC/CA) ou deixe todas em branco.";
         }
-
       }
 
     }
 
     return null;
 
+  };
+
+  const normalizeOptionalField = (value?: string | null) => {
+    if (value === null || value === undefined) {
+      return null;
+    }
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      return trimmed.length > 0 ? trimmed : null;
+    }
+    return value;
   };
 
 
@@ -3189,10 +3207,10 @@ export const WorkflowSteps = () => {
 
       const payload = {
         ...execForm,
-        os_tablet: execForm.os_tablet || null,
-        ss_nota: execForm.ss_nota || null,
-        numero_intervencao: execForm.numero_intervencao || null,
-        observacoes: execForm.observacoes || null,
+        os_tablet: normalizeOptionalField(execForm.os_tablet),
+        ss_nota: normalizeOptionalField(execForm.ss_nota),
+        numero_intervencao: normalizeOptionalField(execForm.numero_intervencao),
+        observacoes: normalizeOptionalField(execForm.observacoes),
         id_acionamento: selectedItem.id_acionamento,
       };
 
@@ -5322,9 +5340,9 @@ export const WorkflowSteps = () => {
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
 
-              <div><Label>OS tablet</Label><Input value={execForm.os_tablet} disabled={execReadonly} onChange={(e) => handleExecChange('os_tablet', e.target.value)} /></div>
+              <div><Label>OS tablet (opcional)</Label><Input value={execForm.os_tablet} disabled={execReadonly} onChange={(e) => handleExecChange('os_tablet', e.target.value)} /></div>
 
-              <div><Label>SS (Nota)</Label><Input value={execForm.ss_nota} disabled={execReadonly} onChange={(e) => handleExecChange('ss_nota', e.target.value)} /></div>
+              <div><Label>SS (Nota) (opcional)</Label><Input value={execForm.ss_nota} disabled={execReadonly} onChange={(e) => handleExecChange('ss_nota', e.target.value)} /></div>
 
               <div><Label>Nº da intervencao</Label><Input value={execForm.numero_intervencao} disabled={execReadonly} onChange={(e) => handleExecChange('numero_intervencao', e.target.value)} /></div>
 
@@ -5889,13 +5907,6 @@ export const WorkflowSteps = () => {
                   <Button variant="outline" onClick={() => salvarMedicao()} disabled={savingMedicao} className="gap-2">
                   {savingMedicao ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                   {savingMedicao ? "Salvando..." : "Salvar"}
-                </Button>
-                <Button
-                  disabled={pdfGeracaoIndisponivel}
-                  onClick={gerarOrcamento}
-                  className="bg-red-600 hover:bg-red-700"
-                >
-                  Layout atual (PDF)
                 </Button>
                 <Button
                   disabled={pdfGeracaoIndisponivel}
