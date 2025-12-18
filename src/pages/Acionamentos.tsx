@@ -6,7 +6,7 @@ import { Separator } from "@/components/ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AcionamentoForm } from "@/components/forms/AcionamentoForm";
-import { WorkflowSteps } from "@/components/WorkflowSteps";
+import { WorkflowSteps } from "@/components/domain/WorkflowSteps";
 import { Plus, Download, Filter, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";

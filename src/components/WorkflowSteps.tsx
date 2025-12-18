@@ -1,207 +1,10 @@
-import { useEffect, useState, useCallback } from "react";
-import logoEngeletrica from "@/assets/logo-engeletrica.png";
+// Arquivo movido para src/components/domain/WorkflowSteps.tsx
+// Atualize seus imports para:
+// import WorkflowSteps from "@/components/domain/WorkflowSteps";
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-
-import { Badge } from "@/components/ui/badge";
-
-import { Button } from "@/components/ui/button";
-
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-
-import { CheckCircle2, Clock, AlertCircle, FileText, Wrench, TrendingUp, ArrowRight, Loader2, Plus, Save, FileDown, LayoutGrid } from "lucide-react";
-
-import { useNavigate } from "react-router-dom";
-
-import { cn } from "@/lib/utils";
-
-import { supabase } from "@/integrations/supabase/client";
-
-import { Input } from "@/components/ui/input";
-
-import { Label } from "@/components/ui/label";
-
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-
-import jsPDF from "jspdf";
-
-import autoTable from "jspdf-autotable";
-import {
-  type EquipeLinha,
-  getEquipeInfoByCodigo,
-  inferEquipePorEncarregado,
-  inferLinhaPorCodigo,
-  inferLinhaPorEncarregado,
-} from "@/data/equipesCatalog";
-
-type EquipeEntry = { nome: string; linha?: EquipeLinha; encarregado?: string | null };
-
-type PreListaPdfContext = {
-  acionamento: any;
-  encarregadoAss: string;
-  printedBy: string;
-};
-
-type OrcamentoPdfContext = {
-  idAcionamento: string;
-  pdfModalidade: "LM" | "LV";
-  selectedItemSnapshot: any;
-  dadosExec: any;
-  detalhesAcionamento: any;
-  headerBase: Record<string, any>;
-  numeroIntervencaoTexto: string;
-  dataExecucaoTexto: string;
-  codigoAcionamento: string;
-  equipeTexto: string;
-  encarregadoTexto: string;
-  tecnicoTexto: string;
-  enderecoTexto: string;
-  alimentadorTexto: string;
-  subestacaoTexto: string;
-  alimentadorSubTexto: string;
-  osTabletTexto: string;
-  itensMO: any[];
-  consumo: any[];
-  sucata: any[];
-  medicaoValorUpsLM: number;
-  medicaoValorUpsLV: number;
-  medicaoForaHC: boolean;
-  medicaoItensSnapshot: Record<"LM" | "LV", any[]>;
-  medicaoTab: "LM" | "LV";
-  currentUserNameSnapshot: string;
-  numeroSigod?: string;
-  numeroSs?: string;
-  equipeInfo?: {
-    codigoSelecionado?: string;
-    linhaSelecionada?: EquipeLinha;
-    encarregadoSelecionado?: string;
-  };
-  detalhesEquipes?: {
-    encarregadoLinhaLM?: string;
-    encarregadoLinhaLV?: string;
-    encarregadoPrincipal?: string;
-    principalLinhaInferida?: EquipeLinha;
-  };
-};
-
-type MaoDeObraResumo = {
-  itensCalculados: {
-    index: number;
-    codigo: string;
-    descricao: string;
-    unidade: string;
-    operacao: string;
-    upsQtd: number;
-    quantidade: number;
-    subtotal: number;
-  }[];
-  totalBase: number;
-  totalComAdicional: number;
-  acrescimoValor: number;
-  acrescimoInfo: { codigo: string; descricao: string };
-};
-
-const isUuidValue = (value: string) =>
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
-
-const normalizeLinha = (valor?: string | null): EquipeLinha | undefined => {
-  if (!valor) return undefined;
-  const text = valor.trim();
-  if (/^lv$/i.test(text) || /linha viva/i.test(text) || /^viva$/i.test(text)) return "LV";
-  if (/^lm$/i.test(text) || /linha morta/i.test(text) || /^morta$/i.test(text)) return "LM";
-  return undefined;
-};
-
-const extrairSiglaEquipe = (nome?: string) => {
-  if (!nome) return "";
-  const texto = nome.trim();
-  if (!texto) return "";
-  const prefix = texto.includes("-") ? texto.split("-")[0]?.trim() : texto;
-  const codigoMatch = prefix.match(/[A-Za-z]{1,4}\d{1,4}/);
-  return (codigoMatch ? codigoMatch[0] : prefix).toUpperCase();
-};
-
-const formatEquipeDisplay = (info?: EquipeEntry, modalidade: EquipeLinha = "LM") => {
-  if (!info?.nome) return "";
-  const sigla = extrairSiglaEquipe(info.nome);
-  if (info.linha === "LV" && modalidade === "LM") {
-    return `Equipe LV: ${sigla}`;
-  }
-  if (info.linha === "LM" && modalidade === "LV") {
-    return `Equipe LM: ${sigla}`;
-  }
-  return sigla;
-};
-
-const loadImageElement = (src: string) =>
-  new Promise<HTMLImageElement>((resolve, reject) => {
-    const img = new Image();
-    img.crossOrigin = "Anonymous";
-    img.onload = () => resolve(img);
-    img.onerror = reject;
-    img.src = src;
-  });
-
-const pickValue = (...values: Array<string | null | undefined>) => {
-  for (const value of values) {
-    if (typeof value === "string" && value.trim().length > 0) {
-      return value.trim();
-    }
-  }
-  return undefined;
-};
-
-const extrairCandidatosEquipe = (fonte?: any): string[] => {
-  if (!fonte) return [];
-  return [
-    fonte.equipe_lm,
-    fonte.codigo_equipe,
-    fonte.equipe,
-    fonte.nome_equipe,
-    fonte.id_equipe,
-  ]
-    .map((valor) => (typeof valor === "string" ? valor.trim() : ""))
-    .filter((valor) => !!valor && !isUuidValue(valor));
-};
-
-const inferirEquipePreferencial = (
-  linhaDesejada: EquipeLinha,
-  fontes: any[] = [],
-  codigosExtras: string[] = []
-): string | undefined => {
-  const candidatos = [
-    ...codigosExtras,
-    ...fontes.flatMap((fonte) => extrairCandidatosEquipe(fonte)),
-  ];
-
-  for (const candidato of candidatos) {
-    const linha = inferLinhaPorCodigo(candidato);
-    if (linha === linhaDesejada) {
-      return candidato;
-    }
-  }
-
-  for (const fonte of fontes) {
-    if (!fonte) continue;
-    const encarregados = [
-      fonte.encarregado_lm,
-      fonte.encarregado,
-      fonte.encarregado_nome,
-      fonte.responsavel,
-      fonte.responsavel_nome,
-    ].filter((nome) => typeof nome === "string" && nome.trim().length > 0);
-
-    for (const nome of encarregados) {
-      const deducao = inferEquipePorEncarregado(nome);
-      if (deducao?.linha === linhaDesejada) {
-        return deducao.codigo;
-      }
-    }
-  }
-
-  return undefined;
-};
-
+// Arquivo movido para src/components/domain/WorkflowSteps.tsx
+// Atualize seus imports para:
+// import WorkflowSteps from "@/components/domain/WorkflowSteps";
 
 
 interface WorkflowStep {
@@ -1961,22 +1764,22 @@ export const WorkflowSteps = () => {
 
       // ==================== ASSINATURAS ====================
       yPos = pageHeight - 45;
-      const assinaturaColWidth = (pageWidth - 30) / 3;
-      
+      const assinaturaColWidth = (pageWidth - 160) / 2;
+
       doc.setDrawColor(mainColor[0], mainColor[1], mainColor[2]);
       doc.setLineWidth(0.5);
-      
-      doc.line(10, yPos + 15, 10 + assinaturaColWidth - 5, yPos + 15);
+
+      doc.line(60, yPos + 15, 60 + assinaturaColWidth, yPos + 15);
       doc.setFont("helvetica", "normal");
       doc.setFontSize(7);
       doc.setTextColor(mainColor[0], mainColor[1], mainColor[2]);
-      doc.text("LÍDER DE EQUIPE", 10 + assinaturaColWidth / 2 - 5, yPos + 20, { align: "center" });
-      
-      doc.line(10 + assinaturaColWidth + 5, yPos + 15, 10 + 2 * assinaturaColWidth, yPos + 15);
-      doc.text("FISCAL", 10 + 1.5 * assinaturaColWidth + 5, yPos + 20, { align: "center" });
-      
-      doc.line(10 + 2 * assinaturaColWidth + 10, yPos + 15, 10 + 3 * assinaturaColWidth + 5, yPos + 15);
-      doc.text("CLIENTE / RESPONSÁVEL", 10 + 2.5 * assinaturaColWidth + 10, yPos + 20, { align: "center" });
+      doc.text("LÍDER DE EQUIPE", 60 + assinaturaColWidth / 2 - 5, yPos + 20, { align: "center" });
+
+      doc.line(60 + assinaturaColWidth + 5, yPos + 15, 60 + 2 * assinaturaColWidth, yPos + 15);
+      doc.text("FISCAL", 60 + 1.5 * assinaturaColWidth + 5, yPos + 20, { align: "center" });
+
+      doc.line(60 + 2 * assinaturaColWidth + 10, yPos + 15, 60 + 3 * assinaturaColWidth + 5, yPos + 15);
+      doc.text("CLIENTE / RESPONSÁVEL", 60 + 2.5 * assinaturaColWidth + 10, yPos + 20, { align: "center" });
 
       // ==================== RODAPÉ ====================
       doc.setFontSize(6);
@@ -2637,11 +2440,7 @@ export const WorkflowSteps = () => {
 
           steps.map(async (step) => {
 
-            const { count, error } = await supabase
-
-              .from("acionamentos")
-
-              .select("id_acionamento", { count: "exact", head: true })
+            const
 
               .eq("etapa_atual", step.id);
 
