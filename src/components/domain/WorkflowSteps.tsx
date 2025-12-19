@@ -1,5 +1,6 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import logoEngeletrica from "@/assets/logo-engeletrica.png";
+import excelTemplateUrl from "@/assets/Orcamento_13132_LV_1766158955600.xlsx?url";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -8,6 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { CheckCircle2, Clock, AlertCircle, FileText, Wrench, TrendingUp, ArrowRight, Loader2, Plus, Save, FileDown, LayoutGrid } from "lucide-react";
 
@@ -22,6 +25,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { exportBookToExcel } from "@/utils/exportBookToExcel";
 
 import jsPDF from "jspdf";
 
@@ -460,6 +464,133 @@ export const WorkflowSteps = () => {
   const [bookError, setBookError] = useState<string | null>(null);
   const [bookInfo, setBookInfo] = useState<string | null>(null);
   const [bookForm, setBookForm] = useState({ ...emptyBookForm });
+  const emptyBookDitais = {
+    data_execucao: "",
+    numero_obra: "",
+    regional: "METROPOLITANA",
+    municipio: "",
+    prestadora: "Engelétrica, Assessoria, Projetos e Construção",
+    responsavel: "",
+    fotos: {
+      D: "",
+      I: "",
+      T: "",
+      A: "",
+      I2: "",
+      S: "",
+    },
+    foto_modelo: "",
+    observacao: "",
+  };
+  const [bookDitais, setBookDitais] = useState({ ...emptyBookDitais });
+  type BookDitaisPhotoKey = keyof typeof emptyBookDitais["fotos"];
+  const [bookTab, setBookTab] = useState<"book" | "ditais" | "trafo">("book");
+  const [bookTrafoData, setBookTrafoData] = useState<any | null>(null);
+  const photoInputRefs = useRef<Record<BookDitaisPhotoKey, HTMLInputElement | null>>({});
+  const modeloInputRef = useRef<HTMLInputElement | null>(null);
+
+  const triggerPhotoUpload = (key: BookDitaisPhotoKey) => {
+    photoInputRefs.current[key]?.click();
+  };
+
+  const triggerModeloUpload = () => {
+    modeloInputRef.current?.click();
+  };
+  const hasBookTrafoInfo = (() => {
+    if (!bookTrafoData) return false;
+    const hasValue = (value: any) => {
+      if (typeof value === "boolean") return value;
+      if (typeof value === "number") return true;
+      if (typeof value === "string" && value.trim().length > 0) return true;
+      return false;
+    };
+    const keys = [
+      bookTrafoData?.troca_transformador,
+      bookTrafoData?.trafo_ret_marca,
+      bookTrafoData?.trafo_ret_potencia,
+      bookTrafoData?.trafo_ret_ano,
+      bookTrafoData?.trafo_ret_tensao_primaria,
+      bookTrafoData?.trafo_ret_tensao_secundaria,
+      bookTrafoData?.trafo_ret_numero_serie,
+      bookTrafoData?.trafo_ret_patrimonio,
+      bookTrafoData?.trafo_inst_potencia,
+      bookTrafoData?.trafo_inst_marca,
+      bookTrafoData?.trafo_inst_ano,
+      bookTrafoData?.trafo_inst_tensao_primaria,
+      bookTrafoData?.trafo_inst_tensao_secundaria,
+      bookTrafoData?.trafo_inst_numero_serie,
+      bookTrafoData?.trafo_inst_patrimonio,
+    ];
+    return keys.some(hasValue);
+  })();
+
+  const handleBookDitaisFieldChange = (
+    field: keyof Omit<typeof emptyBookDitais, "fotos">,
+    value: string
+  ) => {
+    setBookDitais((prev) => ({
+      ...prev,
+        [field]: value,
+      }));
+    };
+
+  const handleBookDitaisPhotoChange = (key: BookDitaisPhotoKey, file?: File) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      setBookDitais((prev) => ({
+        ...prev,
+        fotos: {
+          ...prev.fotos,
+          [key]: reader.result as string,
+        },
+      }));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleBookDitaisRemovePhoto = (key: BookDitaisPhotoKey) => {
+    setBookDitais((prev) => ({
+      ...prev,
+      fotos: {
+        ...prev.fotos,
+        [key]: "",
+      },
+    }));
+  };
+
+  const handleExportBookDitais = async () => {
+    setBookError(null);
+    setBookInfo(null);
+    try {
+      await exportBookToExcel({
+        data_execucao:
+          typeof bookDitais.data_execucao === "string"
+            ? formatDateTimeBr(bookDitais.data_execucao)
+            : bookDitais.data_execucao,
+        numero_obra: bookDitais.numero_obra,
+        regional: bookDitais.regional,
+        municipio: bookDitais.municipio,
+        prestadora: bookDitais.prestadora,
+        responsavel: bookDitais.responsavel,
+        foto_modelo: bookDitais.foto_modelo,
+        observacao: bookDitais.observacao,
+        fotos: bookDitais.fotos,
+      });
+      setBookInfo("Planilha de DITAIS gerada com sucesso. Verifique seus downloads.");
+    } catch (error: any) {
+      setBookError(error?.message || "Erro ao exportar os DITAIS.");
+    }
+  };
+
+  const ditaisFields: Array<{ label: string; field: keyof Omit<typeof emptyBookDitais, "fotos"> }> = [
+    { label: "Data execução", field: "data_execucao" },
+    { label: "Nº da obra", field: "numero_obra" },
+    { label: "Regional", field: "regional" },
+    { label: "Município", field: "municipio" },
+    { label: "Prestadora", field: "prestadora" },
+    { label: "Responsável", field: "responsavel" },
+  ];
 
   // Etapa 3 - Medição / Orçamento (sem persistência)
   const [medicaoModalOpen, setMedicaoModalOpen] = useState(false);
@@ -654,6 +785,22 @@ export const WorkflowSteps = () => {
       setMedicaoCatalogo([]);
     }
   }, []);
+
+  useEffect(() => {
+    if (!bookModalOpen || !selectedItem) return;
+    setBookDitais((prev) => ({
+      ...prev,
+      data_execucao:
+        toInputDateTime(selectedItem.data_execucao || selectedItem.data_abertura) ||
+        prev.data_execucao,
+      numero_obra:
+        `AC${selectedItem.codigo_acionamento || selectedItem.id_acionamento || ""}`.trim() ||
+        prev.numero_obra,
+      municipio: selectedItem.municipio || prev.municipio,
+      responsavel: selectedItem.encarregado || prev.responsavel,
+      regional: "METROPOLITANA",
+    }));
+  }, [bookModalOpen, selectedItem]);
 
   const openMedicaoModal = async (item: any) => {
     setSelectedItem(item);
@@ -2005,6 +2152,233 @@ export const WorkflowSteps = () => {
       alert(`ERRO: ${error?.message}`);
       console.error("ERRO:", error);
       setMaterialInfo(`Erro: ${error?.message}`);
+    }
+  };
+
+  const exportarOrcamentoExcel = async () => {
+    if (!selectedItem) {
+      alert("Nenhum acionamento selecionado");
+      return;
+    }
+    const idAcionamento = selectedItem.id_acionamento || selectedItem.id;
+    if (!idAcionamento) {
+      alert("ID do acionamento não encontrado");
+      return;
+    }
+
+    const pdfModalidade: "LM" | "LV" = medicaoTab === "LM" ? "LM" : "LV";
+    if (!equipeValidaParaLinha(pdfModalidade)) {
+      alert(`Selecione uma equipe de ${pdfModalidade === "LM" ? "Linha Morta" : "Linha Viva"} válida antes de gerar o Excel.`);
+      return;
+    }
+
+    setMaterialError(null);
+    setMaterialInfo(null);
+
+    try {
+      const contexto = await prepararOrcamentoContext(idAcionamento, pdfModalidade);
+      if (!contexto) return;
+
+      const resumoMO = calcularResumoMaoDeObra(contexto);
+      const modalidadeLabel = contexto.pdfModalidade === "LM" ? "Linha Morta" : "Linha Viva";
+
+      const ExcelJS = (await import("exceljs")).default;
+      const response = await fetch(excelTemplateUrl);
+      if (!response.ok) {
+        throw new Error("Não foi possível carregar o modelo de Excel.");
+      }
+      const templateBuffer = await response.arrayBuffer();
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(templateBuffer);
+      const sheet = workbook.getWorksheet("Orçamento");
+      if (!sheet) {
+        throw new Error("Planilha de modelo inválida.");
+      }
+
+      const setCell = (row: number, column: number, value: string | number | null | undefined) => {
+        if (value === null || value === undefined) {
+          sheet.getRow(row).getCell(column).value = "";
+        } else {
+          sheet.getRow(row).getCell(column).value = value;
+        }
+      };
+
+      const findRowByLabel = (label: string, column = 2) => {
+        let result: any = null;
+        sheet.eachRow({ includeEmpty: true }, (row) => {
+          const cellValue = row.getCell(column).value;
+          if (typeof cellValue === "string" && cellValue.trim() === label.trim()) {
+            result = row;
+          }
+        });
+        return result;
+      };
+
+      const findRowByPredicate = (predicate: (value: any) => boolean) => {
+        let result: any = null;
+        sheet.eachRow({ includeEmpty: true }, (row) => {
+          const value = row.getCell(1).value;
+          if (predicate(value)) {
+            result = row;
+          }
+        });
+        return result;
+      };
+
+      const captureStyles = (row: any) => {
+        const styles: Record<number, any> = {};
+        row.eachCell({ includeEmpty: true }, (cell: any, col: number) => {
+          styles[col] = {
+            font: cell.font,
+            fill: cell.fill,
+            border: cell.border,
+            alignment: cell.alignment,
+            numFmt: cell.numFmt,
+          };
+        });
+        return styles;
+      };
+
+      const applyStyles = (row: any, styles: Record<number, any>) => {
+        row.eachCell({ includeEmpty: true }, (cell: any, col: number) => {
+          const style = styles[col];
+          if (!style) return;
+          cell.font = style.font;
+          cell.fill = style.fill;
+          cell.border = style.border;
+          cell.alignment = style.alignment;
+          cell.numFmt = style.numFmt;
+        });
+      };
+
+      setCell(2, 2, `Fechamento de OS - ${modalidadeLabel}`);
+      setCell(6, 3, contexto.numeroIntervencaoTexto || "--");
+      setCell(6, 5, contexto.codigoAcionamento || "--");
+      setCell(7, 3, contexto.osTabletTexto || "--");
+      setCell(7, 5, contexto.enderecoTexto || "--");
+      setCell(8, 3, contexto.dataExecucaoTexto || "--");
+
+      setCell(12, 3, contexto.equipeTexto || "--");
+      setCell(12, 5, contexto.encarregadoTexto || "--");
+      setCell(12, 7, contexto.tecnicoTexto || "--");
+      setCell(12, 9, contexto.dadosExec?.km_inicial || "--");
+      setCell(13, 3, formatDateTimeBr(contexto.dadosExec?.saida_base) || "--");
+      setCell(13, 5, formatDateTimeBr(contexto.dadosExec?.inicio_servico) || "--");
+      setCell(13, 7, formatDateTimeBr(contexto.dadosExec?.retorno_servico) || "--");
+      setCell(13, 9, contexto.dadosExec?.km_final || "--");
+      setCell(14, 3, contexto.dadosExec?.tempo_base || "--");
+      setCell(14, 5, contexto.dadosExec?.tempo_servico || "--");
+      setCell(14, 7, contexto.dadosExec?.km_total || "--");
+
+      const highlightSectionRow = findRowByLabel("ITENS DE MÃO DE OBRA");
+      if (highlightSectionRow) {
+        const moHeaderRow = sheet.getRow(highlightSectionRow.number + 1);
+        const moSampleRow = sheet.getRow(moHeaderRow.number + 1);
+        const moStyles = captureStyles(moSampleRow);
+        sheet.spliceRows(moSampleRow.number, 1);
+
+        let insertPointer = moHeaderRow.number + 1;
+
+        resumoMO.itensCalculados.forEach((item, index) => {
+          const row = sheet.insertRow(insertPointer, [
+            index + 1,
+            item.codigo,
+            item.descricao,
+            item.operacao,
+            item.unidade,
+            Number(item.upsQtd).toFixed(2),
+            Number(item.quantidade).toFixed(2),
+            item.subtotal.toFixed(2),
+          ]);
+          applyStyles(row, moStyles);
+          insertPointer += 1;
+        });
+
+        if (resumoMO.itensCalculados.length === 0) {
+          const placeholder = sheet.insertRow(insertPointer, ["", "", "", "", "", "", "", ""]);
+          applyStyles(placeholder, moStyles);
+          insertPointer += 1;
+        }
+      }
+
+      const atualizarTotal = (label: string, valor: number) => {
+        const row = findRowByLabel(label);
+        if (!row) return;
+        row.getCell(9).value = valor;
+        row.getCell(9).numFmt = "#,##0.00";
+      };
+
+      atualizarTotal("TOTAL MO (sem adicional)", resumoMO.totalBase);
+      atualizarTotal("TOTAL MO (com adicional)", resumoMO.totalComAdicional);
+
+      const adicionalRow = findRowByLabel("ADICIONAL");
+      if (adicionalRow) {
+        adicionalRow.getCell(3).value = resumoMO.acrescimoInfo.codigo || "--";
+        adicionalRow.getCell(4).value = resumoMO.acrescimoInfo.descricao || "";
+        adicionalRow.getCell(7).value = resumoMO.acrescimoValor > 0 ? 1 : "";
+        adicionalRow.getCell(9).value = resumoMO.acrescimoValor > 0 ? resumoMO.acrescimoValor : "";
+        if (resumoMO.acrescimoValor > 0) {
+          adicionalRow.getCell(9).numFmt = "#,##0.00";
+        }
+      }
+
+      const renderMaterialSection = (label: string, dataRows: Array<Array<string | number>>) => {
+        const labelRow = findRowByLabel(label);
+        if (!labelRow) return;
+        const headerRow = sheet.getRow(labelRow.number + 1);
+        const sampleRow = sheet.getRow(headerRow.number + 1);
+        const sampleStyles = captureStyles(sampleRow);
+        sheet.spliceRows(sampleRow.number, 1);
+
+        let insertPointer = headerRow.number + 1;
+        dataRows.forEach((rowData) => {
+          const row = sheet.insertRow(insertPointer, rowData);
+          applyStyles(row, sampleStyles);
+          insertPointer += 1;
+        });
+      };
+
+      renderMaterialSection(
+        "MATERIAL APLICADO",
+        (contexto.consumo || []).map((item, index) => [
+          index + 1,
+          item.codigo_material,
+          item.descricao_item || "",
+          item.unidade_medida || "",
+          Number(item.quantidade || 0).toFixed(2),
+        ])
+      );
+
+      renderMaterialSection(
+        "MATERIAL RETIRADO / SUCATA",
+        (contexto.sucata || []).map((item, index) => [
+          index + 1,
+          item.codigo_material,
+          item.descricao_item || "",
+          item.unidade_medida || "",
+          item.classificacao || "",
+          Number(item.quantidade || 0).toFixed(2),
+        ])
+      );
+
+      const rodapeRow = findRowByPredicate((value) => typeof value === "string" && value.includes("Planilha gerada em"));
+      if (rodapeRow) {
+        rodapeRow.getCell(1).value = `Planilha gerada em ${new Date().toLocaleString("pt-BR")} | Sistema de Gestão de Obras`;
+      }
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      const fileName = `Orcamento_${contexto.selectedItemSnapshot.codigo_acionamento || "acionamento"}_${contexto.medicaoTab}_${Date.now()}.xlsx`;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setMaterialInfo("Excel gerado com sucesso!");
+    } catch (error: any) {
+      console.error("Erro ao exportar Excel", error);
+      setMaterialError(`Erro ao gerar Excel: ${error?.message || error}`);
     }
   };
 
@@ -4464,6 +4838,8 @@ export const WorkflowSteps = () => {
   const handleStage5BookClick = async (item: any) => {
     setSelectedItem(item);
     setBookModalOpen(true);
+    setBookTab("book");
+    setBookTrafoData(null);
     setBookLoading(true);
     setBookError(null);
     setBookInfo(null);
@@ -4480,7 +4856,9 @@ export const WorkflowSteps = () => {
 
       const { data, error } = await supabase
         .from("acionamentos")
-        .select("book_enviado_em,email_msg,elemento_id,codigo_acionamento")
+        .select(
+          "book_enviado_em,email_msg,elemento_id,codigo_acionamento,modalidade,status,prioridade,municipio,data_abertura,data_despacho,encarregado,etapa_atual,numero_os,numero_obra,almox_conferido_em"
+        )
         .eq("id_acionamento", idAcionamento)
         .maybeSingle();
       if (error) throw error;
@@ -4491,6 +4869,19 @@ export const WorkflowSteps = () => {
         ),
         email_msg: data?.email_msg || "",
       });
+
+      let execucaoData: any = null;
+      try {
+        const { data: execData } = await supabase
+          .from("acionamento_execucao")
+          .select("*")
+          .eq("id_acionamento", idAcionamento)
+          .maybeSingle();
+        execucaoData = execData;
+      } catch (err) {
+        console.warn("Não foi possível carregar dados de transformador para o book.", err);
+      }
+      setBookTrafoData(execucaoData || null);
 
       if (data) {
         setSelectedItem((prev: any) => {
@@ -4503,6 +4894,17 @@ export const WorkflowSteps = () => {
                 email_msg: data.email_msg ?? prev.email_msg,
                 elemento_id: data.elemento_id ?? prev.elemento_id,
                 codigo_acionamento: data.codigo_acionamento ?? prev.codigo_acionamento,
+                modalidade: data.modalidade ?? prev.modalidade,
+                status: data.status ?? prev.status,
+                prioridade: data.prioridade ?? prev.prioridade,
+                municipio: data.municipio ?? prev.municipio,
+                data_abertura: data.data_abertura ?? prev.data_abertura,
+                data_despacho: data.data_despacho ?? prev.data_despacho,
+                encarregado: data.encarregado ?? prev.encarregado,
+                etapa_atual: data.etapa_atual ?? prev.etapa_atual,
+                numero_os: data.numero_os ?? prev.numero_os,
+                numero_obra: data.numero_obra ?? prev.numero_obra,
+                almox_conferido_em: data.almox_conferido_em ?? prev.almox_conferido_em,
               }
             : prev;
         });
@@ -4524,6 +4926,9 @@ export const WorkflowSteps = () => {
     setBookError(null);
     setBookInfo(null);
     setBookLoading(false);
+    setBookTab("book");
+    setBookTrafoData(null);
+    setBookDitais({ ...emptyBookDitais });
   };
 
   const salvarDadosBook = async () => {
@@ -5399,7 +5804,7 @@ export const WorkflowSteps = () => {
         }}
         modal
       >
-        <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden">
           <DialogHeader>
             <DialogTitle>Registrar dados da OS</DialogTitle>
             <DialogDescription>
@@ -5486,7 +5891,7 @@ export const WorkflowSteps = () => {
         }}
         modal
       >
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-3xl w-full max-h-[90vh] overflow-hidden">
           <DialogHeader>
             <DialogTitle>Registro do book</DialogTitle>
             <DialogDescription>
@@ -5497,55 +5902,310 @@ export const WorkflowSteps = () => {
           {bookError && <div className="text-sm text-destructive">{bookError}</div>}
           {bookInfo && <div className="text-sm text-emerald-600">{bookInfo}</div>}
 
-          {bookLoading ? (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground py-6">
-              <Loader2 className="h-4 w-4 animate-spin" /> Carregando dados do book...
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div className="rounded-md border px-3 py-2 bg-muted/50">
-                  <Label className="text-xs font-semibold text-muted-foreground">Acionamento</Label>
-                  <div className="text-sm font-semibold text-foreground mt-1">
-                    {selectedItem?.codigo_acionamento || selectedItem?.id_acionamento || "--"}
-                  </div>
-                </div>
-                <div className="rounded-md border px-3 py-2 bg-muted/50">
-                  <Label className="text-xs font-semibold text-muted-foreground">Elemento</Label>
-                  <div className="text-sm font-semibold text-foreground mt-1">
-                    {selectedItem?.elemento_id || "--"}
-                  </div>
-                </div>
-              </div>
+          <Tabs
+            value={bookTab}
+            onValueChange={(value) => setBookTab(value as typeof bookTab)}
+            className="space-y-4"
+          >
+            <TabsList
+              className={cn(
+                "grid w-full gap-2",
+                hasBookTrafoInfo ? "grid-cols-3" : "grid-cols-2"
+              )}
+            >
+              <TabsTrigger value="book">Registro</TabsTrigger>
+              <TabsTrigger value="ditais">DITAIS</TabsTrigger>
+              {hasBookTrafoInfo && <TabsTrigger value="trafo">Trafo</TabsTrigger>}
+            </TabsList>
 
-              {selectedItem?.book_enviado_em && (
-                <div className="text-xs text-muted-foreground">
-                  Último registro em {formatDateTimeBr(selectedItem.book_enviado_em)}
+            <TabsContent value="book">
+              {bookLoading ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground py-6">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Carregando dados do book...
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="rounded-md border px-3 py-2 bg-muted/50">
+                      <Label className="text-xs font-semibold text-muted-foreground">
+                        Acionamento
+                      </Label>
+                      <div className="text-sm font-semibold text-foreground mt-1">
+                        {selectedItem?.codigo_acionamento || selectedItem?.id_acionamento || "--"}
+                      </div>
+                    </div>
+                    <div className="rounded-md border px-3 py-2 bg-muted/50">
+                      <Label className="text-xs font-semibold text-muted-foreground">Elemento</Label>
+                      <div className="text-sm font-semibold text-foreground mt-1">
+                        {selectedItem?.elemento_id || "--"}
+                      </div>
+                    </div>
+                  </div>
+
+                  {selectedItem?.book_enviado_em && (
+                    <div className="text-xs text-muted-foreground">
+                      Último registro em {formatDateTimeBr(selectedItem.book_enviado_em)}
+                    </div>
+                  )}
+
+                  <div>
+                    <Label>Data/hora do envio</Label>
+                    <Input
+                      type="datetime-local"
+                      value={bookForm.book_enviado_em}
+                      disabled={bookSaving}
+                      onChange={(e) => handleBookFormChange("book_enviado_em", e.target.value)}
+                    />
+                  </div>
+
+                  <div>
+                    <Label>Mensagem enviada</Label>
+                    <textarea
+                      className="w-full border rounded-md px-3 py-2 text-sm min-h-[140px]"
+                      value={bookForm.email_msg}
+                      disabled={bookSaving}
+                      onChange={(e) => handleBookFormChange("email_msg", e.target.value)}
+                      placeholder="Cole aqui o texto do e-mail enviado ou observaçães importantes."
+                    />
+                  </div>
                 </div>
               )}
+            </TabsContent>
 
-              <div>
-                <Label>Data/hora do envio</Label>
-                <Input
-                  type="datetime-local"
-                  value={bookForm.book_enviado_em}
-                  disabled={bookSaving}
-                  onChange={(e) => handleBookFormChange("book_enviado_em", e.target.value)}
-                />
-              </div>
+            <TabsContent value="ditais">
+              <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-2 pb-4">
+                <div className="grid gap-3 md:grid-cols-2">
+                  {ditaisFields.map((item) => (
+                    <div key={item.field}>
+                      <Label>{item.label}</Label>
+                      <Input
+                        type={item.field === "data_execucao" ? "datetime-local" : "text"}
+                        value={bookDitais[item.field] || ""}
+                        onChange={(e) => handleBookDitaisFieldChange(item.field, e.target.value)}
+                      />
+                    </div>
+                  ))}
+                </div>
 
-              <div>
-                <Label>Mensagem enviada</Label>
-                <textarea
-                  className="w-full border rounded-md px-3 py-2 text-sm min-h-[140px]"
-                  value={bookForm.email_msg}
-                  disabled={bookSaving}
-                  onChange={(e) => handleBookFormChange("email_msg", e.target.value)}
-                  placeholder="Cole aqui o texto do e-mail enviado ou observaçães importantes."
-                />
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {[
+                    { key: "D", label: "D - desligar" },
+                    { key: "I", label: "I - interromper" },
+                    { key: "T", label: "T - testar" },
+                    { key: "A", label: "A - aterrar" },
+                    { key: "I2", label: "I - isolar" },
+                    { key: "S", label: "S - sinalizar" },
+                  ].map((item) => {
+                    const photoKey = item.key as BookDitaisPhotoKey;
+                    const photoValue = bookDitais.fotos[photoKey];
+                    return (
+                      <div key={item.key} className="rounded-xl border bg-card/80 p-3 space-y-2">
+                        <div className="text-xs font-semibold text-muted-foreground">{item.label}</div>
+                        <div className="border border-dashed border-muted-foreground/40 rounded-md h-40 overflow-hidden bg-muted/20 flex items-center justify-center">
+                          {photoValue ? (
+                            <img src={photoValue} alt={item.label} className="h-full w-full object-cover" />
+                          ) : (
+                            <span className="text-xs text-muted-foreground">Sem foto</span>
+                          )}
+                        </div>
+                        <div className="flex gap-2">
+                          <input
+                            id={`ditais-photo-${item.key}`}
+                            type="file"
+                            accept="image/*"
+                            className="sr-only"
+                            ref={(el) => {
+                              photoInputRefs.current[photoKey] = el;
+                            }}
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              handleBookDitaisPhotoChange(photoKey, file);
+                              if (e.target) e.target.value = "";
+                            }}
+                          />
+                          <div className="flex-1">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="w-full"
+                              type="button"
+                              onClick={(event) => {
+                                event.preventDefault();
+                                triggerPhotoUpload(photoKey);
+                              }}
+                            >
+                              Enviar foto
+                            </Button>
+                          </div>
+                          {photoValue && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              type="button"
+                              onClick={() => handleBookDitaisRemovePhoto(photoKey)}
+                            >
+                              Limpar
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Modelo da foto</Label>
+                    <div className="rounded-xl border bg-card/80 p-3 space-y-2">
+                      <div className="border border-dashed border-muted-foreground/40 rounded-md h-40 overflow-hidden bg-muted/20 flex items-center justify-center">
+                        {bookDitais.foto_modelo ? (
+                          <img src={bookDitais.foto_modelo} alt="Modelo" className="h-full w-full object-cover" />
+                        ) : (
+                          <span className="text-xs text-muted-foreground">Sem foto</span>
+                        )}
+                      </div>
+                        <div className="flex gap-2">
+                          <input
+                            id="ditais-photo-model"
+                            type="file"
+                            accept="image/*"
+                            className="sr-only"
+                            ref={(el) => {
+                              modeloInputRef.current = el;
+                            }}
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              const reader = new FileReader();
+                              reader.onload = () => handleBookDitaisFieldChange("foto_modelo", reader.result as string);
+                              reader.readAsDataURL(file);
+                              if (e.target) e.target.value = "";
+                            }}
+                          />
+                          <div className="flex-1">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="w-full"
+                              type="button"
+                              onClick={(event) => {
+                                event.preventDefault();
+                                triggerModeloUpload();
+                              }}
+                            >
+                              Enviar modelo
+                            </Button>
+                          </div>
+                        {bookDitais.foto_modelo && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            type="button"
+                            onClick={() => handleBookDitaisFieldChange("foto_modelo", "")}
+                          >
+                            Limpar
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Observação</Label>
+                    <textarea
+                      className="w-full border rounded-md px-3 py-2 text-sm min-h-[200px]"
+                      value={bookDitais.observacao}
+                      onChange={(e) => handleBookDitaisFieldChange("observacao", e.target.value)}
+                      placeholder="Registre aqui a descrição das fotos, apontamentos do campo ou informações adicionais."
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end">
+                  <Button onClick={handleExportBookDitais}>Exportar DITAIS</Button>
+                </div>
               </div>
-            </div>
-          )}
+            </TabsContent>
+
+            {hasBookTrafoInfo && (
+              <TabsContent value="trafo">
+                {bookTrafoData ? (
+                  <div className="space-y-4">
+                    {typeof bookTrafoData.troca_transformador === "boolean" && (
+                      <div className="rounded-md border px-3 py-2 bg-muted/40 flex items-center gap-2">
+                        <span className="text-xs font-semibold text-muted-foreground">
+                          Troca de transformador
+                        </span>
+                        <span className="ml-auto text-sm font-semibold text-foreground">
+                          {bookTrafoData.troca_transformador ? "Sim" : "Não"}
+                        </span>
+                      </div>
+                    )}
+                    {[
+                      {
+                        label: "Marca",
+                        retirado: bookTrafoData.trafo_ret_marca,
+                        instalado: bookTrafoData.trafo_inst_marca,
+                      },
+                      {
+                        label: "Potência",
+                        retirado: bookTrafoData.trafo_ret_potencia,
+                        instalado: bookTrafoData.trafo_inst_potencia,
+                      },
+                      {
+                        label: "Nº de série",
+                        retirado: bookTrafoData.trafo_ret_numero_serie,
+                        instalado: bookTrafoData.trafo_inst_numero_serie,
+                      },
+                      {
+                        label: "Tensão primária",
+                        retirado: bookTrafoData.trafo_ret_tensao_primaria,
+                        instalado: bookTrafoData.trafo_inst_tensao_primaria,
+                      },
+                      {
+                        label: "Tensão secundária",
+                        retirado: bookTrafoData.trafo_ret_tensao_secundaria,
+                        instalado: bookTrafoData.trafo_inst_tensao_secundaria,
+                      },
+                      {
+                        label: "Fabricado",
+                        retirado: bookTrafoData.trafo_ret_ano,
+                        instalado: bookTrafoData.trafo_inst_ano,
+                      },
+                      {
+                        label: "Patrimônio",
+                        retirado: bookTrafoData.trafo_ret_patrimonio,
+                        instalado: bookTrafoData.trafo_inst_patrimonio,
+                      },
+                    ].map((row) => {
+                      const formatValue = (value: any) =>
+                        value === null ||
+                        value === undefined ||
+                        (typeof value === "string" && value.trim().length === 0)
+                          ? "--"
+                          : value;
+                      return (
+                        <div key={row.label} className="grid grid-cols-[1fr_1fr_1fr] gap-3">
+                          <div className="text-xs font-semibold uppercase text-muted-foreground">
+                            {row.label}
+                          </div>
+                          <div className="rounded-md border px-3 py-2 text-sm text-foreground bg-muted/40">
+                            {formatValue(row.retirado)}
+                          </div>
+                          <div className="rounded-md border px-3 py-2 text-sm text-foreground bg-muted/40">
+                            {formatValue(row.instalado)}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-sm text-muted-foreground">
+                    Sem dados de transformador cadastrados.
+                  </div>
+                )}
+              </TabsContent>
+            )}
+          </Tabs>
 
           <DialogFooter className="flex gap-2 justify-end">
             <Button variant="outline" onClick={closeBookModal} disabled={bookSaving}>
@@ -5920,6 +6580,15 @@ export const WorkflowSteps = () => {
                 >
                   <LayoutGrid className="h-4 w-4 mr-2" />
                   Layout EngElétrica
+                </Button>
+                <Button
+                  disabled={pdfGeracaoIndisponivel}
+                  variant="outline"
+                  onClick={exportarOrcamentoExcel}
+                  className="gap-2"
+                >
+                  <FileDown className="h-4 w-4" />
+                  Exportar Excel
                 </Button>
                 <Button
                   disabled={!podeConcluirEtapa3}
