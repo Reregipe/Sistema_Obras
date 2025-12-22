@@ -2432,6 +2432,60 @@ export const WorkflowSteps = () => {
 
       const resumoMO = calcularResumoMaoDeObra(contexto);
 
+      const captureHiddenSheetSnapshot = (worksheet: any) => {
+        const cells: Array<{
+          row: number;
+          col: number;
+          value?: unknown;
+          formula?: string;
+          result?: unknown;
+          numFmt?: string;
+        }> = [];
+        for (let rowIndex = 1; rowIndex <= worksheet.rowCount; rowIndex += 1) {
+          const row = worksheet.getRow(rowIndex);
+          row.eachCell({ includeEmpty: true }, (cell: any, col: number) => {
+            const cellValue = cell.value;
+            const isFormula =
+              cellValue &&
+              typeof cellValue === "object" &&
+              "formula" in cellValue &&
+              typeof (cellValue as any).formula === "string";
+            if (!isFormula && (cellValue === null || cellValue === undefined)) {
+              return;
+            }
+            const formula = isFormula ? (cellValue as any).formula : undefined;
+            const result = isFormula ? (cellValue as any).result : undefined;
+            cells.push({
+              row: rowIndex,
+              col,
+              value: isFormula ? undefined : cellValue,
+              formula,
+              result,
+              numFmt: cell.numFmt,
+            });
+          });
+        }
+        return cells;
+      };
+
+      const restoreHiddenSheetSnapshot = (worksheet: any, snapshot: ReturnType<typeof captureHiddenSheetSnapshot>) => {
+        snapshot.forEach((cellSnapshot) => {
+          const row = worksheet.getRow(cellSnapshot.row);
+          const cell = row.getCell(cellSnapshot.col);
+          if (cellSnapshot.formula) {
+            cell.value = {
+              formula: cellSnapshot.formula,
+              result: cellSnapshot.result,
+            };
+          } else {
+            cell.value = cellSnapshot.value ?? null;
+          }
+          if (cellSnapshot.numFmt) {
+            cell.numFmt = cellSnapshot.numFmt;
+          }
+        });
+      };
+
       const ExcelJS = (await import("exceljs")).default;
       const templateUrl = contexto.pdfModalidade === "LM" ? lmMedicaoTemplateUrl : lvMedicaoTemplateUrl;
       const response = await fetch(templateUrl);
@@ -2524,59 +2578,6 @@ export const WorkflowSteps = () => {
         return Number.isFinite(numeric) ? numeric : null;
       };
 
-      const captureHiddenSheetSnapshot = (worksheet: any) => {
-        const cells: Array<{
-          row: number;
-          col: number;
-          value?: unknown;
-          formula?: string;
-          result?: unknown;
-          numFmt?: string;
-        }> = [];
-        for (let rowIndex = 1; rowIndex <= worksheet.rowCount; rowIndex += 1) {
-          const row = worksheet.getRow(rowIndex);
-          row.eachCell({ includeEmpty: true }, (cell: any, col: number) => {
-            const cellValue = cell.value;
-            const isFormula =
-              cellValue &&
-              typeof cellValue === "object" &&
-              "formula" in cellValue &&
-              typeof (cellValue as any).formula === "string";
-            if (!isFormula && (cellValue === null || cellValue === undefined)) {
-              return;
-            }
-            const formula = isFormula ? (cellValue as any).formula : undefined;
-            const result = isFormula ? (cellValue as any).result : undefined;
-            cells.push({
-              row: rowIndex,
-              col,
-              value: isFormula ? undefined : cellValue,
-              formula,
-              result,
-              numFmt: cell.numFmt,
-            });
-          });
-        }
-        return cells;
-      };
-
-      const restoreHiddenSheetSnapshot = (worksheet: any, snapshot: ReturnType<typeof captureHiddenSheetSnapshot>) => {
-        snapshot.forEach((cellSnapshot) => {
-          const row = worksheet.getRow(cellSnapshot.row);
-          const cell = row.getCell(cellSnapshot.col);
-          if (cellSnapshot.formula) {
-            cell.value = {
-              formula: cellSnapshot.formula,
-              result: cellSnapshot.result,
-            };
-          } else {
-            cell.value = cellSnapshot.value ?? null;
-          }
-          if (cellSnapshot.numFmt) {
-            cell.numFmt = cellSnapshot.numFmt;
-          }
-        });
-      };
 
       const fillLinhaVivaMoRows = (items: any[]) => {
         const moStartRow = 21;
