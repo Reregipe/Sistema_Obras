@@ -2510,6 +2510,14 @@ export const WorkflowSteps = () => {
         });
       };
 
+      const parseNumeroCodigo = (value: unknown) => {
+        if (value === null || value === undefined) return null;
+        const stringValue = String(value).trim();
+        if (stringValue.length === 0) return null;
+        const numeric = Number(stringValue.replace(/[^0-9]/g, ""));
+        return Number.isFinite(numeric) ? numeric : null;
+      };
+
       const fillLinhaVivaMoRows = (items: any[]) => {
         const moStartRow = 21;
         const moFooterRowStart = 37;
@@ -2539,7 +2547,15 @@ export const WorkflowSteps = () => {
             row.getCell("C").value = formula;
           }
           if (idx < items.length) {
-            row.getCell("B").value = items[idx].codigo || "";
+            const codigoValue = parseNumeroCodigo(items[idx].codigo);
+            const targetCell = row.getCell("B");
+            if (codigoValue === null) {
+              targetCell.value = items[idx].codigo || "";
+              targetCell.numFmt = "@";
+            } else {
+              targetCell.value = codigoValue;
+              targetCell.numFmt = "0";
+            }
           } else {
             row.getCell("B").value = null;
           }
