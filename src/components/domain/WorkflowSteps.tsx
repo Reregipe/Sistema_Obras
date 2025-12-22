@@ -2661,6 +2661,7 @@ export const WorkflowSteps = () => {
       };
 
       const isLinhaVivaExport = contexto.pdfModalidade === "LV";
+      const isForaHC = contexto.medicaoForaHC;
 
       if (!isLinhaVivaExport) {
         const descriptionColumns = [
@@ -2803,7 +2804,6 @@ export const WorkflowSteps = () => {
             row.getCell(column).numFmt = "#,##0.00";
           });
         };
-        const isForaHC = contexto.medicaoForaHC;
         fillAdicionalRow(additionRow30?.row ?? null, isForaHC);
         fillAdicionalRow(additionRow12?.row ?? null, !isForaHC);
 
@@ -2861,6 +2861,19 @@ export const WorkflowSteps = () => {
         fillMaterialSection("MATERIAL APLICADO", contexto.consumo || []);
         fillMaterialSection("MATERIAL RETIRADO", contexto.sucata || []);
       }
+
+      const markAdicionalCells = () => {
+        const cell30 = sheet.getCell("AG39");
+        const cell12 = sheet.getCell("AG40");
+        if (!getFormulaText(cell30)) {
+          cell30.value = isForaHC ? 1 : null;
+        }
+        if (!getFormulaText(cell12)) {
+          cell12.value = isForaHC ? null : 1;
+        }
+      };
+
+      markAdicionalCells();
 
       if (isLinhaVivaExport) {
         const executionDate = parseDateForExcel(contexto.dataExecucaoTexto);
