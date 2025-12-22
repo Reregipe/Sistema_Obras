@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import logoEngeletrica from "@/assets/logo-engeletrica.png";
-import excelTemplateUrl from "@/assets/Orcamento_13132_LV_1766158955600.xlsx?url";
+import lmMedicaoTemplateUrl from "@/assets/A - PLANILHA LM MEDIÇAO - MODELO.xlsx?url";
+import lvMedicaoTemplateUrl from "@/assets/A - PLANILHA LV MEDIÇÃO - MODELO.xlsx?url";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -2430,189 +2431,298 @@ export const WorkflowSteps = () => {
       if (!contexto) return;
 
       const resumoMO = calcularResumoMaoDeObra(contexto);
-      const modalidadeLabel = contexto.pdfModalidade === "LM" ? "Linha Morta" : "Linha Viva";
 
       const ExcelJS = (await import("exceljs")).default;
-      const response = await fetch(excelTemplateUrl);
+      const templateUrl = contexto.pdfModalidade === "LM" ? lmMedicaoTemplateUrl : lvMedicaoTemplateUrl;
+      const response = await fetch(templateUrl);
       if (!response.ok) {
-        throw new Error("Não foi possível carregar o modelo de Excel.");
+        throw new Error(`Não foi possível carregar o modelo de Excel (${response.status})`);
       }
       const templateBuffer = await response.arrayBuffer();
+      const templateData =
+        templateBuffer instanceof ArrayBuffer ? new Uint8Array(templateBuffer) : templateBuffer;
       const workbook = new ExcelJS.Workbook();
-      await workbook.xlsx.load(templateBuffer);
-      const sheet = workbook.getWorksheet("Orçamento");
+      await workbook.xlsx.load(templateData);
+      const sheet = workbook.getWorksheet("PADRAO") || workbook.worksheets[0];
       if (!sheet) {
         throw new Error("Planilha de modelo inválida.");
       }
 
-      const setCell = (row: number, column: number, value: string | number | null | undefined) => {
-        if (value === null || value === undefined) {
-          sheet.getRow(row).getCell(column).value = "";
-        } else {
-          sheet.getRow(row).getCell(column).value = value;
-        }
-      };
-
-      const findRowByLabel = (label: string, column = 2) => {
-        let result: any = null;
-        sheet.eachRow({ includeEmpty: true }, (row) => {
-          const cellValue = row.getCell(column).value;
-          if (typeof cellValue === "string" && cellValue.trim() === label.trim()) {
-            result = row;
+      const extractCellText = (value: unknown) => {
+        if (typeof value === "string") return value;
+        if (value && typeof value === "object") {
+          if ("richText" in value) {
+            return (value as any).richText.map((segment: any) => segment.text).join("");
           }
-        });
-        return result;
-      };
-
-      const findRowByPredicate = (predicate: (value: any) => boolean) => {
-        let result: any = null;
-        sheet.eachRow({ includeEmpty: true }, (row) => {
-          const value = row.getCell(1).value;
-          if (predicate(value)) {
-            result = row;
+          if ("text" in value) {
+            return (value as any).text;
           }
-        });
-        return result;
-      };
-
-      const captureStyles = (row: any) => {
-        const styles: Record<number, any> = {};
-        row.eachCell({ includeEmpty: true }, (cell: any, col: number) => {
-          styles[col] = {
-            font: cell.font,
-            fill: cell.fill,
-            border: cell.border,
-            alignment: cell.alignment,
-            numFmt: cell.numFmt,
-          };
-        });
-        return styles;
-      };
-
-      const applyStyles = (row: any, styles: Record<number, any>) => {
-        row.eachCell({ includeEmpty: true }, (cell: any, col: number) => {
-          const style = styles[col];
-          if (!style) return;
-          cell.font = style.font;
-          cell.fill = style.fill;
-          cell.border = style.border;
-          cell.alignment = style.alignment;
-          cell.numFmt = style.numFmt;
-        });
-      };
-
-      setCell(2, 2, `Fechamento de OS - ${modalidadeLabel}`);
-      setCell(6, 3, contexto.numeroIntervencaoTexto || "--");
-      setCell(6, 5, contexto.codigoAcionamento || "--");
-      setCell(7, 3, contexto.osTabletTexto || "--");
-      setCell(7, 5, contexto.enderecoTexto || "--");
-      setCell(8, 3, contexto.dataExecucaoTexto || "--");
-
-      setCell(12, 3, contexto.equipeTexto || "--");
-      setCell(12, 5, contexto.encarregadoTexto || "--");
-      setCell(12, 7, contexto.tecnicoTexto || "--");
-      setCell(12, 9, contexto.dadosExec?.km_inicial || "--");
-      setCell(13, 3, formatDateTimeBr(contexto.dadosExec?.saida_base) || "--");
-      setCell(13, 5, formatDateTimeBr(contexto.dadosExec?.inicio_servico) || "--");
-      setCell(13, 7, formatDateTimeBr(contexto.dadosExec?.retorno_servico) || "--");
-      setCell(13, 9, contexto.dadosExec?.km_final || "--");
-      setCell(14, 3, contexto.dadosExec?.tempo_base || "--");
-      setCell(14, 5, contexto.dadosExec?.tempo_servico || "--");
-      setCell(14, 7, contexto.dadosExec?.km_total || "--");
-
-      const highlightSectionRow = findRowByLabel("ITENS DE MÃO DE OBRA");
-      if (highlightSectionRow) {
-        const moHeaderRow = sheet.getRow(highlightSectionRow.number + 1);
-        const moSampleRow = sheet.getRow(moHeaderRow.number + 1);
-        const moStyles = captureStyles(moSampleRow);
-        sheet.spliceRows(moSampleRow.number, 1);
-
-        let insertPointer = moHeaderRow.number + 1;
-
-        resumoMO.itensCalculados.forEach((item, index) => {
-          const row = sheet.insertRow(insertPointer, [
-            index + 1,
-            item.codigo,
-            item.descricao,
-            item.operacao,
-            item.unidade,
-            Number(item.upsQtd).toFixed(2),
-            Number(item.quantidade).toFixed(2),
-            item.subtotal.toFixed(2),
-          ]);
-          applyStyles(row, moStyles);
-          insertPointer += 1;
-        });
-
-        if (resumoMO.itensCalculados.length === 0) {
-          const placeholder = sheet.insertRow(insertPointer, ["", "", "", "", "", "", "", ""]);
-          applyStyles(placeholder, moStyles);
-          insertPointer += 1;
         }
+        return "";
+      };
+
+      const normalizeLabel = (value?: string) =>
+        value ? value.replace(/[=>:]/g, "").trim().toUpperCase() : "";
+
+      const findCellByLabel = (label: string) => {
+        for (let rowNumber = 1; rowNumber <= sheet.rowCount; rowNumber++) {
+          const row = sheet.getRow(rowNumber);
+          for (let column = 1; column <= sheet.columnCount; column++) {
+            const cell = row.getCell(column);
+            const cellValue = extractCellText(cell.value);
+            const text = normalizeLabel(cellValue);
+            if (text === normalizeLabel(label)) {
+              return { row: rowNumber, col: column };
+            }
+          }
+        }
+        return null;
+      };
+
+      const findRowNumberByLabel = (label: string) => {
+        const found = findCellByLabel(label);
+        return found ? found.row : null;
+      };
+
+      const fillHeaderCell = (label: string, value?: string | number) => {
+        const match = findCellByLabel(label);
+        if (!match) return;
+        const targetRow = sheet.getRow(match.row + 1);
+        targetRow.getCell(match.col).value = value ?? "";
+      };
+
+      const isLinhaVivaExport = contexto.pdfModalidade === "LV";
+
+      if (!isLinhaVivaExport) {
+        const descriptionColumns = [
+          "D",
+          "E",
+          "F",
+          "G",
+          "H",
+          "I",
+          "J",
+          "K",
+          "L",
+          "M",
+          "N",
+          "O",
+          "P",
+          "Q",
+          "R",
+          "S",
+          "T",
+          "U",
+        ];
+
+        const fillDescriptionCells = (row: any, text: string) => {
+          descriptionColumns.forEach((column) => {
+            row.getCell(column).value = text || "";
+          });
+        };
+
+        const captureRowStyles = (row: any) => {
+          const styles: Record<number, any> = {};
+          row.eachCell({ includeEmpty: true }, (cell: any, col: number) => {
+            styles[col] = {
+              font: cell.font,
+              fill: cell.fill,
+              border: cell.border,
+              alignment: cell.alignment,
+              numFmt: cell.numFmt,
+            };
+          });
+          return styles;
+        };
+
+        const applyRowStyles = (row: any, styles: Record<number, any>) => {
+          row.eachCell({ includeEmpty: true }, (cell: any, col: number) => {
+            const style = styles[col];
+            if (!style) return;
+            cell.font = style.font;
+            cell.fill = style.fill;
+            cell.border = style.border;
+            cell.alignment = style.alignment;
+            cell.numFmt = style.numFmt;
+          });
+        };
+
+        const tableStartRow = 28;
+        const baseTableCapacity = 14;
+        let tableCapacity = baseTableCapacity;
+        const tableSampleStyles = captureRowStyles(sheet.getRow(tableStartRow));
+
+        const itensMO = resumoMO.itensCalculados;
+        const rowsNeeded = Math.max(itensMO.length, 1);
+        for (let index = 0; index < tableCapacity; index++) {
+          const row = sheet.getRow(tableStartRow + index);
+          applyRowStyles(row, tableSampleStyles);
+          if (index >= rowsNeeded) {
+            row.eachCell({ includeEmpty: true }, (cell) => {
+              cell.value = null;
+            });
+            continue;
+          }
+          const item = itensMO[index];
+          const upsValue = Number(item?.upsQtd ?? 0);
+          const quantity = Number(item?.quantidade ?? 0);
+          const subtotal = Number(item?.subtotal ?? 0);
+          row.getCell("B").value = index + 1;
+          row.getCell("C").value = item?.codigo || "";
+          fillDescriptionCells(row, item?.descricao || "");
+          row.getCell("V").value = item?.unidade || "UN";
+          row.getCell("W").value = upsValue;
+          row.getCell("X").value = quantity;
+          row.getCell("Y").value = quantity > 0 ? quantity : null;
+          row.getCell("Z").value = quantity > 0 ? quantity : null;
+          row.getCell("AA").value = quantity;
+          row.getCell("AB").value = subtotal;
+          row.getCell("AC").value = subtotal;
+          ["W", "X", "Y", "Z", "AA", "AB", "AC"].forEach((column) => {
+            row.getCell(column).numFmt = "#,##0.00";
+          });
+        }
+
+        const findRowByFormula = (column: string, fragment: string) => {
+          for (let rowNumber = 1; rowNumber <= sheet.rowCount; rowNumber++) {
+            const cellValue = sheet.getRow(rowNumber).getCell(column)?.value;
+            if (cellValue && typeof cellValue === "object" && "formula" in cellValue) {
+              if ((cellValue as any).formula?.includes(fragment)) {
+                return sheet.getRow(rowNumber);
+              }
+            }
+          }
+          return null;
+        };
+
+        const totalRow = findRowByFormula("AB", "SUM(AB");
+        if (totalRow) {
+          totalRow.getCell("AB").value = resumoMO.totalBase;
+          totalRow.getCell("AC").value = resumoMO.totalBase;
+          ["AB", "AC"].forEach((column) => {
+            totalRow.getCell(column).numFmt = "#,##0.00";
+          });
+        }
+
+        const additionRow30 = findCellByLabel("SERV. EMERG. FORA DO HORARIO COMERCIAL-ADICIONAL 30%");
+        const additionRow12 = findCellByLabel("SERV. EMERG. HORARIO COMERCIAL - ADICIONAL 12%");
+        const fillAdicionalRow = (rowNumber: number | null, isActive: boolean) => {
+          if (!rowNumber) return;
+          const row = sheet.getRow(rowNumber);
+          if (!isActive) {
+            row.eachCell({ includeEmpty: true }, (cell) => {
+              cell.value = null;
+            });
+            return;
+          }
+          const amount = Math.max(resumoMO.acrescimoValor, 0);
+          const codigo = resumoMO.acrescimoInfo.codigo || "";
+          const descricao = resumoMO.acrescimoInfo.descricao || "";
+          row.getCell("B").value = codigo;
+          row.getCell("C").value = codigo;
+          fillDescriptionCells(row, descricao);
+          row.getCell("V").value = "ADIC";
+          row.getCell("W").value = amount;
+          const flag = amount > 0 ? 1 : 0;
+          row.getCell("X").value = flag;
+          row.getCell("Y").value = flag;
+          row.getCell("Z").value = flag;
+          row.getCell("AA").value = flag;
+          row.getCell("AB").value = amount;
+          row.getCell("AC").value = amount;
+          ["W", "X", "Y", "Z", "AA", "AB", "AC"].forEach((column) => {
+            row.getCell(column).numFmt = "#,##0.00";
+          });
+        };
+        const isForaHC = contexto.medicaoForaHC;
+        fillAdicionalRow(additionRow30?.row ?? null, isForaHC);
+        fillAdicionalRow(additionRow12?.row ?? null, !isForaHC);
+
+        const fillMaterialSection = (label: string, items: any[]) => {
+          const labelCell = findCellByLabel(label);
+          if (!labelCell) return;
+          const dataStart = labelCell.row + 2;
+          const capacity = Math.min(12, sheet.rowCount - dataStart + 1);
+          if (capacity <= 0) return;
+          const sampleStyles = captureRowStyles(sheet.getRow(dataStart));
+          for (let index = 0; index < capacity; index++) {
+            const row = sheet.getRow(dataStart + index);
+            applyRowStyles(row, sampleStyles);
+            if (index >= items.length) {
+              row.eachCell({ includeEmpty: true }, (cell) => {
+                cell.value = null;
+              });
+              continue;
+            }
+            const material = items[index];
+            const quantity = Number(material.quantidade || 0);
+            row.getCell("B").value = index + 1;
+            row.getCell("C").value = material.codigo_material || material.codigo || "";
+            fillDescriptionCells(row, material.descricao_item || material.descricao || "");
+            row.getCell("V").value = material.unidade_medida || material.unidade || "";
+            row.getCell("W").value = Number(material.valor || material.valor_unitario || 0);
+            row.getCell("X").value = quantity;
+            row.getCell("AA").value = quantity;
+            row.getCell("AB").value = quantity;
+            row.getCell("AC").value = quantity;
+            ["W", "X", "AA", "AB", "AC"].forEach((column) => {
+              row.getCell(column).numFmt = "#,##0.00";
+            });
+          }
+        };
+
+        fillHeaderCell("EQUIPE=>", contexto.equipeTexto);
+        fillHeaderCell("ENCARREGADO:", contexto.encarregadoTexto);
+        fillHeaderCell("TÉCNICO ENG:", contexto.tecnicoTexto);
+        fillHeaderCell("DATA SAÍDA =>", formatDateTimeBr(contexto.dadosExec?.saida_base));
+        fillHeaderCell("RETORNO BASE =>", formatDateTimeBr(contexto.dadosExec?.retorno_base));
+        fillHeaderCell("INICIO SERVIÇO =>", formatDateTimeBr(contexto.dadosExec?.inicio_servico));
+        fillHeaderCell("RETORNO SERVIÇO =>", formatDateTimeBr(contexto.dadosExec?.retorno_servico));
+        fillHeaderCell("KM INICIAL=>", contexto.dadosExec?.km_inicial || "");
+        fillHeaderCell("KM FINAL=>", contexto.dadosExec?.km_final || "");
+        fillHeaderCell("CÓD. ACIONAMENTO=>", contexto.codigoAcionamento);
+        fillHeaderCell("Nº INTERVENÇÃO=>", contexto.numeroIntervencaoTexto);
+        fillHeaderCell("NOTA (SS)=>", contexto.numeroSs || "");
+        fillHeaderCell("OS TABLET =>", contexto.osTabletTexto);
+        fillHeaderCell("ENDEREÇO=>", contexto.enderecoTexto);
+        fillHeaderCell("ALIMENTADOR =>", contexto.alimentadorTexto);
+        fillHeaderCell("SUBESTAÇÃO =>", contexto.subestacaoTexto);
+        fillHeaderCell("OBSERVAÇÃO =>", contexto.headerBase?.observacao || "");
+
+        fillMaterialSection("MATERIAL APLICADO", contexto.consumo || []);
+        fillMaterialSection("MATERIAL RETIRADO", contexto.sucata || []);
       }
 
-      const atualizarTotal = (label: string, valor: number) => {
-        const row = findRowByLabel(label);
-        if (!row) return;
-        row.getCell(9).value = valor;
-        row.getCell(9).numFmt = "#,##0.00";
-      };
-
-      atualizarTotal("TOTAL MO (sem adicional)", resumoMO.totalBase);
-      atualizarTotal("TOTAL MO (com adicional)", resumoMO.totalComAdicional);
-
-      const adicionalRow = findRowByLabel("ADICIONAL");
-      if (adicionalRow) {
-        adicionalRow.getCell(3).value = resumoMO.acrescimoInfo.codigo || "--";
-        adicionalRow.getCell(4).value = resumoMO.acrescimoInfo.descricao || "";
-        adicionalRow.getCell(7).value = resumoMO.acrescimoValor > 0 ? 1 : "";
-        adicionalRow.getCell(9).value = resumoMO.acrescimoValor > 0 ? resumoMO.acrescimoValor : "";
-        if (resumoMO.acrescimoValor > 0) {
-          adicionalRow.getCell(9).numFmt = "#,##0.00";
-        }
+      if (isLinhaVivaExport) {
+        sheet.getCell("U5").value = contexto.dataExecucaoTexto || "";
+        sheet.getCell("AH5").value = contexto.codigoAcionamento || "";
+        sheet.getCell("AH12").value = contexto.numeroIntervencaoTexto || "";
+        sheet.getCell("C5").value = contexto.equipeTexto || "";
+        sheet.getCell("E11").value = contexto.encarregadoTexto || "";
+        sheet.getCell("C8").value = contexto.enderecoTexto || "";
+        sheet.getCell("C13").value = contexto.alimentadorSubTexto || "";
+        sheet.getCell("AB8").value = contexto.osTabletTexto || "";
+        sheet.getCell("K5").value = contexto.dadosExec?.km_inicial || "";
+        sheet.getCell("N5").value = contexto.dadosExec?.km_final || "";
       }
 
-      const renderMaterialSection = (label: string, dataRows: Array<Array<string | number>>) => {
-        const labelRow = findRowByLabel(label);
-        if (!labelRow) return;
-        const headerRow = sheet.getRow(labelRow.number + 1);
-        const sampleRow = sheet.getRow(headerRow.number + 1);
-        const sampleStyles = captureStyles(sampleRow);
-        sheet.spliceRows(sampleRow.number, 1);
-
-        let insertPointer = headerRow.number + 1;
-        dataRows.forEach((rowData) => {
-          const row = sheet.insertRow(insertPointer, rowData);
-          applyStyles(row, sampleStyles);
-          insertPointer += 1;
-        });
+      const findRowByText = (text: string) => {
+        const needle = text.trim().toUpperCase();
+        for (let rowNumber = 1; rowNumber <= sheet.rowCount; rowNumber++) {
+          const row = sheet.getRow(rowNumber);
+          for (let column = 1; column <= sheet.columnCount; column++) {
+            const value = extractCellText(row.getCell(column).value).trim().toUpperCase();
+            if (value.includes(needle)) {
+              return rowNumber;
+            }
+          }
+        }
+        return null;
       };
 
-      renderMaterialSection(
-        "MATERIAL APLICADO",
-        (contexto.consumo || []).map((item, index) => [
-          index + 1,
-          item.codigo_material,
-          item.descricao_item || "",
-          item.unidade_medida || "",
-          Number(item.quantidade || 0).toFixed(2),
-        ])
-      );
-
-      renderMaterialSection(
-        "MATERIAL RETIRADO / SUCATA",
-        (contexto.sucata || []).map((item, index) => [
-          index + 1,
-          item.codigo_material,
-          item.descricao_item || "",
-          item.unidade_medida || "",
-          item.classificacao || "",
-          Number(item.quantidade || 0).toFixed(2),
-        ])
-      );
-
-      const rodapeRow = findRowByPredicate((value) => typeof value === "string" && value.includes("Planilha gerada em"));
-      if (rodapeRow) {
+      const rodapeRowNumber = findRowByText("Planilha gerada em");
+      if (rodapeRowNumber) {
+        const rodapeRow = sheet.getRow(rodapeRowNumber);
         rodapeRow.getCell(1).value = `Planilha gerada em ${new Date().toLocaleString("pt-BR")} | Sistema de Gestão de Obras`;
       }
 
@@ -2628,6 +2738,7 @@ export const WorkflowSteps = () => {
       setMaterialInfo("Excel gerado com sucesso!");
     } catch (error: any) {
       console.error("Erro ao exportar Excel", error);
+      alert(`Erro ao gerar Excel: ${error?.message || error}`);
       setMaterialError(`Erro ao gerar Excel: ${error?.message || error}`);
     }
   };
