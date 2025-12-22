@@ -1,31 +1,32 @@
 import trafoTemplateUrl from "@/assets/Book Fotográfico Empreiteiras - Trafos Queimados e Avariados - 9555.xlsx?url";
 
 export const TRAFO_PHOTO_SLOTS = [
-  { key: "estrutura_queimado", range: "B12:I12" },
-  { key: "circuito_bt", range: "K12:R12" },
-  { key: "trafo_retirado_frontal", range: "B14:I14" },
-  { key: "trafo_retirado_traseira", range: "K14:R14" },
-  { key: "trafo_retirado_lateral1", range: "B16:I16" },
-  { key: "trafo_retirado_lateral2", range: "K16:R16" },
-  { key: "trafo_retirado_superior", range: "B18:I18" },
-  { key: "placa_retirado", range: "K18:R18" },
-  { key: "para_raios_retirado", range: "B20:I20" },
-  { key: "aterramento_retirado", range: "K20:R20" },
-  { key: "foto_adicional_1", range: "B22:I22" },
-  { key: "foto_adicional_2", range: "K22:R22" },
-  { key: "trafo_instalado", range: "B25:I25" },
-  { key: "placa_instalada", range: "K25:R25" },
-  { key: "para_raios_instalado", range: "B27:I27" },
-  { key: "aterramento_instalado", range: "K27:R27" },
-  { key: "estrutura_nova", range: "B29:I29" },
-  { key: "medicoes_corrente", range: "K29:R29" },
-  { key: "medicoes_tensao", range: "B31:I31" },
-  { key: "medicao_aterramento", range: "K31:R31" },
+  { key: "estrutura_queimado", label: "Estrutura queimada", range: "B12:I12", imageRowCount: 1 },
+  { key: "circuito_bt", label: "Circuito BT", range: "K12:R12", imageRowCount: 1 },
+  { key: "trafo_retirado_frontal", label: "Trafo retirado (frontal)", range: "B14:I14", imageRowCount: 1 },
+  { key: "trafo_retirado_traseira", label: "Trafo retirado (traseira)", range: "K14:R14", imageRowCount: 1 },
+  { key: "trafo_retirado_lateral1", label: "Trafo retirado (lateral 1)", range: "B16:I16", imageRowCount: 1 },
+  { key: "trafo_retirado_lateral2", label: "Trafo retirado (lateral 2)", range: "K16:R16", imageRowCount: 1 },
+  { key: "trafo_retirado_superior", label: "Trafo retirado (superior)", range: "B18:I18", imageRowCount: 1 },
+  { key: "placa_retirado", label: "Placa retirado", range: "K18:R18", imageRowCount: 1 },
+  { key: "para_raios_retirado", label: "Pararraios retirado", range: "B20:I20", imageRowCount: 1 },
+  { key: "aterramento_retirado", label: "Aterramento retirado", range: "K20:R20", imageRowCount: 1 },
+  { key: "foto_adicional_1", label: "Foto adicional 1", range: "B22:I22", imageRowCount: 1 },
+  { key: "foto_adicional_2", label: "Foto adicional 2", range: "K22:R22", imageRowCount: 1 },
+  { key: "trafo_instalado", label: "Trafo instalado", range: "B25:I25", imageRowCount: 1 },
+  { key: "placa_instalada", label: "Placa instalada", range: "K25:R25", imageRowCount: 1 },
+  { key: "para_raios_instalado", label: "Pararraios instalado", range: "B27:I27", imageRowCount: 1 },
+  { key: "aterramento_instalado", label: "Aterramento instalado", range: "K27:R27", imageRowCount: 1 },
+  { key: "estrutura_nova", label: "Estrutura nova", range: "B29:I29", imageRowCount: 1 },
+  { key: "medicoes_corrente", label: "Medições de corrente", range: "K29:R29", imageRowCount: 1 },
+  { key: "medicoes_tensao", label: "Medições de tensão", range: "B31:I31", imageRowCount: 1 },
+  { key: "medicao_aterramento", label: "Medição aterramento", range: "K31:R31", imageRowCount: 1 },
 ] as const;
 
 export type TrafoPhotoKey = (typeof TRAFO_PHOTO_SLOTS)[number]["key"];
 
-const PHOTO_IMAGE_SCALE = 0.92;
+const PHOTO_IMAGE_SCALE = 0.7;
+const POINT_TO_EMU = 9525;
 
 const CM_TO_PIXELS = 37.7952755906;
 
@@ -163,17 +164,47 @@ export async function exportTrafoBookToExcel(payload: BookTrafoExportPayload) {
   setCellText(sheet, "N7", payload.bookTrafoData?.encarregado);
   setCellText(sheet, "E9", payload.bookTrafoData?.tipo_troca);
 
-  const addImageForRange = async (range: string, dataUrl?: string) => {
+  const fillIfPresent = (address: string, value?: string | number | null) => {
+    if (value !== null && value !== undefined && value !== "") {
+      setCellText(sheet, address, value);
+    }
+  };
+
+  const filledData = payload.bookTrafoData ?? {};
+  fillIfPresent("D37", filledData.tensao_an);
+  fillIfPresent("D38", filledData.tensao_bn);
+  fillIfPresent("D39", filledData.tensao_cn);
+  fillIfPresent("G37", filledData.tensao_ab);
+  fillIfPresent("G38", filledData.tensao_ca);
+  fillIfPresent("G39", filledData.tensao_bc);
+
+  const ensurePhotoRowHeight = (startRow: number, endRow: number, minHeight = 50) => {
+    for (let rowIndex = startRow; rowIndex <= endRow; rowIndex += 1) {
+      const row = sheet.getRow(rowIndex);
+      if (!row.height || row.height < minHeight) {
+        row.height = minHeight;
+      }
+    }
+  };
+
+  const addImageForRange = async (range: string, dataUrl?: string, imageRowCount = 4) => {
     if (!dataUrl) return;
     const borderedDataUrl = await drawImageWithBorder(dataUrl);
     const parsed = parseImageFromDataUrl(borderedDataUrl);
     if (!parsed) return;
     const rangeBounds = getRangeBounds(range);
+    const imageStartRow = rangeBounds.startRow + 1;
+    const imageEndRow = imageStartRow + Math.max(1, imageRowCount - 1);
+    ensurePhotoRowHeight(imageStartRow, imageEndRow);
     const imageWidth = sumColumnWidths(sheet, rangeBounds.startCol, rangeBounds.endCol) * PHOTO_IMAGE_SCALE;
-    const imageHeight = sumRowHeights(sheet, rangeBounds.startRow, rangeBounds.endRow) * PHOTO_IMAGE_SCALE;
+    const imageHeight = sumRowHeights(sheet, imageStartRow, imageEndRow) * PHOTO_IMAGE_SCALE;
     const imageId = workbook.addImage({ buffer: parsed.buffer, extension: parsed.extension });
     sheet.addImage(imageId, {
-      tl: { col: rangeBounds.startCol - 1, row: rangeBounds.startRow - 1 },
+      tl: {
+        col: rangeBounds.startCol - 1,
+        row: imageStartRow - 1,
+        offsetX: 10 * POINT_TO_EMU,
+      },
       ext: { width: imageWidth, height: imageHeight },
       editAs: "oneCell",
     });
@@ -182,8 +213,9 @@ export async function exportTrafoBookToExcel(payload: BookTrafoExportPayload) {
   const photos = payload.photos ?? ({} as Record<TrafoPhotoKey, string>);
   for (const slot of TRAFO_PHOTO_SLOTS) {
     if (photos[slot.key]) {
+      const rowCount = (slot as typeof TRAFO_PHOTO_SLOTS[number]).imageRowCount ?? 4;
       // eslint-disable-next-line no-await-in-loop
-      await addImageForRange(slot.range, photos[slot.key]);
+      await addImageForRange(slot.range, photos[slot.key], rowCount);
     }
   }
 

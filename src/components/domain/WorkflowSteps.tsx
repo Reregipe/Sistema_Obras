@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import logoEngeletrica from "@/assets/logo-engeletrica.png";
 import excelTemplateUrl from "@/assets/Orcamento_13132_LV_1766158955600.xlsx?url";
 
@@ -464,6 +464,8 @@ export const WorkflowSteps = () => {
   const [bookSaving, setBookSaving] = useState(false);
   const [bookError, setBookError] = useState<string | null>(null);
   const [bookInfo, setBookInfo] = useState<string | null>(null);
+  const [savingBookDitais, setSavingBookDitais] = useState(false);
+  const [savingBookTrafo, setSavingBookTrafo] = useState(false);
   const [bookForm, setBookForm] = useState({ ...emptyBookForm });
   const emptyBookDitais = {
     data_execucao: "",
@@ -525,6 +527,12 @@ export const WorkflowSteps = () => {
     return keys.some(hasValue);
   })();
 
+  const getBookStorageKey = (suffix: string) => {
+    const idAcionamento = selectedItem?.id_acionamento || selectedItem?.id;
+    if (!idAcionamento) return null;
+    return `book-${idAcionamento}-${suffix}`;
+  };
+
   const handleBookDitaisFieldChange = (
     field: keyof Omit<typeof emptyBookDitais, "fotos">,
     value: string
@@ -585,6 +593,111 @@ export const WorkflowSteps = () => {
     }));
   };
 
+  const removedPhotoKeys = useMemo(
+    () =>
+      new Set([
+        "trafo_retirado_frontal",
+        "trafo_retirado_traseira",
+        "trafo_retirado_lateral1",
+        "trafo_retirado_lateral2",
+        "trafo_retirado_superior",
+        "placa_retirado",
+        "para_raios_retirado",
+        "aterramento_retirado",
+        "foto_adicional_1",
+        "foto_adicional_2",
+      ]),
+    []
+  );
+  const installedPhotoKeys = useMemo(
+    () =>
+      new Set([
+        "trafo_instalado",
+        "placa_instalada",
+        "para_raios_instalado",
+        "aterramento_instalado",
+      ]),
+    []
+  );
+  const trafoInputRefs = useRef<Record<TrafoPhotoKey, HTMLInputElement | null>>({});
+  const triggerTrafoPhotoUpload = (key: TrafoPhotoKey) => {
+    trafoInputRefs.current[key]?.click();
+  };
+
+  const chunkSlots = (slots: (typeof trafoPhotoSlots)[number][]) => {
+    const rows: Array<(typeof trafoPhotoSlots)[number][]> = [];
+    for (let i = 0; i < slots.length; i += 2) {
+      rows.push(slots.slice(i, i + 2));
+    }
+    return rows;
+  };
+  const renderSlotRows = (slots: (typeof trafoPhotoSlots)[number][]) =>
+    chunkSlots(slots).map((row, rowIndex) => (
+      <div key={`trafo-row-${rowIndex}`} className="grid gap-4 sm:grid-cols-2">
+          {row.map((slot) => {
+            const photoValue = bookTrafoPhotos[slot.key];
+            return (
+              <div key={slot.key} className="rounded-xl border bg-card/80 p-3 space-y-2">
+                <div className="text-xs font-semibold text-muted-foreground">{slot.label}</div>
+                <div className="border border-dashed border-muted-foreground/40 rounded-md h-40 overflow-hidden bg-muted/20 flex items-center justify-center">
+                  {photoValue ? (
+                    <img src={photoValue} alt={slot.label} className="h-full w-full object-cover" />
+                  ) : (
+                    <span className="text-xs text-muted-foreground">Sem foto</span>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    ref={(el) => {
+                      trafoInputRefs.current[slot.key] = el;
+                    }}
+                    id={`trafo-photo-${slot.key}`}
+                    type="file"
+                    accept="image/*"
+                    className="sr-only"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      handleTrafoPhotoChange(slot.key, file);
+                      if (e.target) e.target.value = "";
+                    }}
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex-1"
+                    type="button"
+                    onClick={() => triggerTrafoPhotoUpload(slot.key)}
+                  >
+                    Enviar foto
+                  </Button>
+                  {photoValue && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      type="button"
+                      onClick={() => handleTrafoPhotoRemove(slot.key)}
+                    >
+                      Limpar
+                    </Button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+      </div>
+    ));
+  const generalTrafoSlots = useMemo(
+    () => trafoPhotoSlots.filter((slot) => !removedPhotoKeys.has(slot.key) && !installedPhotoKeys.has(slot.key)),
+    [installedPhotoKeys, removedPhotoKeys]
+  );
+  const removedTrafoSlots = useMemo(
+    () => trafoPhotoSlots.filter((slot) => removedPhotoKeys.has(slot.key)),
+    [removedPhotoKeys]
+  );
+  const installedTrafoSlots = useMemo(
+    () => trafoPhotoSlots.filter((slot) => installedPhotoKeys.has(slot.key)),
+    [installedPhotoKeys]
+  );
   const handleExportBookTrafo = async () => {
     if (!bookTrafoData && !selectedItem) {
       setBookError("Dados de transformador indisponíveis.");
@@ -625,6 +738,50 @@ export const WorkflowSteps = () => {
       setBookInfo("Planilha de DITAIS gerada com sucesso. Verifique seus downloads.");
     } catch (error: any) {
       setBookError(error?.message || "Erro ao exportar os DITAIS.");
+    }
+  };
+
+  const handleSaveBookDitais = () => {
+    const storageKey = getBookStorageKey("ditais");
+    if (!storageKey) {
+      setBookError("ID do acionamento não encontrado.");
+      return;
+    }
+    setSavingBookDitais(true);
+    setBookError(null);
+    setBookInfo(null);
+    try {
+      const storage =
+        typeof window !== "undefined" ? window.localStorage : null;
+      if (!storage) throw new Error("Armazenamento local indisponível.");
+      storage.setItem(storageKey, JSON.stringify(bookDitais));
+      setBookInfo("Informações dos DITAIS salvas localmente.");
+    } catch (error: any) {
+      setBookError(error?.message || "Erro ao salvar os DITAIS.");
+    } finally {
+      setSavingBookDitais(false);
+    }
+  };
+
+  const handleSaveBookTrafo = () => {
+    const storageKey = getBookStorageKey("trafo-photos");
+    if (!storageKey) {
+      setBookError("ID do acionamento não encontrado.");
+      return;
+    }
+    setSavingBookTrafo(true);
+    setBookError(null);
+    setBookInfo(null);
+    try {
+      const storage =
+        typeof window !== "undefined" ? window.localStorage : null;
+      if (!storage) throw new Error("Armazenamento local indisponível.");
+      storage.setItem(storageKey, JSON.stringify(bookTrafoPhotos));
+      setBookInfo("Fotos do trafo salvas localmente.");
+    } catch (error: any) {
+      setBookError(error?.message || "Erro ao salvar as fotos do trafo.");
+    } finally {
+      setSavingBookTrafo(false);
     }
   };
 
@@ -833,18 +990,66 @@ export const WorkflowSteps = () => {
 
   useEffect(() => {
     if (!bookModalOpen || !selectedItem) return;
-    setBookDitais((prev) => ({
-      ...prev,
+
+    const baseDitais = {
+      ...emptyBookDitais,
       data_execucao:
         toInputDateTime(selectedItem.data_execucao || selectedItem.data_abertura) ||
-        prev.data_execucao,
-      numero_obra:
-        `AC${selectedItem.codigo_acionamento || selectedItem.id_acionamento || ""}`.trim() ||
-        prev.numero_obra,
-      municipio: selectedItem.municipio || prev.municipio,
-      responsavel: selectedItem.encarregado || prev.responsavel,
+        emptyBookDitais.data_execucao,
+      numero_obra: `AC${selectedItem.codigo_acionamento || selectedItem.id_acionamento || ""}`.trim() || "",
+      municipio: selectedItem.municipio || "",
+      responsavel: selectedItem.encarregado || "",
       regional: "METROPOLITANA",
-    }));
+    };
+
+    const storage =
+      typeof window !== "undefined" ? window.localStorage : null;
+    const ditaisStorageKey = getBookStorageKey("ditais");
+    let mergedDitais = baseDitais;
+
+    if (storage && ditaisStorageKey) {
+      const savedData = storage.getItem(ditaisStorageKey);
+      if (savedData) {
+        try {
+          const parsed = JSON.parse(savedData);
+          if (parsed && typeof parsed === "object") {
+            const { fotos: savedFotos, ...rest } = parsed;
+            mergedDitais = {
+              ...mergedDitais,
+              ...rest,
+              fotos:
+                savedFotos && typeof savedFotos === "object"
+                  ? { ...mergedDitais.fotos, ...savedFotos }
+                  : mergedDitais.fotos,
+            };
+          }
+        } catch (error) {
+          console.warn("Não foi possível restaurar dados salvos dos DITAIS.", error);
+        }
+      }
+    }
+
+    setBookDitais(mergedDitais);
+
+    const trafoStorageKey = getBookStorageKey("trafo-photos");
+    const initialPhotos = initialTrafoPhotos;
+    let nextTrafoPhotos = initialPhotos;
+
+    if (storage && trafoStorageKey) {
+      const savedPhotos = storage.getItem(trafoStorageKey);
+      if (savedPhotos) {
+        try {
+          const parsed = JSON.parse(savedPhotos);
+          if (parsed && typeof parsed === "object") {
+            nextTrafoPhotos = { ...initialPhotos, ...parsed };
+          }
+        } catch (error) {
+          console.warn("Não foi possível restaurar fotos salvas do trafo.", error);
+        }
+      }
+    }
+
+    setBookTrafoPhotos(nextTrafoPhotos);
   }, [bookModalOpen, selectedItem]);
 
   const openMedicaoModal = async (item: any) => {
@@ -6166,7 +6371,17 @@ export const WorkflowSteps = () => {
                   </div>
                 </div>
 
-                <div className="flex justify-end">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={handleSaveBookDitais}
+                      disabled={savingBookDitais}
+                      type="button"
+                    >
+                      {savingBookDitais ? "Salvando..." : "Salvar DITAIS"}
+                    </Button>
+                  </div>
                   <Button onClick={handleExportBookDitais}>Exportar DITAIS</Button>
                 </div>
               </div>
@@ -6174,133 +6389,124 @@ export const WorkflowSteps = () => {
 
             {hasBookTrafoInfo && (
               <TabsContent value="trafo">
-                {bookTrafoData ? (
-                  <div className="space-y-6">
-                    {typeof bookTrafoData.troca_transformador === "boolean" && (
-                      <div className="rounded-md border px-3 py-2 bg-muted/40 flex items-center gap-2">
-                        <span className="text-xs font-semibold text-muted-foreground">
-                          Troca de transformador
-                        </span>
-                        <span className="ml-auto text-sm font-semibold text-foreground">
-                          {bookTrafoData.troca_transformador ? "Sim" : "Não"}
-                        </span>
-                      </div>
-                    )}
-                    {[
-                      {
-                        label: "Marca",
-                        retirado: bookTrafoData.trafo_ret_marca,
-                        instalado: bookTrafoData.trafo_inst_marca,
-                      },
-                      {
-                        label: "Potência",
-                        retirado: bookTrafoData.trafo_ret_potencia,
-                        instalado: bookTrafoData.trafo_inst_potencia,
-                      },
-                      {
-                        label: "Nº de série",
-                        retirado: bookTrafoData.trafo_ret_numero_serie,
-                        instalado: bookTrafoData.trafo_inst_numero_serie,
-                      },
-                      {
-                        label: "Tensão primária",
-                        retirado: bookTrafoData.trafo_ret_tensao_primaria,
-                        instalado: bookTrafoData.trafo_inst_tensao_primaria,
-                      },
-                      {
-                        label: "Tensão secundária",
-                        retirado: bookTrafoData.trafo_ret_tensao_secundaria,
-                        instalado: bookTrafoData.trafo_inst_tensao_secundaria,
-                      },
-                      {
-                        label: "Fabricado",
-                        retirado: bookTrafoData.trafo_ret_ano,
-                        instalado: bookTrafoData.trafo_inst_ano,
-                      },
-                      {
-                        label: "Patrimônio",
-                        retirado: bookTrafoData.trafo_ret_patrimonio,
-                        instalado: bookTrafoData.trafo_inst_patrimonio,
-                      },
-                    ].map((row) => {
-                      const formatValue = (value: any) =>
-                        value === null ||
-                        value === undefined ||
-                        (typeof value === "string" && value.trim().length === 0)
-                          ? "--"
-                          : value;
-                      return (
-                        <div key={row.label} className="grid grid-cols-[1fr_1fr_1fr] gap-3">
-                          <div className="text-xs font-semibold uppercase text-muted-foreground">
-                            {row.label}
+                <div className="space-y-6 max-h-[70vh] overflow-y-auto pr-2 pb-4">
+                  {bookTrafoData ? (
+                    <div className="space-y-6">
+                      {typeof bookTrafoData.troca_transformador === "boolean" && (
+                        <div className="rounded-md border px-3 py-2 bg-muted/40 flex items-center gap-2">
+                          <span className="text-xs font-semibold text-muted-foreground">
+                            Troca de transformador
+                          </span>
+                          <span className="ml-auto text-sm font-semibold text-foreground">
+                            {bookTrafoData.troca_transformador ? "Sim" : "Não"}
+                          </span>
+                        </div>
+                      )}
+                      {[
+                        {
+                          label: "Marca",
+                          retirado: bookTrafoData.trafo_ret_marca,
+                          instalado: bookTrafoData.trafo_inst_marca,
+                        },
+                        {
+                          label: "Potência",
+                          retirado: bookTrafoData.trafo_ret_potencia,
+                          instalado: bookTrafoData.trafo_inst_potencia,
+                        },
+                        {
+                          label: "Nº de série",
+                          retirado: bookTrafoData.trafo_ret_numero_serie,
+                          instalado: bookTrafoData.trafo_inst_numero_serie,
+                        },
+                        {
+                          label: "Tensão primária",
+                          retirado: bookTrafoData.trafo_ret_tensao_primaria,
+                          instalado: bookTrafoData.trafo_inst_tensao_primaria,
+                        },
+                        {
+                          label: "Tensão secundária",
+                          retirado: bookTrafoData.trafo_ret_tensao_secundaria,
+                          instalado: bookTrafoData.trafo_inst_tensao_secundaria,
+                        },
+                        {
+                          label: "Fabricado",
+                          retirado: bookTrafoData.trafo_ret_ano,
+                          instalado: bookTrafoData.trafo_inst_ano,
+                        },
+                        {
+                          label: "Patrimônio",
+                          retirado: bookTrafoData.trafo_ret_patrimonio,
+                          instalado: bookTrafoData.trafo_inst_patrimonio,
+                        },
+                      ].map((row) => {
+                        const formatValue = (value: any) =>
+                          value === null ||
+                          value === undefined ||
+                          (typeof value === "string" && value.trim().length === 0)
+                            ? "--"
+                            : value;
+                        return (
+                          <div key={row.label} className="grid grid-cols-[1fr_1fr_1fr] gap-3">
+                            <div className="text-xs font-semibold uppercase text-muted-foreground">
+                              {row.label}
+                            </div>
+                            <div className="rounded-md border px-3 py-2 text-sm text-foreground bg-muted/40">
+                              {formatValue(row.retirado)}
+                            </div>
+                            <div className="rounded-md border px-3 py-2 text-sm text-foreground bg-muted/40">
+                              {formatValue(row.instalado)}
+                            </div>
                           </div>
-                          <div className="rounded-md border px-3 py-2 text-sm text-foreground bg-muted/40">
-                            {formatValue(row.retirado)}
-                          </div>
-                          <div className="rounded-md border px-3 py-2 text-sm text-foreground bg-muted/40">
-                            {formatValue(row.instalado)}
+                        );
+                      })}
+
+                      <div className="space-y-4">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                          <div className="text-sm font-semibold">Fotos do trafo</div>
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              onClick={handleSaveBookTrafo}
+                              disabled={savingBookTrafo}
+                              type="button"
+                            >
+                              {savingBookTrafo ? "Salvando..." : "Salvar trafo"}
+                            </Button>
+                            <Button onClick={handleExportBookTrafo}>Exportar trafo</Button>
                           </div>
                         </div>
-                      );
-                    })}
-
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <div className="text-sm font-semibold">Fotos do trafo</div>
-                        <Button onClick={handleExportBookTrafo}>Exportar trafo</Button>
-                      </div>
-                      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                        {trafoPhotoSlots.map((slot) => {
-                          const photoValue = bookTrafoPhotos[slot.key];
-                          return (
-                            <div key={slot.key} className="rounded-xl border bg-card/80 p-3 space-y-2">
-                              <div className="text-xs font-semibold text-muted-foreground">{slot.label}</div>
-                              <div className="border border-dashed border-muted-foreground/40 rounded-md h-40 overflow-hidden bg-muted/20 flex items-center justify-center">
-                                {photoValue ? (
-                                  <img src={photoValue} alt={slot.label} className="h-full w-full object-cover" />
-                                ) : (
-                                  <span className="text-xs text-muted-foreground">Sem foto</span>
-                                )}
+                        <div className="space-y-6">
+                          {installedTrafoSlots.length > 0 && (
+                            <div className="space-y-3">
+                              <div className="text-xs font-semibold uppercase text-muted-foreground">
+                                Transformador instalado
                               </div>
-                              <div className="flex gap-2">
-                                <input
-                                  id={`trafo-photo-${slot.key}`}
-                                  type="file"
-                                  accept="image/*"
-                                  className="sr-only"
-                                  onChange={(e) => {
-                                    const file = e.target.files?.[0];
-                                    handleTrafoPhotoChange(slot.key, file);
-                                    if (e.target) e.target.value = "";
-                                  }}
-                                />
-                                <label htmlFor={`trafo-photo-${slot.key}`} className="flex-1">
-                                  <Button variant="outline" size="sm" className="w-full" type="button">
-                                    Enviar foto
-                                  </Button>
-                                </label>
-                                {photoValue && (
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    type="button"
-                                    onClick={() => handleTrafoPhotoRemove(slot.key)}
-                                  >
-                                    Limpar
-                                  </Button>
-                                )}
-                              </div>
+                              <div className="space-y-4">{renderSlotRows(installedTrafoSlots)}</div>
                             </div>
-                          );
-                        })}
+                          )}
+                          {removedTrafoSlots.length > 0 && (
+                            <div className="space-y-3">
+                              <div className="text-xs font-semibold uppercase text-muted-foreground">
+                                Transformador retirado
+                              </div>
+                              <div className="space-y-4">{renderSlotRows(removedTrafoSlots)}</div>
+                            </div>
+                          )}
+                          {generalTrafoSlots.length > 0 && (
+                            <div className="space-y-3">
+                              <div className="text-xs font-semibold uppercase text-muted-foreground">Outras fotos</div>
+                              <div className="space-y-4">{renderSlotRows(generalTrafoSlots)}</div>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ) : (
-                  <div className="text-sm text-muted-foreground">
-                    Sem dados de transformador cadastrados.
-                  </div>
-                )}
+                  ) : (
+                    <div className="text-sm text-muted-foreground">
+                      Sem dados de transformador cadastrados.
+                    </div>
+                  )}
+                </div>
               </TabsContent>
             )}
           </Tabs>
