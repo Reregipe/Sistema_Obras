@@ -2579,7 +2579,7 @@ export const WorkflowSteps = () => {
       };
 
 
-      const fillLinhaVivaMoRows = (items: any[]) => {
+      const fillLinhaVivaMoRows = (items: any[], valorUpsReferencia: number) => {
         const moStartRow = 21;
         const moFooterRowStart = 37;
         const baseRow = sheet.getRow(moStartRow);
@@ -2626,6 +2626,24 @@ export const WorkflowSteps = () => {
               "";
             const descCell = row.getCell("C");
             descCell.value = descriptionValue;
+            const unidadeValue =
+              items[idx].unidade ||
+              items[idx].unidade_medida ||
+              items[idx].unidade_medida_cons ||
+              "";
+            const unidadeCell = row.getCell("S");
+            const unidadeAlreadyFormula = getFormulaText(unidadeCell);
+            if (!unidadeAlreadyFormula) {
+              unidadeCell.value = unidadeValue;
+            }
+            const valorUnitarioCell = row.getCell("T");
+            const valorUnitarioFormula = getFormulaText(valorUnitarioCell);
+            if (!valorUnitarioFormula) {
+              const upsQtd = Number(items[idx].upsQtd ?? 0);
+              const valorUnitarioValue = upsQtd * valorUpsReferencia;
+              valorUnitarioCell.value = Number.isFinite(valorUnitarioValue) ? valorUnitarioValue : null;
+              valorUnitarioCell.numFmt = "#,##0.00";
+            }
           } else {
             row.getCell("B").value = null;
             row.getCell("C").value = null;
@@ -2857,7 +2875,8 @@ export const WorkflowSteps = () => {
         sheet.getCell("AB8").value = contexto.osTabletTexto || "";
         sheet.getCell("K5").value = contexto.dadosExec?.km_inicial || "";
         sheet.getCell("N5").value = contexto.dadosExec?.km_final || "";
-        fillLinhaVivaMoRows(resumoMO.itensCalculados);
+        const valorUpsReferencia = contexto.medicaoTab === "LV" ? contexto.medicaoValorUpsLV : contexto.medicaoValorUpsLM;
+        fillLinhaVivaMoRows(resumoMO.itensCalculados, valorUpsReferencia);
       }
 
       const findRowByText = (text: string) => {
