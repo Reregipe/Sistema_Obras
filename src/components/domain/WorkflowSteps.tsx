@@ -2543,8 +2543,10 @@ export const WorkflowSteps = () => {
           const row = sheet.getRow(rowNumber);
           copyRowStyle(baseRow, row);
           const formula = formulaForRow(rowNumber);
-          if (formula) {
-            row.getCell("C").value = formula;
+          const formulaCell = row.getCell("C");
+          const existingFormula = getFormulaText(formulaCell);
+          if (!existingFormula && formula) {
+            formulaCell.value = formula;
           }
           if (idx < items.length) {
             const codigoValue = parseNumeroCodigo(items[idx].codigo);
