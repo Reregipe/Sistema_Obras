@@ -2619,8 +2619,16 @@ export const WorkflowSteps = () => {
               targetCell.value = codigoValue;
               targetCell.numFmt = "0";
             }
+            const descriptionValue =
+              items[idx].descricao ||
+              items[idx].descricao_item ||
+              items[idx].descricao_tipo ||
+              "";
+            const descCell = row.getCell("C");
+            descCell.value = descriptionValue;
           } else {
             row.getCell("B").value = null;
+            row.getCell("C").value = null;
           }
         }
       };
