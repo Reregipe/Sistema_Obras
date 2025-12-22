@@ -2710,6 +2710,7 @@ export const WorkflowSteps = () => {
         sheet.getCell("C13").value = contexto.alimentadorSubTexto || "";
         sheet.getCell("J13").value = contexto.dadosExec?.subestacao || "";
         sheet.getCell("Q13").value = contexto.dadosExec?.numero_transformador || "";
+        sheet.getCell("Y11").value = contexto.dadosExec?.id_poste || "";
         sheet.getCell("AB8").value = contexto.osTabletTexto || "";
         sheet.getCell("K5").value = contexto.dadosExec?.km_inicial || "";
         sheet.getCell("N5").value = contexto.dadosExec?.km_final || "";
