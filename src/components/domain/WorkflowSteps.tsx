@@ -2694,13 +2694,22 @@ export const WorkflowSteps = () => {
       }
 
       if (isLinhaVivaExport) {
-        sheet.getCell("U5").value = contexto.dataExecucaoTexto || "";
+        const executionDate = parseDateForExcel(contexto.dataExecucaoTexto);
+        const dateCell = sheet.getCell("U5");
+        if (executionDate) {
+          dateCell.value = executionDate;
+          dateCell.numFmt = "dd/mm/yyyy";
+        } else {
+          dateCell.value = contexto.dataExecucaoTexto || "";
+        }
         sheet.getCell("AH5").value = contexto.codigoAcionamento || "";
         sheet.getCell("AH12").value = contexto.numeroIntervencaoTexto || "";
         sheet.getCell("C5").value = contexto.equipeTexto || "";
         sheet.getCell("E11").value = contexto.encarregadoTexto || "";
         sheet.getCell("C8").value = contexto.enderecoTexto || "";
         sheet.getCell("C13").value = contexto.alimentadorSubTexto || "";
+        sheet.getCell("J13").value = contexto.dadosExec?.subestacao || "";
+        sheet.getCell("Q13").value = contexto.dadosExec?.numero_transformador || "";
         sheet.getCell("AB8").value = contexto.osTabletTexto || "";
         sheet.getCell("K5").value = contexto.dadosExec?.km_inicial || "";
         sheet.getCell("N5").value = contexto.dadosExec?.km_final || "";
@@ -5492,6 +5501,17 @@ export const WorkflowSteps = () => {
     if (!date) return "--";
     const d = new Date(date);
     return isNaN(d.getTime()) ? "--" : d.toLocaleString("pt-BR");
+  };
+
+  const parseDateForExcel = (input?: string | null) => {
+    if (!input) return null;
+    const normalized = input.trim();
+    const iso = new Date(normalized);
+    if (!isNaN(iso.getTime())) return iso;
+    const match = normalized.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+    if (!match) return null;
+    const [, day, month, year] = match;
+    return new Date(Number(year), Number(month) - 1, Number(day));
   };
 
 
