@@ -2644,6 +2644,15 @@ export const WorkflowSteps = () => {
               valorUnitarioCell.value = Number.isFinite(valorUnitarioValue) ? valorUnitarioValue : null;
               valorUnitarioCell.numFmt = "#,##0.00";
             }
+            const quantidadeCell = row.getCell("AJ");
+            const quantidadeFormula = getFormulaText(quantidadeCell);
+            if (!quantidadeFormula) {
+              const quantidadeValue =
+                Number(items[idx].quantidade ?? items[idx].qtde ?? items[idx].qtd ?? 0) ||
+                Number(items[idx].quantidade_prevista ?? 0);
+              quantidadeCell.value = Number.isFinite(quantidadeValue) ? quantidadeValue : null;
+              quantidadeCell.numFmt = "#,##0.00";
+            }
           } else {
             row.getCell("B").value = null;
             row.getCell("C").value = null;
