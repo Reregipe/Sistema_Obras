@@ -26,6 +26,7 @@ import { Label } from "@/components/ui/label";
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { exportBookToExcel } from "@/utils/exportBookToExcel";
+import { exportTrafoBookToExcel, trafoPhotoSlots, TrafoPhotoKey } from "@/utils/exportTrafoBookToExcel";
 
 import jsPDF from "jspdf";
 
@@ -557,6 +558,50 @@ export const WorkflowSteps = () => {
         [key]: "",
       },
     }));
+  };
+
+  const initialTrafoPhotos = trafoPhotoSlots.reduce<Record<TrafoPhotoKey, string>>((acc, slot) => {
+    acc[slot.key] = "";
+    return acc;
+  }, {} as Record<TrafoPhotoKey, string>);
+  const [bookTrafoPhotos, setBookTrafoPhotos] = useState<Record<TrafoPhotoKey, string>>(initialTrafoPhotos);
+
+  const handleTrafoPhotoChange = (key: TrafoPhotoKey, file?: File) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      setBookTrafoPhotos((prev) => ({
+        ...prev,
+        [key]: reader.result as string,
+      }));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleTrafoPhotoRemove = (key: TrafoPhotoKey) => {
+    setBookTrafoPhotos((prev) => ({
+      ...prev,
+      [key]: "",
+    }));
+  };
+
+  const handleExportBookTrafo = async () => {
+    if (!bookTrafoData && !selectedItem) {
+      setBookError("Dados de transformador indisponíveis.");
+      return;
+    }
+    setBookError(null);
+    setBookInfo(null);
+    try {
+      await exportTrafoBookToExcel({
+        selectedItem,
+        bookTrafoData,
+        photos: bookTrafoPhotos,
+      });
+      setBookInfo("Planilha de trafo gerada com sucesso.");
+    } catch (error: any) {
+      setBookError(error?.message || "Erro ao exportar o modelo de trafo.");
+    }
   };
 
   const handleExportBookDitais = async () => {
@@ -4929,6 +4974,7 @@ export const WorkflowSteps = () => {
     setBookTab("book");
     setBookTrafoData(null);
     setBookDitais({ ...emptyBookDitais });
+    setBookTrafoPhotos(initialTrafoPhotos);
   };
 
   const salvarDadosBook = async () => {
@@ -6129,7 +6175,7 @@ export const WorkflowSteps = () => {
             {hasBookTrafoInfo && (
               <TabsContent value="trafo">
                 {bookTrafoData ? (
-                  <div className="space-y-4">
+                  <div className="space-y-6">
                     {typeof bookTrafoData.troca_transformador === "boolean" && (
                       <div className="rounded-md border px-3 py-2 bg-muted/40 flex items-center gap-2">
                         <span className="text-xs font-semibold text-muted-foreground">
@@ -6197,6 +6243,58 @@ export const WorkflowSteps = () => {
                         </div>
                       );
                     })}
+
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="text-sm font-semibold">Fotos do trafo</div>
+                        <Button onClick={handleExportBookTrafo}>Exportar trafo</Button>
+                      </div>
+                      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                        {trafoPhotoSlots.map((slot) => {
+                          const photoValue = bookTrafoPhotos[slot.key];
+                          return (
+                            <div key={slot.key} className="rounded-xl border bg-card/80 p-3 space-y-2">
+                              <div className="text-xs font-semibold text-muted-foreground">{slot.label}</div>
+                              <div className="border border-dashed border-muted-foreground/40 rounded-md h-40 overflow-hidden bg-muted/20 flex items-center justify-center">
+                                {photoValue ? (
+                                  <img src={photoValue} alt={slot.label} className="h-full w-full object-cover" />
+                                ) : (
+                                  <span className="text-xs text-muted-foreground">Sem foto</span>
+                                )}
+                              </div>
+                              <div className="flex gap-2">
+                                <input
+                                  id={`trafo-photo-${slot.key}`}
+                                  type="file"
+                                  accept="image/*"
+                                  className="sr-only"
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    handleTrafoPhotoChange(slot.key, file);
+                                    if (e.target) e.target.value = "";
+                                  }}
+                                />
+                                <label htmlFor={`trafo-photo-${slot.key}`} className="flex-1">
+                                  <Button variant="outline" size="sm" className="w-full" type="button">
+                                    Enviar foto
+                                  </Button>
+                                </label>
+                                {photoValue && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    type="button"
+                                    onClick={() => handleTrafoPhotoRemove(slot.key)}
+                                  >
+                                    Limpar
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
                   </div>
                 ) : (
                   <div className="text-sm text-muted-foreground">
