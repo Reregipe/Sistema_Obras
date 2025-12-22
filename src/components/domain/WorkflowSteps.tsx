@@ -2491,6 +2491,61 @@ export const WorkflowSteps = () => {
         targetRow.getCell(match.col).value = value ?? "";
       };
 
+      const getFormulaText = (cell: any) => {
+        if (!cell) return null;
+        if (typeof cell.value === "string" && cell.value.startsWith("=")) return cell.value;
+        if (cell.formula) return `=${cell.formula}`;
+        return null;
+      };
+
+      const copyRowStyle = (sourceRow: any, targetRow: any) => {
+        targetRow.height = sourceRow.height;
+        sourceRow.eachCell({ includeEmpty: true }, (sourceCell: any, col: number) => {
+          const targetCell = targetRow.getCell(col);
+          targetCell.font = sourceCell.font;
+          targetCell.fill = sourceCell.fill;
+          targetCell.border = sourceCell.border;
+          targetCell.alignment = sourceCell.alignment;
+          targetCell.numFmt = sourceCell.numFmt;
+        });
+      };
+
+      const fillLinhaVivaMoRows = (items: any[]) => {
+        const moStartRow = 21;
+        const moFooterRowStart = 37;
+        const baseRow = sheet.getRow(moStartRow);
+        const baseFormula = getFormulaText(baseRow.getCell("C"));
+        const baseCapacity = moFooterRowStart - moStartRow;
+        const extraRows = Math.max(0, items.length - baseCapacity);
+        let footerRow = moFooterRowStart;
+        for (let i = 0; i < extraRows; i += 1) {
+          sheet.spliceRows(footerRow, 0, []);
+          const newRow = sheet.getRow(footerRow);
+          copyRowStyle(baseRow, newRow);
+          if (baseFormula) {
+            newRow.getCell("C").value = baseFormula.replace(/B\d+/g, `B${footerRow}`);
+          }
+          footerRow += 1;
+        }
+        const totalRows = footerRow - moStartRow;
+        const formulaForRow = (rowNumber: number) =>
+          baseFormula ? baseFormula.replace(/B\d+/g, `B${rowNumber}`) : null;
+        for (let idx = 0; idx < totalRows; idx += 1) {
+          const rowNumber = moStartRow + idx;
+          const row = sheet.getRow(rowNumber);
+          copyRowStyle(baseRow, row);
+          const formula = formulaForRow(rowNumber);
+          if (formula) {
+            row.getCell("C").value = formula;
+          }
+          if (idx < items.length) {
+            row.getCell("B").value = items[idx].codigo || "";
+          } else {
+            row.getCell("B").value = null;
+          }
+        }
+      };
+
       const isLinhaVivaExport = contexto.pdfModalidade === "LV";
 
       if (!isLinhaVivaExport) {
@@ -2715,6 +2770,7 @@ export const WorkflowSteps = () => {
         sheet.getCell("AB8").value = contexto.osTabletTexto || "";
         sheet.getCell("K5").value = contexto.dadosExec?.km_inicial || "";
         sheet.getCell("N5").value = contexto.dadosExec?.km_final || "";
+        fillLinhaVivaMoRows(resumoMO.itensCalculados);
       }
 
       const findRowByText = (text: string) => {
