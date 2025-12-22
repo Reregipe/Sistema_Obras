@@ -2626,6 +2626,8 @@ export const WorkflowSteps = () => {
               "";
             const descCell = row.getCell("C");
             descCell.value = descriptionValue;
+            const upsQtd = Number(items[idx].upsQtd ?? 0);
+            const valorUnitarioValue = upsQtd * valorUpsReferencia;
             const unidadeValue =
               items[idx].unidade ||
               items[idx].unidade_medida ||
@@ -2639,19 +2641,24 @@ export const WorkflowSteps = () => {
             const valorUnitarioCell = row.getCell("T");
             const valorUnitarioFormula = getFormulaText(valorUnitarioCell);
             if (!valorUnitarioFormula) {
-              const upsQtd = Number(items[idx].upsQtd ?? 0);
-              const valorUnitarioValue = upsQtd * valorUpsReferencia;
               valorUnitarioCell.value = Number.isFinite(valorUnitarioValue) ? valorUnitarioValue : null;
               valorUnitarioCell.numFmt = "#,##0.00";
             }
+            const quantidadeValue =
+              Number(items[idx].quantidade ?? items[idx].qtde ?? items[idx].qtd ?? 0) ||
+              Number(items[idx].quantidade_prevista ?? 0);
             const quantidadeCell = row.getCell("AJ");
             const quantidadeFormula = getFormulaText(quantidadeCell);
             if (!quantidadeFormula) {
-              const quantidadeValue =
-                Number(items[idx].quantidade ?? items[idx].qtde ?? items[idx].qtd ?? 0) ||
-                Number(items[idx].quantidade_prevista ?? 0);
               quantidadeCell.value = Number.isFinite(quantidadeValue) ? quantidadeValue : null;
               quantidadeCell.numFmt = "#,##0.00";
+            }
+            const valorItemCell = row.getCell("AK");
+            const valorItemFormula = getFormulaText(valorItemCell);
+            if (!valorItemFormula) {
+              const totalValue = quantidadeValue * valorUnitarioValue;
+              valorItemCell.value = Number.isFinite(totalValue) ? totalValue : null;
+              valorItemCell.numFmt = "#,##0.00";
             }
           } else {
             row.getCell("B").value = null;
