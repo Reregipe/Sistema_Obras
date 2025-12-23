@@ -2667,111 +2667,6 @@ export const WorkflowSteps = () => {
         }
       };
 
-      const fillMaterialRows = (
-        items: any[],
-        startRow: number,
-        options: {
-          baseCapacity?: number;
-          codeColumn?: string;
-          descriptionColumn?: string | null;
-          writeDescription?: boolean;
-          unitColumn?: string | null;
-          quantityColumn?: string | null;
-          classificationMap?: Record<string, string>;
-        } = {}
-      ) => {
-        const {
-          baseCapacity = 15,
-          codeColumn = "C",
-          descriptionColumn = "C",
-          writeDescription = true,
-          unitColumn,
-          quantityColumn = "AK",
-          classificationMap = {},
-        } = options;
-        const baseRow = sheet.getRow(startRow);
-        const extraRows = Math.max(0, items.length - baseCapacity);
-        for (let i = 0; i < extraRows; i += 1) {
-          const insertRowNumber = startRow + baseCapacity + i;
-          sheet.spliceRows(insertRowNumber, 0, []);
-          const newRow = sheet.getRow(insertRowNumber);
-          copyRowStyle(baseRow, newRow);
-        }
-        const totalRows = Math.max(items.length, baseCapacity);
-        for (let idx = 0; idx < totalRows; idx += 1) {
-          const rowNumber = startRow + idx;
-          const row = sheet.getRow(rowNumber);
-          const codeCell = row.getCell(codeColumn);
-          const quantityCell = quantityColumn ? row.getCell(quantityColumn) : null;
-          const descriptionCell =
-            descriptionColumn && writeDescription ? row.getCell(descriptionColumn) : null;
-          const unitCell = unitColumn ? row.getCell(unitColumn) : null;
-          const hasItem = idx < items.length;
-          row.getCell("B").value = hasItem ? idx + 1 : null;
-          if (hasItem) {
-            const material = items[idx];
-            const codigoValue = parseNumeroCodigo(material.codigo_material || material.codigo);
-            if (codigoValue === null) {
-              codeCell.value = material.codigo_material || material.codigo || "";
-              codeCell.numFmt = "@";
-            } else {
-              codeCell.value = codigoValue;
-              codeCell.numFmt = "0";
-            }
-            if (descriptionCell) {
-              const descriptionValue =
-                material.descricao_item ||
-                material.descricao ||
-                material.nome ||
-                "";
-              descriptionCell.value = descriptionValue;
-            }
-            if (unitCell) {
-              const unitFormula = getFormulaText(unitCell);
-              if (!unitFormula) {
-                unitCell.value =
-                  material.unidade_medida ||
-                  material.unidade ||
-                  material.unidade_medida_cons ||
-                  "";
-              }
-            }
-            if (quantityCell) {
-              const quantidadeValue = Number(
-                material.quantidade ?? material.quantidade_aplicada ?? material.quantidade_retirada ?? 0
-              );
-              const quantityFormula = getFormulaText(quantityCell);
-              if (!quantityFormula) {
-                quantityCell.value = Number.isFinite(quantidadeValue) ? quantidadeValue : null;
-              } else {
-                quantityCell.value = Number.isFinite(quantidadeValue) ? quantidadeValue : null;
-              }
-              quantityCell.numFmt = "#,##0.00";
-            }
-            const classificationValue = (material.classificacao || "").toString().trim().toUpperCase();
-            Object.entries(classificationMap).forEach(([key, column]) => {
-              const cell = row.getCell(column);
-              cell.value = classificationValue === key.toUpperCase() ? "X" : null;
-            });
-          } else {
-            codeCell.value = null;
-            if (descriptionCell) {
-              descriptionCell.value = null;
-            }
-            if (unitCell) {
-              const unitFormula = getFormulaText(unitCell);
-              if (!unitFormula) {
-                unitCell.value = null;
-              }
-            }
-            if (quantityCell) {
-              quantityCell.value = null;
-            }
-            Object.values(classificationMap).forEach((column) => row.getCell(column).value = null);
-          }
-        }
-      };
-
       const isLinhaVivaExport = contexto.pdfModalidade === "LV";
       const isForaHC = contexto.medicaoForaHC;
 
@@ -2919,10 +2814,37 @@ export const WorkflowSteps = () => {
         fillAdicionalRow(additionRow30?.row ?? null, isForaHC);
         fillAdicionalRow(additionRow12?.row ?? null, !isForaHC);
 
-        const fillDescriptionCells = (row: any, text: string) => {
-          descriptionColumns.forEach((column) => {
-            row.getCell(column).value = text || "";
-          });
+        const fillMaterialSection = (label: string, items: any[]) => {
+          const labelCell = findCellByLabel(label);
+          if (!labelCell) return;
+          const dataStart = labelCell.row + 2;
+          const capacity = Math.min(12, sheet.rowCount - dataStart + 1);
+          if (capacity <= 0) return;
+          const sampleStyles = captureRowStyles(sheet.getRow(dataStart));
+          for (let index = 0; index < capacity; index++) {
+            const row = sheet.getRow(dataStart + index);
+            applyRowStyles(row, sampleStyles);
+            if (index >= items.length) {
+              row.eachCell({ includeEmpty: true }, (cell) => {
+                cell.value = null;
+              });
+              continue;
+            }
+            const material = items[index];
+            const quantity = Number(material.quantidade || 0);
+            row.getCell("B").value = index + 1;
+            row.getCell("C").value = material.codigo_material || material.codigo || "";
+            fillDescriptionCells(row, material.descricao_item || material.descricao || "");
+            row.getCell("V").value = material.unidade_medida || material.unidade || "";
+            row.getCell("W").value = Number(material.valor || material.valor_unitario || 0);
+            row.getCell("X").value = quantity;
+            row.getCell("AA").value = quantity;
+            row.getCell("AB").value = quantity;
+            row.getCell("AC").value = quantity;
+            ["W", "X", "AA", "AB", "AC"].forEach((column) => {
+              row.getCell(column).numFmt = "#,##0.00";
+            });
+          }
         };
 
         fillHeaderCell("EQUIPE=>", contexto.equipeTexto);
@@ -2943,23 +2865,8 @@ export const WorkflowSteps = () => {
         fillHeaderCell("SUBESTAÇÃO =>", contexto.subestacaoTexto);
         fillHeaderCell("OBSERVAÇÃO =>", contexto.headerBase?.observacao || "");
 
-        fillMaterialRows(contexto.consumo || [], 49, {
-          baseCapacity: 12,
-          quantityColumn: "X",
-          unitColumn: "V",
-          writeDescription: false,
-        });
-        fillMaterialRows(contexto.sucata || [], 56, {
-          baseCapacity: 12,
-          quantityColumn: null,
-          descriptionColumn: null,
-          classificationMap: {
-            SUCATA: "X",
-            REFORMA: "Y",
-            BOM: "AA",
-            DESCARTE: "AB",
-          },
-        });
+        fillMaterialSection("MATERIAL APLICADO", contexto.consumo || []);
+        fillMaterialSection("MATERIAL RETIRADO", contexto.sucata || []);
       }
 
       const markAdicionalCells = () => {
@@ -2999,21 +2906,75 @@ export const WorkflowSteps = () => {
         sheet.getCell("N5").value = contexto.dadosExec?.km_final || "";
         const valorUpsReferencia = contexto.medicaoTab === "LV" ? contexto.medicaoValorUpsLV : contexto.medicaoValorUpsLM;
         fillLinhaVivaMoRows(resumoMO.itensCalculados, valorUpsReferencia);
-        fillMaterialRows(contexto.consumo || [], 44, {
-          baseCapacity: 15,
-          unitColumn: "T",
-          quantityColumn: "AK",
-        });
-        fillMaterialRows(contexto.sucata || [], 61, {
-          baseCapacity: 15,
-          unitColumn: "T",
-          quantityColumn: "AK",
-          classificationMap: {
-            BOM: "Y",
-            SUCATA: "AB",
-            DESCARTE: "AE",
-            REFORMA: "AH",
-          },
+        const fillLinhaVivaMaterialRows = (
+          items: any[],
+          startRow: number,
+          quantityColumn: string = "AK",
+          unitColumn: string = "T",
+          baseCapacity = 15,
+          classificationMap: Record<string, string> = {}
+        ) => {
+          const baseRow = sheet.getRow(startRow);
+          const unitFormula = getFormulaText(baseRow.getCell(unitColumn));
+          for (let idx = 0; idx < baseCapacity; idx += 1) {
+            const rowNumber = startRow + idx;
+            const row = sheet.getRow(rowNumber);
+            const codeCell = row.getCell("B");
+            const descriptionCell = row.getCell("C");
+            const unitCell = row.getCell(unitColumn);
+            const quantityCell = row.getCell(quantityColumn);
+            const hasItem = idx < items.length;
+            if (hasItem) {
+              const material = items[idx];
+              const codigoValue = parseNumeroCodigo(material.codigo_material || material.codigo);
+              if (codigoValue === null) {
+                codeCell.value = material.codigo_material || material.codigo || "";
+                codeCell.numFmt = "@";
+              } else {
+                codeCell.value = codigoValue;
+                codeCell.numFmt = "0";
+              }
+              const descriptionValue =
+                material.descricao_item ||
+                material.descricao ||
+                material.nome ||
+                "";
+              descriptionCell.value = descriptionValue;
+              const unidadeValue =
+                material.unidade_medida ||
+                material.unidade ||
+                material.unidade_medida_cons ||
+                "";
+              if (!unitFormula) {
+                unitCell.value = unidadeValue || null;
+              }
+              const quantidadeValue = Number(
+                material.quantidade ?? material.quantidade_aplicada ?? material.quantidade_retirada ?? 0
+              );
+              quantityCell.value = Number.isFinite(quantidadeValue) ? quantidadeValue : null;
+              quantityCell.numFmt = "#,##0.00";
+              const classification = (material.classificacao || "").toString().trim().toUpperCase();
+              Object.entries(classificationMap).forEach(([key, column]) => {
+                const cell = row.getCell(column);
+                cell.value = classification === key.toUpperCase() ? "X" : null;
+              });
+            } else {
+              codeCell.value = null;
+              descriptionCell.value = null;
+              if (!unitFormula) {
+                unitCell.value = null;
+              }
+              quantityCell.value = null;
+              Object.values(classificationMap).forEach((column) => row.getCell(column).value = null);
+            }
+          }
+        };
+        fillLinhaVivaMaterialRows(contexto.consumo || [], 44);
+        fillLinhaVivaMaterialRows(contexto.sucata || [], 61, "AK", "T", 15, {
+          BOM: "Y",
+          SUCATA: "AB",
+          DESCARTE: "AE",
+          REFORMA: "AH",
         });
       }
 
