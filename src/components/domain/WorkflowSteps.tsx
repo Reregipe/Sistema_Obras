@@ -2906,6 +2906,76 @@ export const WorkflowSteps = () => {
         sheet.getCell("N5").value = contexto.dadosExec?.km_final || "";
         const valorUpsReferencia = contexto.medicaoTab === "LV" ? contexto.medicaoValorUpsLV : contexto.medicaoValorUpsLM;
         fillLinhaVivaMoRows(resumoMO.itensCalculados, valorUpsReferencia);
+        const fillLinhaVivaMaterialRows = (
+          items: any[],
+          startRow: number,
+          quantityColumn: string = "AK",
+          unitColumn: string = "T",
+          baseCapacity = 15,
+          classificationMap: Record<string, string> = {}
+        ) => {
+          const baseRow = sheet.getRow(startRow);
+          const unitFormula = getFormulaText(baseRow.getCell(unitColumn));
+          for (let idx = 0; idx < baseCapacity; idx += 1) {
+            const rowNumber = startRow + idx;
+            const row = sheet.getRow(rowNumber);
+            const codeCell = row.getCell("B");
+            const descriptionCell = row.getCell("C");
+            const unitCell = row.getCell(unitColumn);
+            const quantityCell = row.getCell(quantityColumn);
+            const hasItem = idx < items.length;
+            if (hasItem) {
+              const material = items[idx];
+              const codigoValue = parseNumeroCodigo(material.codigo_material || material.codigo);
+              if (codigoValue === null) {
+                codeCell.value = material.codigo_material || material.codigo || "";
+                codeCell.numFmt = "@";
+              } else {
+                codeCell.value = codigoValue;
+                codeCell.numFmt = "0";
+              }
+              const descriptionValue =
+                material.descricao_item ||
+                material.descricao ||
+                material.nome ||
+                "";
+              descriptionCell.value = descriptionValue;
+              const unidadeValue =
+                material.unidade_medida ||
+                material.unidade ||
+                material.unidade_medida_cons ||
+                "";
+              if (!unitFormula) {
+                unitCell.value = unidadeValue || null;
+              }
+              const quantidadeValue = Number(
+                material.quantidade ?? material.quantidade_aplicada ?? material.quantidade_retirada ?? 0
+              );
+              quantityCell.value = Number.isFinite(quantidadeValue) ? quantidadeValue : null;
+              quantityCell.numFmt = "#,##0.00";
+              const classification = (material.classificacao || "").toString().trim().toUpperCase();
+              Object.entries(classificationMap).forEach(([key, column]) => {
+                const cell = row.getCell(column);
+                cell.value = classification === key.toUpperCase() ? "X" : null;
+              });
+            } else {
+              codeCell.value = null;
+              descriptionCell.value = null;
+              if (!unitFormula) {
+                unitCell.value = null;
+              }
+              quantityCell.value = null;
+              Object.values(classificationMap).forEach((column) => row.getCell(column).value = null);
+            }
+          }
+        };
+        fillLinhaVivaMaterialRows(contexto.consumo || [], 44);
+        fillLinhaVivaMaterialRows(contexto.sucata || [], 61, "AK", "T", 15, {
+          BOM: "Y",
+          SUCATA: "AB",
+          DESCARTE: "AE",
+          REFORMA: "AH",
+        });
       }
 
       const findRowByText = (text: string) => {
