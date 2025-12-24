@@ -2521,38 +2521,6 @@ export const WorkflowSteps = () => {
         return "";
       };
 
-      const setCellValue = (address: string, value?: string | number | null) => {
-        const cell = sheet.getCell(address);
-        cell.value = value ?? "";
-      };
-
-      const setDateCellValue = (address: string, input?: string | null) => {
-        const cell = sheet.getCell(address);
-        const date = parseDateForExcel(input);
-        if (date) {
-          cell.value = date;
-          cell.numFmt = "dd/mm/yyyy";
-          return;
-        }
-        cell.value = input ?? "";
-      };
-
-      const setNumericCellValue = (address: string, input?: string | number | null) => {
-        const cell = sheet.getCell(address);
-        if (input === null || input === undefined || input === "") {
-          cell.value = "";
-          return;
-        }
-        const parsed = typeof input === "number" ? input : Number(String(input).replace(/\./g, "").replace(",", "."));
-        if (Number.isFinite(parsed)) {
-          cell.value = parsed;
-          cell.numFmt = "#,#0.00".replace(/#/g, "#");
-          cell.numFmt = "#,##0.00";
-        } else {
-          cell.value = input;
-        }
-      };
-
       const normalizeLabel = (value?: string) =>
         value ? value.replace(/[=>:]/g, "").trim().toUpperCase() : "";
 
@@ -2574,6 +2542,13 @@ export const WorkflowSteps = () => {
       const findRowNumberByLabel = (label: string) => {
         const found = findCellByLabel(label);
         return found ? found.row : null;
+      };
+
+      const fillHeaderCell = (label: string, value?: string | number) => {
+        const match = findCellByLabel(label);
+        if (!match) return;
+        const targetRow = sheet.getRow(match.row + 1);
+        targetRow.getCell(match.col).value = value ?? "";
       };
 
       const getFormulaText = (cell: any) => {
@@ -2872,17 +2847,26 @@ export const WorkflowSteps = () => {
           }
         };
 
+        fillHeaderCell("EQUIPE=>", contexto.equipeTexto);
+        fillHeaderCell("ENCARREGADO:", contexto.encarregadoTexto);
+        fillHeaderCell("TÉCNICO ENG:", contexto.tecnicoTexto);
+        fillHeaderCell("DATA SAÍDA =>", formatDateTimeBr(contexto.dadosExec?.saida_base));
+        fillHeaderCell("RETORNO BASE =>", formatDateTimeBr(contexto.dadosExec?.retorno_base));
+        fillHeaderCell("INICIO SERVIÇO =>", formatDateTimeBr(contexto.dadosExec?.inicio_servico));
+        fillHeaderCell("RETORNO SERVIÇO =>", formatDateTimeBr(contexto.dadosExec?.retorno_servico));
+        fillHeaderCell("KM INICIAL=>", contexto.dadosExec?.km_inicial || "");
+        fillHeaderCell("KM FINAL=>", contexto.dadosExec?.km_final || "");
+        fillHeaderCell("CÓD. ACIONAMENTO=>", contexto.codigoAcionamento);
+        fillHeaderCell("Nº INTERVENÇÃO=>", contexto.numeroIntervencaoTexto);
+        fillHeaderCell("NOTA (SS)=>", contexto.numeroSs || "");
+        fillHeaderCell("OS TABLET =>", contexto.osTabletTexto);
+        fillHeaderCell("ENDEREÇO=>", contexto.enderecoTexto);
+        fillHeaderCell("ALIMENTADOR =>", contexto.alimentadorTexto);
+        fillHeaderCell("SUBESTAÇÃO =>", contexto.subestacaoTexto);
+        fillHeaderCell("OBSERVAÇÃO =>", contexto.headerBase?.observacao || "");
+
         fillMaterialSection("MATERIAL APLICADO", contexto.consumo || []);
         fillMaterialSection("MATERIAL RETIRADO", contexto.sucata || []);
-
-        setCellValue("C3", contexto.equipeTexto);
-        setCellValue("H3", contexto.encarregadoTexto);
-        setDateCellValue("M3", contexto.dadosExec?.saida_base || contexto.dataExecucaoTexto);
-        setDateCellValue("T3", contexto.dadosExec?.retorno_base);
-        setCellValue("AA3", contexto.currentUserNameSnapshot);
-        setCellValue("D5", contexto.enderecoTexto);
-        setNumericCellValue("U9", contexto.dadosExec?.km_inicial);
-        setNumericCellValue("U11", contexto.dadosExec?.km_final);
       }
 
       const markAdicionalCells = () => {
