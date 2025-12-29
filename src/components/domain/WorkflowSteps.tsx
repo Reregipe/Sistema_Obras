@@ -90,6 +90,39 @@ type OrcamentoPdfContext = {
   };
 };
 
+type MedicaoRascunho = {
+  itens_lm?: any[];
+  itens_lv?: any[];
+  valor_ups_lm?: number;
+  valor_ups_lv?: number;
+  fora_horario?: boolean;
+};
+
+const MODALIDADES_MEDICAO: ("LM" | "LV")[] = ["LM", "LV"];
+
+const hasDadosMedicao = (contexto?: OrcamentoPdfContext | null) =>
+  Boolean(contexto && (contexto.itensMO?.length ?? 0) > 0);
+
+const obterModalidadesDisponiveis = (
+  contexto: Record<"LM" | "LV", OrcamentoPdfContext | null>
+): ("LM" | "LV")[] => MODALIDADES_MEDICAO.filter((modalidade) => hasDadosMedicao(contexto[modalidade]));
+
+const parseMedicaoItens = (value: unknown): any[] => {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
+    } catch {
+      return [];
+    }
+  }
+  return [];
+};
+
 type MaoDeObraResumo = {
   itensCalculados: {
     index: number;
@@ -107,8 +140,54 @@ type MaoDeObraResumo = {
   acrescimoInfo: { codigo: string; descricao: string };
 };
 
+type AprovacaoStatus = "aguardando" | "reprovado" | "concluido";
+
+type AprovacaoLog = {
+  id_log: string;
+  status: AprovacaoStatus;
+  observacao: string | null;
+  criado_em: string;
+};
+
+type AprovacaoLogForm = {
+  status: AprovacaoStatus;
+  observacao: string;
+  data: string;
+};
+
+const APROVACAO_STATUS_LABELS: Record<AprovacaoStatus, string> = {
+  aguardando: "Aguardando",
+  reprovado: "Reprovado",
+  concluido: "Concluído",
+};
+
+const APROVACAO_STATUS_CLASSES: Record<AprovacaoStatus, string> = {
+  aguardando: "text-orange-700 bg-orange-50",
+  reprovado: "text-red-700 bg-red-50",
+  concluido: "text-emerald-700 bg-emerald-50",
+};
+
+const emptyAprovacaoLogForm: AprovacaoLogForm = {
+  status: "aguardando",
+  observacao: "",
+  data: "",
+};
+
 const isUuidValue = (value: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+
+const currencyFormatter = new Intl.NumberFormat("pt-BR", {
+  style: "currency",
+  currency: "BRL",
+});
+
+const formatCurrency = (value: number) => currencyFormatter.format(value);
+const formatQuantity = (value: number | string | undefined) => {
+  if (value === undefined || value === null || value === "") return "0,00";
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return "0,00";
+  return numeric.toFixed(2);
+};
 
 const normalizeLinha = (valor?: string | null): EquipeLinha | undefined => {
   if (!valor) return undefined;
@@ -456,9 +535,83 @@ export const WorkflowSteps = () => {
   const [numeroInfo, setNumeroInfo] = useState<string | null>(null);
   const [numeroForm, setNumeroForm] = useState({ ...emptyNumeroObraForm });
 
-  const emptyBookForm = {
+  const emptyFiscalForm = {
+    assinatura_fiscal_em: "",
+  };
+  const [fiscalModalOpen, setFiscalModalOpen] = useState(false);
+  const [fiscalLoading, setFiscalLoading] = useState(false);
+  const [fiscalSaving, setFiscalSaving] = useState(false);
+  const [fiscalError, setFiscalError] = useState<string | null>(null);
+  const [fiscalInfo, setFiscalInfo] = useState<string | null>(null);
+  const [fiscalForm, setFiscalForm] = useState({ ...emptyFiscalForm });
+
+    const emptyTciForm = {
+      tci_criado_em: "",
+    };
+    const [tciModalOpen, setTciModalOpen] = useState(false);
+    const [tciLoading, setTciLoading] = useState(false);
+    const [tciSaving, setTciSaving] = useState(false);
+    const [tciError, setTciError] = useState<string | null>(null);
+    const [tciInfo, setTciInfo] = useState<string | null>(null);
+    const [tciForm, setTciForm] = useState({ ...emptyTciForm });
+  const [aprovacaoModalOpen, setAprovacaoModalOpen] = useState(false);
+  const [aprovacaoLoading, setAprovacaoLoading] = useState(false);
+  const [aprovacaoSaving, setAprovacaoSaving] = useState(false);
+  const [aprovacaoError, setAprovacaoError] = useState<string | null>(null);
+  const [aprovacaoInfo, setAprovacaoInfo] = useState<string | null>(null);
+  const [aprovacaoLogs, setAprovacaoLogs] = useState<AprovacaoLog[]>([]);
+  const [aprovacaoLogsPreview, setAprovacaoLogsPreview] = useState<AprovacaoLog[]>([]);
+  const [aprovacaoLogForm, setAprovacaoLogForm] = useState<AprovacaoLogForm>({
+    ...emptyAprovacaoLogForm,
+  });
+  const [aprovacaoContextoPreview, setAprovacaoContextoPreview] = useState<
+    Record<"LM" | "LV", OrcamentoPdfContext | null>
+  >({
+    LM: null,
+    LV: null,
+  });
+  const [aprovacaoResumoPreview, setAprovacaoResumoPreview] = useState<
+    Record<"LM" | "LV", MaoDeObraResumo | null>
+  >({
+    LM: null,
+    LV: null,
+  });
+  const [aprovacaoPreviewModalidade, setAprovacaoPreviewModalidade] = useState<"LM" | "LV">("LM");
+  const [reajusteModalOpen, setReajusteModalOpen] = useState(false);
+  const [reajusteModalModalidade, setReajusteModalModalidade] = useState<"LM" | "LV">("LM");
+  const availablePreviewModalities = useMemo(() => {
+    return obterModalidadesDisponiveis(aprovacaoContextoPreview);
+  }, [aprovacaoContextoPreview]);
+
+  useEffect(() => {
+    if (availablePreviewModalities.length === 0) return;
+    if (!availablePreviewModalities.includes(aprovacaoPreviewModalidade)) {
+      setAprovacaoPreviewModalidade(availablePreviewModalities[0]);
+    }
+  }, [availablePreviewModalities, aprovacaoPreviewModalidade]);
+
+  const handleReajusteValor = (modalidade: "LM" | "LV") => {
+    if (!hasDadosMedicao(aprovacaoContextoPreview[modalidade])) {
+      alert("Não há dados de medição registrados para esta modalidade.");
+      return;
+    }
+    setReajusteModalModalidade(modalidade);
+    setReajusteModalOpen(true);
+  };
+  type BookEmailAttachment = {
+    name: string;
+    data: string;
+  };
+  type BookFormType = {
+    book_enviado_em: string;
+    email_msg: string;
+    email_attachment: BookEmailAttachment | null;
+  };
+  type BookFormField = Exclude<keyof BookFormType, "email_attachment">;
+  const emptyBookForm: BookFormType = {
     book_enviado_em: "",
     email_msg: "",
+    email_attachment: null,
   };
   const [bookModalOpen, setBookModalOpen] = useState(false);
   const [bookLoading, setBookLoading] = useState(false);
@@ -467,7 +620,8 @@ export const WorkflowSteps = () => {
   const [bookInfo, setBookInfo] = useState<string | null>(null);
   const [savingBookDitais, setSavingBookDitais] = useState(false);
   const [savingBookTrafo, setSavingBookTrafo] = useState(false);
-  const [bookForm, setBookForm] = useState({ ...emptyBookForm });
+  const [bookForm, setBookForm] = useState<BookFormType>({ ...emptyBookForm });
+  const [bookEmailStorageEnabled, setBookEmailStorageEnabled] = useState(true);
   const emptyBookDitais = {
     data_execucao: "",
     numero_obra: "",
@@ -492,6 +646,7 @@ export const WorkflowSteps = () => {
   const [bookTrafoData, setBookTrafoData] = useState<any | null>(null);
   const photoInputRefs = useRef<Record<BookDitaisPhotoKey, HTMLInputElement | null>>({});
   const modeloInputRef = useRef<HTMLInputElement | null>(null);
+  const bookAttachmentInputRef = useRef<HTMLInputElement | null>(null);
 
   const triggerPhotoUpload = (key: BookDitaisPhotoKey) => {
     photoInputRefs.current[key]?.click();
@@ -540,9 +695,45 @@ export const WorkflowSteps = () => {
   ) => {
     setBookDitais((prev) => ({
       ...prev,
-        [field]: value,
+      [field]: value,
+    }));
+  };
+
+  const handleBookFormChange = (field: BookFormField, value: string) => {
+    setBookForm((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+  };
+
+  const handleBookEmailAttachmentUpload = (file?: File) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      setBookForm((prev) => ({
+        ...prev,
+        email_attachment: {
+          name: file.name,
+          data: reader.result as string,
+        },
       }));
     };
+    reader.readAsDataURL(file);
+  };
+
+  const clearBookEmailAttachment = () => {
+    setBookForm((prev) => ({
+      ...prev,
+      email_attachment: null,
+    }));
+    if (bookAttachmentInputRef.current) {
+      bookAttachmentInputRef.current.value = "";
+    }
+  };
+
+  const triggerBookEmailAttachmentUpload = () => {
+    bookAttachmentInputRef.current?.click();
+  };
 
   const handleBookDitaisPhotoChange = (key: BookDitaisPhotoKey, file?: File) => {
     if (!file) return;
@@ -1516,9 +1707,12 @@ export const WorkflowSteps = () => {
 
   const prepararOrcamentoContext = async (
     idAcionamento: string,
-    pdfModalidade: "LM" | "LV"
+    pdfModalidade: "LM" | "LV",
+    selectedSnapshot?: any,
+    medicaoRascunho?: MedicaoRascunho
   ): Promise<OrcamentoPdfContext | null> => {
-    if (!selectedItem) return null;
+    const snapshotItem = selectedSnapshot || selectedItem;
+    if (!snapshotItem) return null;
 
     let dadosExec: any = null;
     try {
@@ -1573,9 +1767,9 @@ export const WorkflowSteps = () => {
     registrarEquipe(detalhesAcionamento?.equipe);
     registrarEquipe(detalhesAcionamento?.equipe_lm);
     registrarEquipe(detalhesAcionamento?.nome_equipe);
-    registrarEquipe((selectedItem as any)?.id_equipe);
-    registrarEquipe((selectedItem as any)?.equipe);
-    registrarEquipe((selectedItem as any)?.equipe_lm);
+    registrarEquipe((snapshotItem as any)?.id_equipe);
+    registrarEquipe((snapshotItem as any)?.equipe);
+    registrarEquipe((snapshotItem as any)?.equipe_lm);
     equipesRelacionadas.forEach((rel) => registrarEquipe(rel?.id_equipe));
 
     const equipeCodigos = new Set<string>();
@@ -1645,7 +1839,7 @@ export const WorkflowSteps = () => {
     };
 
     const headerBase = {
-      ...(selectedItem || {}),
+      ...(snapshotItem || {}),
       ...(detalhesAcionamento || {}),
       modalidade: pdfModalidade,
     };
@@ -1831,11 +2025,21 @@ export const WorkflowSteps = () => {
     const subestacaoTexto = pickValue(dadosExec?.subestacao, headerBase.subestacao) || "--";
     const alimentadorSubTexto = `${alimentadorTexto} / ${subestacaoTexto}`;
     const osTabletTexto = pickValue(dadosExec?.os_tablet, headerBase.os_tablet) || "--";
+    const itensLM = medicaoRascunho?.itens_lm ?? medicaoItens.LM;
+    const itensLV = medicaoRascunho?.itens_lv ?? medicaoItens.LV;
+    const valorUpsLM = medicaoRascunho?.valor_ups_lm ?? medicaoValorUpsLM;
+    const valorUpsLV = medicaoRascunho?.valor_ups_lv ?? medicaoValorUpsLV;
+    const foraHorario = medicaoRascunho?.fora_horario ?? medicaoForaHC;
+    const medicaoItensSnapshotLocal = {
+      LM: [...(itensLM || [])],
+      LV: [...(itensLV || [])],
+    };
+    const itensMO = (pdfModalidade === "LM" ? itensLM || [] : itensLV || []).map((item) => ({ ...item }));
 
     return {
       idAcionamento,
       pdfModalidade,
-      selectedItemSnapshot: { ...selectedItem },
+      selectedItemSnapshot: { ...snapshotItem },
       dadosExec,
       detalhesAcionamento,
       headerBase,
@@ -1850,13 +2054,13 @@ export const WorkflowSteps = () => {
       subestacaoTexto,
       alimentadorSubTexto,
       osTabletTexto,
-      itensMO: (medicaoItens[pdfModalidade] || []).map((item) => ({ ...item })),
+      itensMO,
       consumo: (consumo || []).map((item) => ({ ...item })),
       sucata: (sucata || []).map((item) => ({ ...item })),
-      medicaoValorUpsLM,
-      medicaoValorUpsLV,
-      medicaoForaHC,
-      medicaoItensSnapshot: { ...medicaoItens },
+      medicaoValorUpsLM: valorUpsLM,
+      medicaoValorUpsLV: valorUpsLV,
+      medicaoForaHC: foraHorario,
+      medicaoItensSnapshot: medicaoItensSnapshotLocal,
       medicaoTab: pdfModalidade,
       currentUserNameSnapshot: currentUserName,
       numeroSigod,
@@ -2406,7 +2610,10 @@ export const WorkflowSteps = () => {
     }
   };
 
-  const exportarOrcamentoExcel = async () => {
+  const exportarOrcamentoExcel = async (
+    forcedModalidade?: "LM" | "LV",
+    ignoreEquipeValidation?: boolean
+  ) => {
     if (!selectedItem) {
       alert("Nenhum acionamento selecionado");
       return;
@@ -2417,8 +2624,9 @@ export const WorkflowSteps = () => {
       return;
     }
 
-    const pdfModalidade: "LM" | "LV" = medicaoTab === "LM" ? "LM" : "LV";
-    if (!equipeValidaParaLinha(pdfModalidade)) {
+    const pdfModalidade: "LM" | "LV" =
+      forcedModalidade ?? (medicaoTab === "LM" ? "LM" : "LV");
+    if (!ignoreEquipeValidation && !equipeValidaParaLinha(pdfModalidade)) {
       alert(`Selecione uma equipe de ${pdfModalidade === "LM" ? "Linha Morta" : "Linha Viva"} válida antes de gerar o Excel.`);
       return;
     }
@@ -2427,7 +2635,7 @@ export const WorkflowSteps = () => {
     setMaterialInfo(null);
 
     try {
-      const contexto = await prepararOrcamentoContext(idAcionamento, pdfModalidade);
+      const contexto = await prepararOrcamentoContext(idAcionamento, pdfModalidade, selectedItem);
       if (!contexto) return;
 
       const resumoMO = calcularResumoMaoDeObra(contexto);
@@ -3696,7 +3904,7 @@ export const WorkflowSteps = () => {
         .from("acionamentos")
 
         .select(
-          "id_acionamento,codigo_acionamento,numero_os,os_criada_em,book_enviado_em,numero_obra,numero_obra_atualizado_em,elemento_id,status,prioridade,municipio,modalidade,data_abertura,data_despacho,etapa_atual,encarregado,almox_conferido_em"
+          "id_acionamento,codigo_acionamento,numero_os,os_criada_em,book_enviado_em,numero_obra,numero_obra_atualizado_em,elemento_id,status,prioridade,municipio,modalidade,data_abertura,data_despacho,etapa_atual,encarregado,almox_conferido_em,assinatura_fiscal_em,tci_criado_em,medicao_aprovada_em,medicao_aprovacao_status"
         )
 
         .eq("etapa_atual", step.id)
@@ -4394,6 +4602,440 @@ export const WorkflowSteps = () => {
     } finally {
       setOsSaving(false);
     }
+  };
+
+  const handleFiscalFormChange = (value: string) => {
+    setFiscalForm({ assinatura_fiscal_em: value });
+  };
+
+  const closeFiscalModal = () => {
+    setFiscalModalOpen(false);
+    setFiscalForm({ ...emptyFiscalForm });
+    setFiscalError(null);
+    setFiscalInfo(null);
+    setFiscalLoading(false);
+    setFiscalSaving(false);
+  };
+
+  const openFiscalModal = async (item: any) => {
+    setSelectedItem(item);
+    setFiscalModalOpen(true);
+    setFiscalLoading(true);
+    setFiscalError(null);
+    setFiscalInfo(null);
+    setFiscalForm({
+      assinatura_fiscal_em: toInputDateTime(
+        item.assinatura_fiscal_em || new Date().toISOString()
+      ),
+    });
+
+    try {
+      const idAcionamento = item.id_acionamento || item.id;
+      if (!idAcionamento) {
+        throw new Error("ID do acionamento não encontrado.");
+      }
+      const { data, error } = await supabase
+        .from("acionamentos")
+        .select("assinatura_fiscal_em")
+        .eq("id_acionamento", idAcionamento)
+        .maybeSingle();
+      if (error) throw error;
+      setFiscalForm({
+        assinatura_fiscal_em: toInputDateTime(
+          data?.assinatura_fiscal_em || item.assinatura_fiscal_em || new Date().toISOString()
+        ),
+      });
+    } catch (err: any) {
+      setFiscalError(err.message || "Erro ao carregar dados da aprovação fiscal.");
+    } finally {
+      setFiscalLoading(false);
+    }
+  };
+
+  const salvarDadosFiscal = async () => {
+    if (!selectedItem) {
+      setFiscalError("Nenhum acionamento selecionado.");
+      return;
+    }
+    const idAcionamento = selectedItem.id_acionamento || selectedItem.id;
+    if (!idAcionamento) {
+      setFiscalError("ID do acionamento não encontrado.");
+      return;
+    }
+    const assinaturaIso = fromInputDateTime(fiscalForm.assinatura_fiscal_em);
+    if (!assinaturaIso) {
+      setFiscalError("Informe a data e hora da assinatura fiscal.");
+      return;
+    }
+
+    setFiscalSaving(true);
+    setFiscalError(null);
+    setFiscalInfo(null);
+
+    try {
+      const etapaDestino = 7;
+      const payload = {
+        assinatura_fiscal_em: assinaturaIso,
+        etapa_atual: etapaDestino,
+      };
+      const { error } = await supabase
+        .from("acionamentos")
+        .update(payload)
+        .eq("id_acionamento", idAcionamento);
+      if (error) throw error;
+
+      setSelectedItem((prev: any) =>
+        prev
+          ? {
+              ...prev,
+              ...payload,
+            }
+          : prev
+      );
+      setItems((prev) => prev.filter((it) => it.id_acionamento !== idAcionamento));
+
+      setSteps((prev) =>
+        prev.map((step) => {
+          if (step.id === 6) {
+            return { ...step, count: Math.max(0, step.count - 1) };
+          }
+          if (step.id === etapaDestino) {
+            return { ...step, count: step.count + 1 };
+          }
+          return step;
+        })
+      );
+
+      setFiscalInfo("Assinatura fiscal registrada com sucesso e etapa liberada.");
+      setTimeout(() => closeFiscalModal(), 800);
+    } catch (err: any) {
+      setFiscalError(err.message || "Erro ao salvar aprovação fiscal.");
+    } finally {
+      setFiscalSaving(false);
+    }
+  };
+
+  const handleTciFormChange = (value: string) => {
+    setTciForm((prev) => ({ ...prev, tci_criado_em: value }));
+  };
+
+  const closeTciModal = () => {
+    setTciModalOpen(false);
+    setTciForm({ ...emptyTciForm });
+    setTciError(null);
+    setTciInfo(null);
+    setTciLoading(false);
+    setTciSaving(false);
+  };
+
+  const openTciModal = async (item: any) => {
+    setSelectedItem(item);
+    setTciModalOpen(true);
+    setTciLoading(true);
+    setTciError(null);
+    setTciInfo(null);
+    setTciForm({
+      tci_numero: item.tci_numero || "",
+      tci_criado_em: toInputDateTime(item.tci_criado_em || new Date().toISOString()),
+    });
+
+    try {
+      const idAcionamento = item.id_acionamento || item.id;
+      if (!idAcionamento) {
+        throw new Error("ID do acionamento não encontrado.");
+      }
+      const { data, error } = await supabase
+        .from("acionamentos")
+        .select("tci_criado_em")
+        .eq("id_acionamento", idAcionamento)
+        .maybeSingle();
+      if (error) throw error;
+      setTciForm({
+        tci_criado_em: toInputDateTime(data?.tci_criado_em || item.tci_criado_em || new Date().toISOString()),
+      });
+    } catch (err: any) {
+      setTciError(err.message || "Erro ao carregar dados do TCI.");
+    } finally {
+      setTciLoading(false);
+    }
+  };
+
+  const salvarDadosTci = async () => {
+    if (!selectedItem) {
+      setTciError("Nenhum acionamento selecionado.");
+      return;
+    }
+    const idAcionamento = selectedItem.id_acionamento || selectedItem.id;
+    if (!idAcionamento) {
+      setTciError("ID do acionamento não encontrado.");
+      return;
+    }
+
+    const criadoIso = fromInputDateTime(tciForm.tci_criado_em);
+    if (!criadoIso) {
+      setTciError("Informe a data e hora do TCI.");
+      return;
+    }
+
+    setTciSaving(true);
+    setTciError(null);
+    setTciInfo(null);
+
+    try {
+      const etapaDestino = 8;
+      const payload = {
+        tci_criado_em: criadoIso,
+        etapa_atual: etapaDestino,
+      };
+      const { error } = await supabase
+        .from("acionamentos")
+        .update(payload)
+        .eq("id_acionamento", idAcionamento);
+      if (error) throw error;
+
+      setSelectedItem((prev: any) => (prev ? { ...prev, ...payload } : prev));
+      setItems((prev) => prev.filter((it) => it.id_acionamento !== idAcionamento));
+
+      setSteps((prev) =>
+        prev.map((step) => {
+          if (step.id === 7) {
+            return { ...step, count: Math.max(0, step.count - 1) };
+          }
+          if (step.id === etapaDestino) {
+            return { ...step, count: step.count + 1 };
+          }
+          return step;
+        })
+      );
+
+      setTciInfo("TCI registrado com sucesso e etapa liberada.");
+      setTimeout(() => closeTciModal(), 800);
+    } catch (err: any) {
+      setTciError(err.message || "Erro ao salvar o TCI.");
+    } finally {
+      setTciSaving(false);
+    }
+  };
+
+  const closeAprovacaoModal = () => {
+    setAprovacaoModalOpen(false);
+    setAprovacaoLogForm({ ...emptyAprovacaoLogForm });
+    setAprovacaoLogs([]);
+    setAprovacaoError(null);
+    setAprovacaoInfo(null);
+    setAprovacaoLoading(false);
+    setAprovacaoSaving(false);
+  };
+
+  const carregarResumoAprovacaoPreview = async (idAcionamento: string, itemSnapshot: any) => {
+    const modalidades: Array<"LM" | "LV"> = ["LM", "LV"];
+    const contextoPreview: Record<"LM" | "LV", OrcamentoPdfContext | null> = {
+      LM: null,
+      LV: null,
+    };
+    const resumoPreview: Record<"LM" | "LV", MaoDeObraResumo | null> = {
+      LM: null,
+      LV: null,
+    };
+
+    let medicaoRascunho: MedicaoRascunho | null = null;
+    try {
+      const { data } = await supabase
+        .from("medicao_orcamentos")
+        .select("itens_lm,itens_lv,fora_horario,valor_ups_lm,valor_ups_lv")
+        .eq("id_acionamento", idAcionamento)
+        .maybeSingle();
+      if (data) {
+        medicaoRascunho = {
+          itens_lm: parseMedicaoItens(data.itens_lm),
+          itens_lv: parseMedicaoItens(data.itens_lv),
+          valor_ups_lm: Number(data.valor_ups_lm) || undefined,
+          valor_ups_lv: Number(data.valor_ups_lv) || undefined,
+          fora_horario: data.fora_horario ?? undefined,
+        };
+      }
+    } catch (err) {
+      console.warn("Falha ao carregar rascunho da medição para preview", err);
+    }
+
+    await Promise.all(
+      modalidades.map(async (modalidade) => {
+        try {
+          const contexto = await prepararOrcamentoContext(
+            idAcionamento,
+            modalidade,
+            itemSnapshot,
+            medicaoRascunho || undefined
+          );
+          if (!contexto) {
+            return;
+          }
+          contextoPreview[modalidade] = contexto;
+          resumoPreview[modalidade] = calcularResumoMaoDeObra(contexto);
+        } catch (err) {
+          console.error("Erro ao preparar preview da aprovação da medição", err);
+        }
+      })
+    );
+
+    setAprovacaoContextoPreview(contextoPreview);
+    setAprovacaoResumoPreview(resumoPreview);
+    const modalidadesDisponiveis = obterModalidadesDisponiveis(contextoPreview);
+    const preferencia = modalidadesDisponiveis[0] || (medicaoTab === "LM" ? "LM" : "LV");
+    setAprovacaoPreviewModalidade(preferencia);
+  };
+
+  const openAprovacaoModal = async (item: any) => {
+    setSelectedItem(item);
+    setAprovacaoModalOpen(true);
+    setAprovacaoLoading(true);
+    setAprovacaoError(null);
+    setAprovacaoInfo(null);
+    setAprovacaoLogs([]);
+    const defaultDate = toInputDateTime(new Date().toISOString()) || "";
+    setAprovacaoLogForm({
+      status: (item.medicao_aprovacao_status as AprovacaoStatus) || "aguardando",
+      observacao: "",
+      data: defaultDate,
+    });
+
+    try {
+      const idAcionamento = item.id_acionamento || item.id;
+      if (!idAcionamento) {
+        throw new Error("ID do acionamento não encontrado.");
+      }
+      const { data: logs, error } = await supabase
+        .from("medicao_aprovacao_logs")
+        .select("id_log,status,observacao,criado_em")
+        .eq("id_acionamento", idAcionamento)
+        .order("criado_em", { ascending: false });
+      if (error) throw error;
+      const fetched = logs || [];
+      setAprovacaoLogs(fetched);
+      setAprovacaoLogsPreview(fetched);
+      await carregarResumoAprovacaoPreview(idAcionamento, item);
+    } catch (err: any) {
+      setAprovacaoError(err.message || "Erro ao carregar dados da aprovação da medição.");
+    } finally {
+      setAprovacaoLoading(false);
+    }
+  };
+
+  const registrarAprovacaoLog = async (concluir: boolean) => {
+    if (!selectedItem) {
+      setAprovacaoError("Nenhum acionamento selecionado.");
+      return;
+    }
+    const idAcionamento = selectedItem.id_acionamento || selectedItem.id;
+    if (!idAcionamento) {
+      setAprovacaoError("ID do acionamento não encontrado.");
+      return;
+    }
+
+    const logDateIso =
+      fromInputDateTime(aprovacaoLogForm.data) || new Date().toISOString();
+    const payloadLog = {
+      id_acionamento: idAcionamento,
+      status: aprovacaoLogForm.status,
+      observacao: aprovacaoLogForm.observacao.trim() || null,
+      criado_em: logDateIso,
+    };
+
+    setAprovacaoSaving(true);
+    setAprovacaoError(null);
+    setAprovacaoInfo(null);
+
+    try {
+      const { data: insertedLog, error: logError } = await supabase
+        .from("medicao_aprovacao_logs")
+        .insert(payloadLog)
+        .select()
+        .single();
+      if (logError) throw logError;
+      if (!insertedLog) {
+        throw new Error("Não foi possível registrar o status da medição.");
+      }
+
+      const statusUpdate = {
+        medicao_aprovacao_status: aprovacaoLogForm.status,
+        ...(concluir ? { medicao_aprovada_em: logDateIso, etapa_atual: 9 } : {}),
+      };
+
+      const { error: updateError } = await supabase
+        .from("acionamentos")
+        .update(statusUpdate)
+        .eq("id_acionamento", idAcionamento);
+      if (updateError) throw updateError;
+
+      const logEntry: AprovacaoLog = (insertedLog as unknown) as AprovacaoLog;
+
+      setAprovacaoLogs((prev) => [logEntry, ...prev]);
+
+      if (concluir) {
+        setSelectedItem((prev: any) =>
+          prev ? { ...prev, ...statusUpdate } : prev
+        );
+        setItems((prev) => prev.filter((it) => it.id_acionamento !== idAcionamento));
+
+        setSteps((prev) =>
+          prev.map((step) => {
+            if (step.id === 8) {
+              return { ...step, count: Math.max(0, step.count - 1) };
+            }
+            if (step.id === 9) {
+              return { ...step, count: step.count + 1 };
+            }
+            return step;
+          })
+        );
+
+        setAprovacaoInfo("Medição aprovada e etapa liberada.");
+        setTimeout(() => closeAprovacaoModal(), 800);
+      } else {
+        setSelectedItem((prev: any) =>
+          prev ? { ...prev, medicao_aprovacao_status: aprovacaoLogForm.status } : prev
+        );
+        setItems((prev) =>
+          prev.map((it) =>
+            it.id_acionamento === idAcionamento
+              ? { ...it, medicao_aprovacao_status: aprovacaoLogForm.status }
+              : it
+          )
+        );
+        setAprovacaoInfo("Status registrado com sucesso.");
+      }
+
+      setAprovacaoLogForm({
+        ...aprovacaoLogForm,
+        observacao: "",
+        data: toInputDateTime(new Date().toISOString()) || "",
+      });
+    } catch (err: any) {
+      setAprovacaoError(
+        err.message || "Erro ao registrar o status da aprovação da medição."
+      );
+    } finally {
+      setAprovacaoSaving(false);
+    }
+  };
+
+  const salvarDadosAprovacao = async () => {
+    await registrarAprovacaoLog(true);
+  };
+
+  const registrarStatusAprovacao = async () => {
+    if (aprovacaoLogForm.status === "concluido") {
+      setAprovacaoError("Use o botão de conclusão para finalizar a medição.");
+      return;
+    }
+    await registrarAprovacaoLog(false);
+  };
+
+  const handleAprovacaoLogFieldChange = (field: keyof AprovacaoLogForm, value: string) => {
+    setAprovacaoLogForm((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
   };
 
   const closeOsModal = () => {
@@ -5487,6 +6129,7 @@ export const WorkflowSteps = () => {
       book_enviado_em: toInputDateTime(item.book_enviado_em || new Date().toISOString()),
       email_msg: item.email_msg || "",
     });
+    setBookEmailStorageEnabled(true);
 
     try {
       const idAcionamento = item.id_acionamento || item.id;
@@ -5494,20 +6137,71 @@ export const WorkflowSteps = () => {
         throw new Error("ID do acionamento não encontrado.");
       }
 
-      const { data, error } = await supabase
-        .from("acionamentos")
-        .select(
-          "book_enviado_em,email_msg,elemento_id,codigo_acionamento,modalidade,status,prioridade,municipio,data_abertura,data_despacho,encarregado,etapa_atual,numero_os,numero_obra,almox_conferido_em"
-        )
-        .eq("id_acionamento", idAcionamento)
-        .maybeSingle();
-      if (error) throw error;
+      const baseFields = [
+        "book_enviado_em",
+        "email_msg",
+        "elemento_id",
+        "codigo_acionamento",
+        "modalidade",
+        "status",
+        "prioridade",
+        "municipio",
+        "data_abertura",
+        "data_despacho",
+        "encarregado",
+        "etapa_atual",
+        "numero_os",
+        "numero_obra",
+        "almox_conferido_em",
+      ];
+      const emailFields = ["book_email_msg", "book_email_msg_name"];
+      let bookData: any | null = null;
+      let emailColumnsAvailable = true;
+      const selectFields = (fields: string[]) => fields.join(",");
+
+      try {
+        const { data, error } = await supabase
+          .from("acionamentos")
+          .select(selectFields([...baseFields, ...emailFields]))
+          .eq("id_acionamento", idAcionamento)
+          .maybeSingle();
+        if (error) throw error;
+        bookData = data;
+      } catch (fetchError: any) {
+        const message = fetchError?.message || "";
+        if (
+          message.includes("book_email_msg") ||
+          message.includes("book_email_msg_name")
+        ) {
+          emailColumnsAvailable = false;
+          const { data, error } = await supabase
+            .from("acionamentos")
+            .select(selectFields(baseFields))
+            .eq("id_acionamento", idAcionamento)
+            .maybeSingle();
+          if (error) throw error;
+          bookData = data;
+        } else {
+          throw fetchError;
+        }
+      }
+
+      setBookEmailStorageEnabled(emailColumnsAvailable);
 
       setBookForm({
         book_enviado_em: toInputDateTime(
-          data?.book_enviado_em || item.book_enviado_em || new Date().toISOString()
+          bookData?.book_enviado_em || item.book_enviado_em || new Date().toISOString()
         ),
-        email_msg: data?.email_msg || "",
+        email_msg: bookData?.email_msg || "",
+        email_attachment:
+          emailColumnsAvailable &&
+          bookData?.book_email_msg &&
+          bookData?.book_email_msg_name
+            ? {
+                name: bookData.book_email_msg_name,
+                data: bookData.book_email_msg,
+              }
+            : null,
       });
 
       let execucaoData: any = null;
@@ -5523,28 +6217,33 @@ export const WorkflowSteps = () => {
       }
       setBookTrafoData(execucaoData || null);
 
-      if (data) {
+      if (bookData) {
         setSelectedItem((prev: any) => {
           if (!prev) return prev;
           const prevId = prev.id_acionamento || prev.id;
           return prevId === idAcionamento
             ? {
                 ...prev,
-                book_enviado_em: data.book_enviado_em ?? prev.book_enviado_em,
-                email_msg: data.email_msg ?? prev.email_msg,
-                elemento_id: data.elemento_id ?? prev.elemento_id,
-                codigo_acionamento: data.codigo_acionamento ?? prev.codigo_acionamento,
-                modalidade: data.modalidade ?? prev.modalidade,
-                status: data.status ?? prev.status,
-                prioridade: data.prioridade ?? prev.prioridade,
-                municipio: data.municipio ?? prev.municipio,
-                data_abertura: data.data_abertura ?? prev.data_abertura,
-                data_despacho: data.data_despacho ?? prev.data_despacho,
-                encarregado: data.encarregado ?? prev.encarregado,
-                etapa_atual: data.etapa_atual ?? prev.etapa_atual,
-                numero_os: data.numero_os ?? prev.numero_os,
-                numero_obra: data.numero_obra ?? prev.numero_obra,
-                almox_conferido_em: data.almox_conferido_em ?? prev.almox_conferido_em,
+                book_enviado_em: bookData.book_enviado_em ?? prev.book_enviado_em,
+                email_msg: bookData.email_msg ?? prev.email_msg,
+                book_email_msg: bookData.book_email_msg ?? prev.book_email_msg,
+                book_email_msg_name:
+                  bookData.book_email_msg_name ?? prev.book_email_msg_name,
+                elemento_id: bookData.elemento_id ?? prev.elemento_id,
+                codigo_acionamento:
+                  bookData.codigo_acionamento ?? prev.codigo_acionamento,
+                modalidade: bookData.modalidade ?? prev.modalidade,
+                status: bookData.status ?? prev.status,
+                prioridade: bookData.prioridade ?? prev.prioridade,
+                municipio: bookData.municipio ?? prev.municipio,
+                data_abertura: bookData.data_abertura ?? prev.data_abertura,
+                data_despacho: bookData.data_despacho ?? prev.data_despacho,
+                encarregado: bookData.encarregado ?? prev.encarregado,
+                etapa_atual: bookData.etapa_atual ?? prev.etapa_atual,
+                numero_os: bookData.numero_os ?? prev.numero_os,
+                numero_obra: bookData.numero_obra ?? prev.numero_obra,
+                almox_conferido_em:
+                  bookData.almox_conferido_em ?? prev.almox_conferido_em,
               }
             : prev;
         });
@@ -5554,10 +6253,6 @@ export const WorkflowSteps = () => {
     } finally {
       setBookLoading(false);
     }
-  };
-
-  const handleBookFormChange = (field: keyof typeof emptyBookForm, value: string) => {
-    setBookForm((prev) => ({ ...prev, [field]: value }));
   };
 
   const closeBookModal = () => {
@@ -5594,22 +6289,51 @@ export const WorkflowSteps = () => {
     setBookInfo(null);
 
     try {
-      const payload: Record<string, any> = {
+      const payloadBase: Record<string, any> = {
         book_enviado_em: enviadoEmIso,
         email_msg: bookForm.email_msg?.trim() ? bookForm.email_msg.trim() : null,
       };
+      const emailPayload: Record<string, any> = {
+        book_email_msg: bookForm.email_attachment?.data || null,
+        book_email_msg_name: bookForm.email_attachment?.name || null,
+      };
+
+      let payload = { ...payloadBase };
+      if (bookEmailStorageEnabled) {
+        payload = { ...payload, ...emailPayload };
+      }
+
+      let columnsMissing = false;
 
       const { error } = await supabase
         .from("acionamentos")
         .update(payload)
         .eq("id_acionamento", idAcionamento);
-      if (error) throw error;
+      if (error) {
+        const message = error?.message || "";
+        if (
+          bookEmailStorageEnabled &&
+          (message.includes("book_email_msg") || message.includes("book_email_msg_name"))
+        ) {
+          columnsMissing = true;
+          setBookEmailStorageEnabled(false);
+          const { error: fallbackError } = await supabase
+            .from("acionamentos")
+            .update(payloadBase)
+            .eq("id_acionamento", idAcionamento);
+          if (fallbackError) throw fallbackError;
+        } else {
+          throw error;
+        }
+      }
 
-      setSelectedItem((prev: any) => (prev ? { ...prev, ...payload } : prev));
+      const committedPayload = columnsMissing ? payloadBase : payload;
+
+      setSelectedItem((prev: any) => (prev ? { ...prev, ...committedPayload } : prev));
       setItems((prev) =>
         prev.map((it) => {
           const currId = it.id_acionamento || it.id;
-          return currId === idAcionamento ? { ...it, ...payload } : it;
+          return currId === idAcionamento ? { ...it, ...committedPayload } : it;
         })
       );
 
@@ -5717,9 +6441,11 @@ export const WorkflowSteps = () => {
     setNumeroInfo(null);
 
     try {
+      const etapaDestino = 6;
       const payload = {
         numero_obra: numero,
         numero_obra_atualizado_em: atualizadoEmIso,
+        etapa_atual: etapaDestino,
       };
       const { error } = await supabase
         .from("acionamentos")
@@ -5727,14 +6453,29 @@ export const WorkflowSteps = () => {
         .eq("id_acionamento", idAcionamento);
       if (error) throw error;
 
-      setSelectedItem((prev: any) => (prev ? { ...prev, ...payload } : prev));
-      setItems((prev) =>
-        prev.map((it) =>
-          it.id_acionamento === idAcionamento ? { ...it, ...payload } : it
-        )
+      setSelectedItem((prev: any) =>
+        prev
+          ? {
+              ...prev,
+              ...payload,
+            }
+          : prev
+      );
+      setItems((prev) => prev.filter((it) => it.id_acionamento !== idAcionamento));
+
+      setSteps((prev) =>
+        prev.map((step) => {
+          if (step.id === 5) {
+            return { ...step, count: Math.max(0, step.count - 1) };
+          }
+          if (step.id === etapaDestino) {
+            return { ...step, count: step.count + 1 };
+          }
+          return step;
+        })
       );
 
-      setNumeroInfo("Número da obra atualizado com sucesso.");
+      setNumeroInfo("Número da obra atualizado com sucesso e etapa liberada.");
       setTimeout(() => closeNumeroObraModal(), 800);
     } catch (err: any) {
       setNumeroError(err.message || "Erro ao salvar número da obra.");
@@ -5890,6 +6631,35 @@ export const WorkflowSteps = () => {
               ) : selectedStep?.id === 5 ? (
                 <div className="text-[11px] text-amber-600">Nº da obra pendente</div>
               ) : null}
+              {item.assinatura_fiscal_em ? (
+                <div className="text-[11px] text-emerald-600 font-semibold">
+                  Fiscal aprovado em {formatDateTimeBr(item.assinatura_fiscal_em)}
+                </div>
+              ) : selectedStep?.id === 6 ? (
+                <div className="text-[11px] text-amber-600">Aguardando aprovação fiscal</div>
+              ) : null}
+              {item.tci_criado_em ? (
+                <div className="text-[11px] text-emerald-600 font-semibold">
+                  TCI formalizado em {formatDateTimeBr(item.tci_criado_em)}
+                </div>
+              ) : selectedStep?.id === 7 ? (
+                <div className="text-[11px] text-amber-600">TCI pendente nesta etapa</div>
+              ) : null}
+              {item.medicao_aprovada_em ? (
+                <div className="text-[11px] text-emerald-600 font-semibold">
+                  Medição aprovada em {formatDateTimeBr(item.medicao_aprovada_em)}
+                </div>
+              ) : selectedStep?.id === 8 ? (
+                <div className="text-[11px] text-amber-600">Aguardando aprovação da medição</div>
+              ) : null}
+              {item.medicao_aprovacao_status ? (
+                <div className="text-[11px] text-muted-foreground">
+                  Status da aprovação:{" "}
+                  {APROVACAO_STATUS_LABELS[
+                    item.medicao_aprovacao_status as AprovacaoStatus
+                  ] ?? item.medicao_aprovacao_status}
+                </div>
+              ) : null}
             </div>
             <Badge variant="outline" className="capitalize">
               {item.status || "--"}
@@ -5897,16 +6667,21 @@ export const WorkflowSteps = () => {
           </div>
 
           <div className="flex flex-wrap gap-2">
-            {selectedStep?.id !== 4 && selectedStep?.id !== 5 && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  setSelectedItem(item);
-                  openMaterialsModal(item);
-                }}
-              >
-                Lista de materiais
+            {selectedStep?.id === 6 && (
+              <Button size="sm" onClick={() => openFiscalModal(item)}>
+                Registrar aprovação fiscal
+              </Button>
+            )}
+
+            {selectedStep?.id === 7 && (
+              <Button size="sm" onClick={() => openTciModal(item)}>
+                Registrar TCI
+              </Button>
+            )}
+
+            {selectedStep?.id === 8 && (
+              <Button size="sm" onClick={() => openAprovacaoModal(item)}>
+                Registrar aprovação da medição
               </Button>
             )}
 
@@ -5941,22 +6716,6 @@ export const WorkflowSteps = () => {
               </>
             )}
 
-            {selectedStep?.id !== 4 && selectedStep?.id !== 5 && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  if (selectedStep?.id === 2) {
-                    openExecModal(item);
-                  } else {
-                    navigate(`/acionamentos/${item.codigo_acionamento || item.id_acionamento}`);
-                    setOpen(false);
-                  }
-                }}
-              >
-                Editar acionamento
-              </Button>
-            )}
           </div>
         </div>
       );
@@ -5964,6 +6723,142 @@ export const WorkflowSteps = () => {
   };
 
 
+
+  const renderAprovacaoPreviewContent = (modalidade: "LM" | "LV") => {
+    const contexto = aprovacaoContextoPreview[modalidade];
+    const resumo = aprovacaoResumoPreview[modalidade];
+    if (!contexto || !resumo) {
+      return (
+        <div className="rounded-xl border border-muted/60 bg-muted/10 p-4 text-sm text-muted-foreground">
+          Nenhum dado disponível para o módulo de {modalidade === "LM" ? "Linha Morta" : "Linha Viva"}.
+        </div>
+      );
+    }
+    const itensPreview = resumo.itensCalculados.slice(0, 3);
+    const modalidadeLabel = modalidade === "LM" ? "Linha Morta" : "Linha Viva";
+    const appliedMaterials = contexto.consumo || [];
+    const removedMaterials = contexto.sucata || [];
+
+    return (
+      <div className="space-y-4">
+        <div className="rounded-xl border border-muted/80 bg-muted/10 p-3">
+          <div className="flex items-center justify-between">
+            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Total da aba</p>
+            <span className="text-[10px] font-semibold uppercase text-muted-foreground">
+              {modalidadeLabel}
+            </span>
+          </div>
+          <p className="text-2xl font-semibold">{formatCurrency(resumo.totalComAdicional)}</p>
+          <p className="text-xs text-muted-foreground">
+            Base {formatCurrency(resumo.totalBase)} + {contexto.medicaoForaHC ? "30%" : "12%"} (
+            {resumo.acrescimoInfo.descricao})
+          </p>
+        </div>
+        <div className="rounded-xl border border-muted/80 bg-muted/10 p-3 space-y-2">
+          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Últimos itens</p>
+          {itensPreview.length > 0 ? (
+            itensPreview.map((item) => (
+              <div
+                key={item.index}
+                className="flex items-center justify-between text-sm text-muted-foreground"
+              >
+                <span className="truncate pr-2">
+                  {item.index}. {item.descricao || item.codigo}
+                </span>
+                <span className="font-semibold text-foreground">{formatCurrency(item.subtotal)}</span>
+              </div>
+            ))
+          ) : (
+            <p className="text-xs text-muted-foreground">Sem itens listados.</p>
+          )}
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <div className="rounded-xl border border-muted/80 bg-muted/10 p-2 text-[11px]">
+            <p className="font-semibold truncate">{contexto.codigoAcionamento || "--"}</p>
+            <p className="text-[11px] text-muted-foreground">
+              {contexto.numeroIntervencaoTexto || "--"}
+            </p>
+          </div>
+          <div className="rounded-xl border border-muted/80 bg-muted/10 p-2 text-[11px]">
+            <p className="font-semibold">{contexto.dataExecucaoTexto || "--"}</p>
+            <p className="text-[11px] text-muted-foreground">Data de execução</p>
+          </div>
+          <div className="rounded-xl border border-muted/80 bg-muted/10 p-2 text-[11px]">
+            <p className="font-semibold truncate">{contexto.equipeTexto || "--"}</p>
+            <p className="text-[11px] text-muted-foreground">Equipe</p>
+          </div>
+          <div className="rounded-xl border border-muted/80 bg-muted/10 p-2 text-[11px]">
+            <p className="font-semibold truncate">{contexto.enderecoTexto || "--"}</p>
+            <p className="text-[11px] text-muted-foreground">Endereço</p>
+          </div>
+          <div className="rounded-xl border border-muted/80 bg-muted/10 p-2 text-[11px] sm:col-span-2">
+            <p className="font-semibold truncate">{contexto.alimentadorSubTexto || "--"}</p>
+            <p className="text-[11px] text-muted-foreground">Alimentador / Subestação</p>
+          </div>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase text-muted-foreground">Materiais aplicados</p>
+            {appliedMaterials.length === 0 ? (
+              <p className="text-xs text-muted-foreground">Nenhum item</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Item</TableHead>
+                    <TableHead>Cód.</TableHead>
+                    <TableHead>Descrição</TableHead>
+                    <TableHead>Qtd</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {appliedMaterials.map((item, index) => (
+                    <TableRow key={`applied-${modalidade}-${index}`}>
+                      <TableCell>{index + 1}</TableCell>
+                      <TableCell>{item.codigo_material || item.codigo}</TableCell>
+                      <TableCell className="max-w-[220px] truncate">
+                        {item.descricao_item || item.descricao || "—"}
+                      </TableCell>
+                      <TableCell>{(item.quantidade || item.quantidade_aplicada || 0).toFixed?.() ?? (item.quantidade || item.quantidade_aplicada || 0)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </div>
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase text-muted-foreground">Materiais retirados</p>
+            {removedMaterials.length === 0 ? (
+              <p className="text-xs text-muted-foreground">Nenhum item</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Item</TableHead>
+                    <TableHead>Cód.</TableHead>
+                    <TableHead>Descrição</TableHead>
+                    <TableHead>Qtd</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {removedMaterials.map((item, index) => (
+                    <TableRow key={`removed-${modalidade}-${index}`}>
+                      <TableCell>{index + 1}</TableCell>
+                      <TableCell>{item.codigo_material || item.codigo}</TableCell>
+                      <TableCell className="max-w-[220px] truncate">
+                        {item.descricao || "—"}
+                      </TableCell>
+                      <TableCell>{(item.quantidade || item.quantidade_retirada || 0).toFixed?.() ?? (item.quantidade || item.quantidade_retirada || 0)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   return (
 
@@ -6187,6 +7082,7 @@ export const WorkflowSteps = () => {
           </div>
 
         </div>
+
 
       </CardContent>
 
@@ -6529,13 +7425,432 @@ export const WorkflowSteps = () => {
               Salvar OS
             </Button>
           </DialogFooter>
+      </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={fiscalModalOpen}
+        onOpenChange={(next) => {
+          if (!next) {
+            closeFiscalModal();
+          } else {
+            setFiscalModalOpen(true);
+          }
+        }}
+        modal
+      >
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden">
+          <DialogHeader>
+            <DialogTitle>Registrar aprovação fiscal</DialogTitle>
+            <DialogDescription>
+              Informe quando o fiscal assinou a aprovação para mover a obra na etapa.
+            </DialogDescription>
+          </DialogHeader>
+
+          {fiscalError && <div className="text-sm text-destructive">{fiscalError}</div>}
+          {fiscalInfo && <div className="text-sm text-emerald-600">{fiscalInfo}</div>}
+
+          {fiscalLoading ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground py-6">
+              <Loader2 className="h-4 w-4 animate-spin" /> Carregando dados da aprovação fiscal...
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="rounded-md border px-3 py-2 bg-muted/50">
+                  <Label className="text-xs font-semibold text-muted-foreground">Acionamento</Label>
+                  <div className="text-sm font-semibold text-foreground mt-1">
+                    {selectedItem?.codigo_acionamento || "--"}
+                  </div>
+                </div>
+                <div className="rounded-md border px-3 py-2 bg-muted/50">
+                  <Label className="text-xs font-semibold text-muted-foreground">Status atual</Label>
+                  <div className="text-sm font-semibold text-foreground mt-1">
+                    {selectedItem?.status || "--"}
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <Label>Data/hora da assinatura fiscal</Label>
+                <Input
+                  type="datetime-local"
+                  value={fiscalForm.assinatura_fiscal_em}
+                  disabled={fiscalSaving}
+                  onChange={(e) => handleFiscalFormChange(e.target.value)}
+                />
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="flex gap-2 justify-end">
+            <Button variant="outline" onClick={closeFiscalModal} disabled={fiscalSaving}>
+              Fechar
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={salvarDadosFiscal}
+              disabled={fiscalSaving || fiscalLoading}
+            >
+              {fiscalSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+              Salvar aprovação
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Dialog
-        open={bookModalOpen}
+        open={tciModalOpen}
         onOpenChange={(next) => {
           if (!next) {
+            closeTciModal();
+          } else {
+            setTciModalOpen(true);
+          }
+        }}
+        modal
+      >
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden">
+          <DialogHeader>
+            <DialogTitle>Registrar TCI</DialogTitle>
+            <DialogDescription>
+              Informe o número e a data do TCI para registrar que o documento foi emitido.
+            </DialogDescription>
+          </DialogHeader>
+
+          {tciError && <div className="text-sm text-destructive">{tciError}</div>}
+          {tciInfo && <div className="text-sm text-emerald-600">{tciInfo}</div>}
+
+          {tciLoading ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground py-6">
+              <Loader2 className="h-4 w-4 animate-spin" /> Carregando dados do TCI...
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="rounded-md border px-3 py-2 bg-muted/50">
+                  <Label className="text-xs font-semibold text-muted-foreground">Acionamento</Label>
+                  <div className="text-sm font-semibold text-foreground mt-1">
+                    {selectedItem?.codigo_acionamento || "--"}
+                  </div>
+                </div>
+                <div className="rounded-md border px-3 py-2 bg-muted/50">
+                  <Label className="text-xs font-semibold text-muted-foreground">Status atual</Label>
+                  <div className="text-sm font-semibold text-foreground mt-1">
+                    {selectedItem?.status || "--"}
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <Label>Data/hora do TCI</Label>
+                <Input
+                  type="datetime-local"
+                  value={tciForm.tci_criado_em}
+                  disabled={tciSaving}
+                  onChange={(e) => handleTciFormChange(e.target.value)}
+                />
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="flex gap-2 justify-end">
+            <Button variant="outline" onClick={closeTciModal} disabled={tciSaving}>
+              Fechar
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={salvarDadosTci}
+              disabled={tciSaving || tciLoading}
+            >
+              {tciSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+              Salvar TCI
+            </Button>
+          </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog
+          open={aprovacaoModalOpen}
+          onOpenChange={(next) => {
+            if (!next) {
+              closeAprovacaoModal();
+            } else {
+              setAprovacaoModalOpen(true);
+            }
+          }}
+          modal
+        >
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden">
+            <DialogHeader>
+              <DialogTitle>Registrar aprovação da medição</DialogTitle>
+              <DialogDescription>
+                Informe a data e hora em que a medição foi aprovada para liberação da próxima etapa.
+              </DialogDescription>
+            </DialogHeader>
+
+            {aprovacaoError && <div className="text-sm text-destructive">{aprovacaoError}</div>}
+            {aprovacaoInfo && <div className="text-sm text-emerald-600">{aprovacaoInfo}</div>}
+
+            {aprovacaoLoading ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground py-6">
+                <Loader2 className="h-4 w-4 animate-spin" /> Carregando dados da aprovação...
+              </div>
+            ) : (
+              <div className="grid gap-6 md:grid-cols-2">
+                <div className="space-y-4">
+                  {availablePreviewModalities.length > 0 ? (
+                    <Tabs
+                      value={aprovacaoPreviewModalidade}
+                      onValueChange={(value) => setAprovacaoPreviewModalidade(value as "LM" | "LV")}
+                      className="space-y-4"
+                    >
+                      <TabsList className="grid auto-cols-fr grid-flow-col gap-2">
+                        {availablePreviewModalities.map((modalidade) => (
+                          <TabsTrigger key={modalidade} value={modalidade} className="text-xs">
+                            {modalidade === "LM" ? "Linha Morta" : "Linha Viva"}
+                          </TabsTrigger>
+                        ))}
+                      </TabsList>
+                      {availablePreviewModalities.map((modalidade) => (
+                        <TabsContent key={modalidade} value={modalidade}>
+                          {renderAprovacaoPreviewContent(modalidade)}
+                        </TabsContent>
+                      ))}
+                    </Tabs>
+                  ) : (
+                    <div className="rounded-xl border border-muted/60 bg-muted/10 px-4 py-6 text-center text-sm text-muted-foreground">
+                      Nenhum dado de medição registrado ainda para este acionamento.
+                    </div>
+                  )}
+                </div>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold uppercase text-muted-foreground">
+                      Histórico de negociações
+                    </span>
+                    {aprovacaoLogs[0] ? (
+                      <span className="text-xs text-muted-foreground">
+                        Última atualização em {formatDateTimeBr(aprovacaoLogs[0].criado_em)}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">Nenhum registro</span>
+                    )}
+                  </div>
+                  <div className="space-y-2 rounded-md border border-muted/60 bg-muted/10 p-2 max-h-60 overflow-y-auto">
+                    {aprovacaoLogs.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">
+                        Nenhum registro de status da aprovação até o momento.
+                      </p>
+                    ) : (
+                      aprovacaoLogs.map((log) => (
+                        <div
+                          key={log.id_log}
+                          className="space-y-1 rounded-md border border-muted/40 bg-background px-3 py-3"
+                        >
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span
+                              className={cn(
+                                "text-[11px] font-semibold uppercase px-2 py-0.5 rounded-full",
+                                APROVACAO_STATUS_CLASSES[log.status]
+                              )}
+                            >
+                              {APROVACAO_STATUS_LABELS[log.status]}
+                            </span>
+                            <span className="text-[11px] text-muted-foreground">
+                              {formatDateTimeBr(log.criado_em)}
+                            </span>
+                          </div>
+                          <p className="text-sm text-foreground">
+                            {log.observacao || "Sem observação"}
+                          </p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <div>
+                      <Label>Status</Label>
+                      <select
+                        className="w-full rounded-md border border-input px-3 py-2 text-sm"
+                        value={aprovacaoLogForm.status}
+                        onChange={(e) =>
+                          handleAprovacaoLogFieldChange(
+                            "status",
+                            e.target.value as AprovacaoStatus
+                          )
+                        }
+                      >
+                        <option value="aguardando">Aguardando</option>
+                        <option value="reprovado">Reprovado</option>
+                        <option value="concluido">Concluído</option>
+                      </select>
+                    </div>
+                    <div>
+                      <Label>Data/hora do registro</Label>
+                      <Input
+                        type="datetime-local"
+                        value={aprovacaoLogForm.data}
+                        disabled={aprovacaoSaving}
+                        onChange={(e) => handleAprovacaoLogFieldChange("data", e.target.value)}
+                      />
+                    </div>
+                    <div className="md:col-span-3">
+                      <Label>Observação</Label>
+                      <textarea
+                        className="w-full rounded-md border border-input px-3 py-2 text-sm min-h-[100px]"
+                        value={aprovacaoLogForm.observacao}
+                        disabled={aprovacaoSaving}
+                        onChange={(e) =>
+                          handleAprovacaoLogFieldChange("observacao", e.target.value)
+                        }
+                        placeholder="Descreva o andamento da negociação ou justificativa."
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <DialogFooter className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <Button variant="outline" onClick={closeAprovacaoModal} disabled={aprovacaoSaving}>
+                Fechar
+              </Button>
+              <Button
+                variant="outline"
+                onClick={registrarStatusAprovacao}
+                disabled={aprovacaoSaving || aprovacaoLogForm.status === "concluido"}
+                title={
+                  aprovacaoLogForm.status === "concluido"
+                    ? "Use o botão de conclusão para finalizar"
+                    : undefined
+                }
+              >
+                {aprovacaoSaving ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <Save className="h-4 w-4 mr-2" />
+                )}
+                Registrar status
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={salvarDadosAprovacao}
+                disabled={
+                  aprovacaoSaving ||
+                  aprovacaoLogForm.status !== "concluido" ||
+                  aprovacaoLoading
+                }
+              >
+                {aprovacaoSaving ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <Save className="h-4 w-4 mr-2" />
+                )}
+                Concluir medição
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog
+          open={reajusteModalOpen}
+          onOpenChange={(next) => {
+            if (!next) {
+              setReajusteModalOpen(false);
+            }
+          }}
+          modal
+        >
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden">
+            <DialogHeader>
+              <DialogTitle>Reajuste de medição</DialogTitle>
+              <DialogDescription>
+                Esta tela espelha os dados da etapa 3 para conferir e reajustar valores antes da aprovação.
+              </DialogDescription>
+            </DialogHeader>
+            {(() => {
+              const contexto = aprovacaoContextoPreview[reajusteModalModalidade];
+              const resumo = aprovacaoResumoPreview[reajusteModalModalidade];
+              if (!contexto || !resumo) {
+                return (
+                  <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">
+                    Nenhuma medição registrada para {reajusteModalModalidade === "LM" ? "Linha Morta" : "Linha Viva"}.
+                  </div>
+                );
+              }
+              return (
+                <div className="space-y-6 max-h-[70vh] overflow-y-auto pr-2 pb-4">
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div className="rounded-xl border border-muted/80 bg-muted/10 p-4">
+                      <p className="text-xs uppercase text-muted-foreground">Total da aba</p>
+                      <p className="text-3xl font-semibold">{formatCurrency(resumo.totalComAdicional)}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Base {formatCurrency(resumo.totalBase)} + {contexto.medicaoForaHC ? "30%" : "12%"} (
+                        {resumo.acrescimoInfo.descricao})
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-muted/80 bg-muted/10 p-4 text-sm space-y-2">
+                      <div className="flex justify-between">
+                        <span>Código</span>
+                        <span className="font-semibold">{contexto.codigoAcionamento || "--"}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Data execução</span>
+                        <span className="font-semibold">{contexto.dataExecucaoTexto || "--"}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Equipe</span>
+                        <span className="font-semibold">{contexto.equipeTexto || "--"}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Endereço</span>
+                        <span className="font-semibold truncate">{contexto.enderecoTexto || "--"}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase text-muted-foreground">Itens calculados</p>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-[40px]">Item</TableHead>
+                          <TableHead>Código</TableHead>
+                          <TableHead>Descrição</TableHead>
+                          <TableHead>Quant</TableHead>
+                          <TableHead>UPS</TableHead>
+                          <TableHead className="text-right">Total R$</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {resumo.itensCalculados.map((item) => (
+                          <TableRow key={`reajuste-${reajusteModalModalidade}-${item.index}`}>
+                            <TableCell>{item.index}</TableCell>
+                            <TableCell>{item.codigo}</TableCell>
+                            <TableCell className="max-w-[300px] truncate">{item.descricao}</TableCell>
+                            <TableCell>{item.quantidade.toFixed(2)}</TableCell>
+                            <TableCell>{item.upsQtd.toFixed(2)}</TableCell>
+                            <TableCell className="text-right">{formatCurrency(item.subtotal)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              );
+            })()}
+            <DialogFooter className="flex justify-end">
+              <Button variant="outline" onClick={() => setReajusteModalOpen(false)}>
+                Fechar
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog
+          open={bookModalOpen}
+          onOpenChange={(next) => {
+            if (!next) {
             closeBookModal();
           } else {
             setBookModalOpen(true);
@@ -6546,8 +7861,8 @@ export const WorkflowSteps = () => {
         <DialogContent className="max-w-3xl w-full max-h-[90vh] overflow-hidden">
           <DialogHeader>
             <DialogTitle>Registro do book</DialogTitle>
-            <DialogDescription>
-              Informe quando o book foi enviado á Energisa e deixe registrado o conteúdo do e-mail ou observaçães relevantes.
+          <DialogDescription>
+              Informe quando o book foi enviado á Energisa e deixe registrado o conteúdo do e-mail ou observações relevantes.
             </DialogDescription>
           </DialogHeader>
 
@@ -6593,6 +7908,54 @@ export const WorkflowSteps = () => {
                       </div>
                     </div>
                   </div>
+                  <div className="space-y-2">
+                    <Label>Anexar e-mail (.msg)</Label>
+                    <div className="flex flex-wrap gap-2 items-center">
+                      <input
+                        ref={bookAttachmentInputRef}
+                        type="file"
+                        accept=".msg"
+                        className="sr-only"
+                        disabled={!bookEmailStorageEnabled}
+                        onChange={(e) => {
+                          if (!bookEmailStorageEnabled) return;
+                          const file = e.target.files?.[0];
+                          handleBookEmailAttachmentUpload(file);
+                          if (e.target) e.target.value = "";
+                        }}
+                      />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        type="button"
+                        onClick={triggerBookEmailAttachmentUpload}
+                        disabled={bookSaving || !bookEmailStorageEnabled}
+                      >
+                        Selecionar arquivo
+                      </Button>
+                      {bookForm.email_attachment && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          type="button"
+                          onClick={clearBookEmailAttachment}
+                          disabled={bookSaving}
+                        >
+                          Remover
+                        </Button>
+                      )}
+                    </div>
+                    {bookForm.email_attachment && (
+                      <p className="text-xs text-muted-foreground">
+                        {bookForm.email_attachment.name}
+                      </p>
+                    )}
+                    {!bookEmailStorageEnabled && (
+                      <p className="text-xs text-destructive">
+                        As colunas `book_email_msg`/`book_email_msg_name` não existem na base; o anexo .msg não será salvo.
+                      </p>
+                    )}
+                  </div>
 
                   {selectedItem?.book_enviado_em && (
                     <div className="text-xs text-muted-foreground">
@@ -6617,7 +7980,7 @@ export const WorkflowSteps = () => {
                       value={bookForm.email_msg}
                       disabled={bookSaving}
                       onChange={(e) => handleBookFormChange("email_msg", e.target.value)}
-                      placeholder="Cole aqui o texto do e-mail enviado ou observaçães importantes."
+                      placeholder="Cole aqui o texto do e-mail enviado ou observações importantes."
                     />
                   </div>
                 </div>
@@ -7043,6 +8406,7 @@ export const WorkflowSteps = () => {
                   Fora do horário comercial
                 </label>
               </div>
+
 
               {(modalSuportaLM || modalSuportaLV) && (
                 <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
