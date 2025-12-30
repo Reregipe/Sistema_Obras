@@ -7342,7 +7342,10 @@ export const WorkflowSteps = () => {
     setRetornoResumo(null);
     setRetornoRows([]);
     setRetornoEnviadoRows([]);
+    setRetornoSaveMessage(null);
   };
+
+  const [retornoSaveMessage, setRetornoSaveMessage] = useState<string | null>(null);
 
   const salvarRetornoConcessionaria = async () => {
     if (!selectedItem) {
@@ -7375,8 +7378,7 @@ export const WorkflowSteps = () => {
       }));
       const { error } = await supabase.from("medicao_retorno_items").insert(payload);
       if (error) throw error;
-      await handleReajusteValor(retornoModalidade);
-      closeRetornoModal();
+      setRetornoSaveMessage("Retorno salvo com sucesso.");
     } catch (err: any) {
       setRetornoError(err?.message || "Erro ao salvar o retorno da concessionária.");
     } finally {
@@ -7421,6 +7423,33 @@ export const WorkflowSteps = () => {
     : retornoResumo
     ? `${(adicionalPercentual * 100).toFixed(0)}% (${retornoResumo.acrescimoInfo?.descricao || "Adicional"})`
     : `${Math.round(adicionalPercentual * 100)}%`;
+  const retornoSummaryCards = [
+    {
+      label: "Total base (R$)",
+      value: formatCurrency(retornoBaseTotal),
+      helper: "Somatório dos itens sem adicional",
+    },
+    {
+      label: "Total aprovado (R$)",
+      value: formatCurrency(retornoTotalAprovado),
+      helper: "Somatório homologado",
+    },
+    {
+      label: "Diferença total",
+      value: formatCurrency(retornoDiferenca),
+      helper: `${formatPercent(retornoDiferencaPercent)} sobre o base`,
+    },
+    {
+      label: "Valor retido (R$)",
+      value: formatCurrency(retornoValorRetido),
+      helper: "Base − aprovado",
+    },
+    {
+      label: "Adicional aplicado",
+      value: formatPercent(adicionalPercentual * 100),
+      helper: retornoAdditionalLabel,
+    },
+  ];
   const renderAprovacaoPreviewContent = (modalidade: "LM" | "LV") => {
     const contexto = aprovacaoContextoPreview[modalidade];
     const resumo = aprovacaoResumoPreview[modalidade];
@@ -8496,6 +8525,28 @@ export const WorkflowSteps = () => {
                 ))}
               </TableBody>
                   </Table>
+                </div>
+                {retornoSaveMessage && (
+                  <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800">
+                    {retornoSaveMessage}
+                  </div>
+                )}
+                <div className="rounded-xl border border-muted/60 bg-muted/10 p-4 space-y-3">
+                  <div className="flex items-center justify-between text-xs uppercase text-muted-foreground">
+                    <span>Resumo do retorno</span>
+                    <span className="text-[10px] text-foreground">Atualização automática</span>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5">
+                    {retornoSummaryCards.map((card) => (
+                      <div key={card.label} className="rounded-lg border border-muted/40 bg-white/80 p-3">
+                        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                          {card.label}
+                        </p>
+                        <div className="text-lg font-semibold text-foreground">{card.value}</div>
+                        <p className="text-[11px] text-muted-foreground">{card.helper}</p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
