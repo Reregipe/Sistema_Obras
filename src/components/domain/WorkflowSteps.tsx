@@ -253,13 +253,13 @@ const renderRetornoReferenciaPanel = (
   const itensPreview = resumo.itensCalculados.slice(0, 3);
   return (
     <div className="space-y-4">
-        <div className="rounded-xl border border-muted/60 bg-muted/10 p-3 text-xs text-muted-foreground flex items-center justify-between">
+        <div className="rounded-xl border border-muted/100 bg-muted/10 p-3 text-xs text-muted-foreground flex items-center justify-between">
           <span className="font-semibold text-muted-foreground">Adicional aplicado</span>
           <span className="text-sm text-foreground">
             {contexto.medicaoForaHC ? "30% (SERV. EMERG.)" : "12% (HORÁRIO COMERCIAL)"}
           </span>
         </div>
-        <div className="rounded-xl border border-muted/60 bg-muted/10 p-4 space-y-1">
+        <div className="rounded-xl border border-muted/100 bg-muted/10 p-4 space-y-1">
           <p className="text-xs font-semibold uppercase text-muted-foreground">Total da aba</p>
           <div className="text-3xl font-semibold text-foreground">{formatCurrency(resumo.totalComAdicional)}</div>
           <div className="flex flex-col text-xs text-muted-foreground">
@@ -269,12 +269,9 @@ const renderRetornoReferenciaPanel = (
             <span>
               Adicional: <span className="font-semibold text-foreground">{formatCurrency(resumo.totalComAdicional - resumo.totalBase)}</span>
             </span>
-            <span>
-              {contexto.medicaoForaHC ? "30% (SERV. EMERG.)" : "12% (HORÁRIO COMERCIAL)"}
-            </span>
           </div>
         </div>
-      <div className="rounded-xl border border-muted/60 bg-muted/10 p-3 space-y-2">
+      <div className="rounded-xl border border-muted/100 bg-muted/10 p-3 space-y-2">
         <p className="text-xs uppercase tracking-wide text-muted-foreground">Últimos itens</p>
         {itensPreview.length > 0 ? (
           itensPreview.map((item) => (
@@ -290,27 +287,27 @@ const renderRetornoReferenciaPanel = (
         )}
       </div>
       <div className="grid gap-2 sm:grid-cols-2">
-        <div className="rounded-md border border-muted/50 bg-background/50 px-3 py-2 text-xs text-muted-foreground">
+        <div className="rounded-md border border-muted/100 bg-background/50 px-3 py-2 text-xs text-muted-foreground">
           <p className="font-semibold text-foreground">{contexto.codigoAcionamento || "--"}</p>
           <p>Código do acionamento</p>
         </div>
-        <div className="rounded-md border border-muted/50 bg-background/50 px-3 py-2 text-xs text-muted-foreground">
+        <div className="rounded-md border border-muted/100 bg-background/50 px-3 py-2 text-xs text-muted-foreground">
           <p className="font-semibold text-foreground">{contexto.numeroIntervencaoTexto || "--"}</p>
           <p>Número intervenção</p>
         </div>
-        <div className="rounded-md border border-muted/50 bg-background/50 px-3 py-2 text-xs text-muted-foreground">
+        <div className="rounded-md border border-muted/100 bg-background/50 px-3 py-2 text-xs text-muted-foreground">
           <p className="font-semibold text-foreground">{contexto.dataExecucaoTexto || "--"}</p>
           <p>Data execução</p>
         </div>
-        <div className="rounded-md border border-muted/50 bg-background/50 px-3 py-2 text-xs text-muted-foreground">
+        <div className="rounded-md border border-muted/100 bg-background/50 px-3 py-2 text-xs text-muted-foreground">
           <p className="font-semibold text-foreground">{contexto.equipeTexto || "--"}</p>
           <p>Equipe</p>
         </div>
-        <div className="rounded-md border border-muted/50 bg-background/50 px-3 py-2 text-xs text-muted-foreground sm:col-span-2">
+        <div className="rounded-md border border-muted/100 bg-background/50 px-3 py-2 text-xs text-muted-foreground sm:col-span-2">
           <p className="font-semibold text-foreground truncate">{contexto.enderecoTexto || "--"}</p>
           <p>Endereço</p>
         </div>
-        <div className="rounded-md border border-muted/50 bg-background/50 px-3 py-2 text-xs text-muted-foreground sm:col-span-2">
+        <div className="rounded-md border border-muted/100 bg-background/50 px-3 py-2 text-xs text-muted-foreground sm:col-span-2">
           <p className="font-semibold text-foreground truncate">{contexto.alimentadorSubTexto || "--"}</p>
           <p>Alimentador / Subestação</p>
         </div>
@@ -7523,11 +7520,6 @@ export const WorkflowSteps = () => {
       value: formatCurrency(retornoValorRetido),
       helper: "Base − aprovado",
     },
-    {
-      label: "Adicional aplicado",
-      value: formatPercent(adicionalPercentual * 100),
-      helper: retornoAdditionalLabel,
-    },
   ];
   const renderAprovacaoPreviewContent = (modalidade: "LM" | "LV") => {
     const contexto = aprovacaoContextoPreview[modalidade];
@@ -8510,53 +8502,56 @@ export const WorkflowSteps = () => {
             >
               <TabsList className="grid grid-cols-2 gap-2 rounded-full bg-muted/20 p-1">
                 {RETORNO_MODALIDADES.map((modalidade) => (
-                  <TabsTrigger
-                    key={modalidade}
-                    value={modalidade}
-                    className="text-xs font-medium rounded-full"
-                  >
+                <TabsTrigger
+                  key={modalidade}
+                  value={modalidade}
+                  className="text-xs font-medium rounded-full px-3 py-1.5 border border-transparent transition-colors data-[state=active]:bg-foreground data-[state=active]:text-background data-[state=active]:shadow-md"
+                >
                     {formatModalidadeLabel(modalidade)}
                   </TabsTrigger>
                 ))}
               </TabsList>
             </Tabs>
             <div className="grid gap-4 xl:grid-cols-[1.05fr,1.45fr]">
-            <div className="space-y-4">
-              {renderRetornoReferenciaPanel(retornoContexto, retornoResumo)}
-            </div>
-              <div className="rounded-xl border border-muted/60 bg-muted/10 p-2 shadow-sm overflow-x-auto">
+              <div className="space-y-4">
+                {renderRetornoReferenciaPanel(retornoContexto, retornoResumo)}
+              </div>
+              <div className="space-y-4">
+                <div className="rounded-xl border border-muted/100 bg-muted/10 p-2 shadow-sm overflow-x-auto">
                   <Table className="min-w-full">
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Código</TableHead>
-                  <TableHead>Descrição</TableHead>
-                  <TableHead>Qtde Enviado</TableHead>
-                  <TableHead>Total Enviado R$</TableHead>
-                  <TableHead>Qtde Aprovado</TableHead>
-                  <TableHead>Total Aprovado R$</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {retornoRows.map((row) => (
-                  <TableRow key={row.codigo}>
-                    <TableCell>{row.codigo}</TableCell>
-                    <TableCell className="max-w-[200px] truncate">{row.descricao}</TableCell>
-                      <TableCell>{row.quantidadeEnviada.toFixed(2)}</TableCell>
-                      <TableCell>{formatCurrency(row.totalEnviado)}</TableCell>
-                    <TableCell>
-                      <Input
-                        type="number"
-                        size="sm"
-                        value={row.quantidadeAprovada}
-                        onChange={(e) => handleRetornoFieldChange(row.codigo, "quantidadeAprovada", e.target.value)}
-                      />
-                    </TableCell>
-                    <TableCell className="text-right font-semibold">
-                      {formatCurrency(row.totalAprovado)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Código</TableHead>
+                        <TableHead>Descrição</TableHead>
+                        <TableHead>Qtde Enviado</TableHead>
+                        <TableHead>Total Enviado R$</TableHead>
+                        <TableHead>Qtde Aprovado</TableHead>
+                        <TableHead>Total Aprovado R$</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {retornoRows.map((row) => (
+                        <TableRow key={row.codigo}>
+                          <TableCell>{row.codigo}</TableCell>
+                          <TableCell className="max-w-[200px] truncate">{row.descricao}</TableCell>
+                          <TableCell>{row.quantidadeEnviada.toFixed(2)}</TableCell>
+                          <TableCell>{formatCurrency(row.totalEnviado)}</TableCell>
+                          <TableCell>
+                            <Input
+                              type="number"
+                              size="sm"
+                              value={row.quantidadeAprovada}
+                              onChange={(e) =>
+                                handleRetornoFieldChange(row.codigo, "quantidadeAprovada", e.target.value)
+                              }
+                            />
+                          </TableCell>
+                          <TableCell className="text-right font-semibold">
+                            {formatCurrency(row.totalAprovado)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
                   </Table>
                 </div>
                 {retornoSaveMessage && (
@@ -8564,15 +8559,18 @@ export const WorkflowSteps = () => {
                     {retornoSaveMessage}
                   </div>
                 )}
-                <div className="rounded-xl border border-muted/60 bg-muted/10 p-4 space-y-3">
+                <div className="rounded-xl border border-muted/100 bg-muted/10 p-4 space-y-1">
                   <div className="flex items-center justify-between text-xs uppercase text-muted-foreground">
                     <span>Resumo do retorno</span>
-                    <span className="text-[10px] text-foreground">Atualização automática</span>
+                    <span className="text-[10px] text-foreground tracking-[0.3em]">Atualização automática</span>
                   </div>
-                  <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5">
+                  <div className="flex flex-wrap gap-3">
                     {retornoSummaryCards.map((card) => (
-                      <div key={card.label} className="rounded-lg border border-muted/40 bg-white/80 p-3">
-                        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                      <div
+                        key={card.label}
+                        className="flex-1 min-w-[150px] rounded-lg border border-muted/100 bg-white/80 p-3 shadow-sm"
+                      >
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                           {card.label}
                         </p>
                         <div className="text-lg font-semibold text-foreground">{card.value}</div>
@@ -8700,116 +8698,83 @@ export const WorkflowSteps = () => {
                 <Loader2 className="h-4 w-4 animate-spin" /> Carregando dados da aprovação...
               </div>
             ) : (
-              <div className="grid gap-6 md:grid-cols-2">
-                <div className="space-y-4">
-                  {availablePreviewModalities.length > 0 ? (
-                    <Tabs
-                      value={aprovacaoPreviewModalidade}
-                      onValueChange={(value) => setAprovacaoPreviewModalidade(value as "LM" | "LV")}
-                      className="space-y-4"
-                    >
-                      <TabsList className="grid auto-cols-fr grid-flow-col gap-2">
-                        {availablePreviewModalities.map((modalidade) => (
-                          <TabsTrigger key={modalidade} value={modalidade} className="text-xs">
-                            {modalidade === "LM" ? "Linha Morta" : "Linha Viva"}
-                          </TabsTrigger>
-                        ))}
-                      </TabsList>
-                      {availablePreviewModalities.map((modalidade) => (
-                        <TabsContent key={modalidade} value={modalidade}>
-                          {renderAprovacaoPreviewContent(modalidade)}
-                        </TabsContent>
-                      ))}
-                    </Tabs>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold uppercase text-muted-foreground">Histórico de negociações</span>
+                  {aprovacaoLogs[0] ? (
+                    <span className="text-xs text-muted-foreground">
+                      Última atualização em {formatDateTimeBr(aprovacaoLogs[0].criado_em)}
+                    </span>
                   ) : (
-                    <div className="rounded-xl border border-muted/60 bg-muted/10 px-4 py-6 text-center text-sm text-muted-foreground">
-                      Nenhum dado de medição registrado ainda para este acionamento.
-                    </div>
+                    <span className="text-xs text-muted-foreground">Nenhum registro</span>
                   )}
                 </div>
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold uppercase text-muted-foreground">
-                      Histórico de negociações
-                    </span>
-                    {aprovacaoLogs[0] ? (
-                      <span className="text-xs text-muted-foreground">
-                        Última atualização em {formatDateTimeBr(aprovacaoLogs[0].criado_em)}
-                      </span>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">Nenhum registro</span>
-                    )}
-                  </div>
-                  <div className="space-y-2 rounded-md border border-muted/60 bg-muted/10 p-2 max-h-60 overflow-y-auto">
-                    {aprovacaoLogs.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">
-                        Nenhum registro de status da aprovação até o momento.
-                      </p>
-                    ) : (
-                      aprovacaoLogs.map((log) => (
-                        <div
-                          key={log.id_log}
-                          className="space-y-1 rounded-md border border-muted/40 bg-background px-3 py-3"
-                        >
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span
-                              className={cn(
-                                "text-[11px] font-semibold uppercase px-2 py-0.5 rounded-full",
-                                APROVACAO_STATUS_CLASSES[log.status]
-                              )}
-                            >
-                              {APROVACAO_STATUS_LABELS[log.status]}
-                            </span>
-                            <span className="text-[11px] text-muted-foreground">
-                              {formatDateTimeBr(log.criado_em)}
-                            </span>
-                          </div>
-                          <p className="text-sm text-foreground">
-                            {log.observacao || "Sem observação"}
-                          </p>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                  <div className="grid gap-3 md:grid-cols-3">
-                    <div>
-                      <Label>Status</Label>
-                      <select
-                        className="w-full rounded-md border border-input px-3 py-2 text-sm"
-                        value={aprovacaoLogForm.status}
-                        onChange={(e) =>
-                          handleAprovacaoLogFieldChange(
-                            "status",
-                            e.target.value as AprovacaoStatus
-                          )
-                        }
+                <div className="space-y-2 rounded-md border border-muted/60 bg-muted/10 p-2 max-h-60 overflow-y-auto">
+                  {aprovacaoLogs.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      Nenhum registro de status da aprovação até o momento.
+                    </p>
+                  ) : (
+                    aprovacaoLogs.map((log) => (
+                      <div
+                        key={log.id_log}
+                        className="space-y-1 rounded-md border border-muted/40 bg-background px-3 py-3"
                       >
-                        <option value="aguardando">Aguardando</option>
-                        <option value="reprovado">Reprovado</option>
-                        <option value="concluido">Concluído</option>
-                      </select>
-                    </div>
-                    <div>
-                      <Label>Data/hora do registro</Label>
-                      <Input
-                        type="datetime-local"
-                        value={aprovacaoLogForm.data}
-                        disabled={aprovacaoSaving}
-                        onChange={(e) => handleAprovacaoLogFieldChange("data", e.target.value)}
-                      />
-                    </div>
-                    <div className="md:col-span-3">
-                      <Label>Observação</Label>
-                      <textarea
-                        className="w-full rounded-md border border-input px-3 py-2 text-sm min-h-[100px]"
-                        value={aprovacaoLogForm.observacao}
-                        disabled={aprovacaoSaving}
-                        onChange={(e) =>
-                          handleAprovacaoLogFieldChange("observacao", e.target.value)
-                        }
-                        placeholder="Descreva o andamento da negociação ou justificativa."
-                      />
-                    </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span
+                            className={cn(
+                              "text-[11px] font-semibold uppercase px-2 py-0.5 rounded-full",
+                              APROVACAO_STATUS_CLASSES[log.status]
+                            )}
+                          >
+                            {APROVACAO_STATUS_LABELS[log.status]}
+                          </span>
+                          <span className="text-[11px] text-muted-foreground">
+                            {formatDateTimeBr(log.criado_em)}
+                          </span>
+                        </div>
+                        <p className="text-sm text-foreground">
+                          {log.observacao || "Sem observação"}
+                        </p>
+                      </div>
+                    ))
+                  )}
+                </div>
+                <div className="grid gap-3 md:grid-cols-3">
+                  <div>
+                    <Label>Status</Label>
+                    <select
+                      className="w-full rounded-md border border-input px-3 py-2 text-sm"
+                      value={aprovacaoLogForm.status}
+                      onChange={(e) =>
+                        handleAprovacaoLogFieldChange("status", e.target.value as AprovacaoStatus)
+                      }
+                    >
+                      <option value="aguardando">Aguardando</option>
+                      <option value="reprovado">Reprovado</option>
+                      <option value="concluido">Concluído</option>
+                    </select>
+                  </div>
+                  <div>
+                    <Label>Data/hora do registro</Label>
+                    <Input
+                      type="datetime-local"
+                      value={aprovacaoLogForm.data}
+                      disabled={aprovacaoSaving}
+                      onChange={(e) => handleAprovacaoLogFieldChange("data", e.target.value)}
+                    />
+                  </div>
+                  <div className="md:col-span-3">
+                    <Label>Observação</Label>
+                    <textarea
+                      className="w-full rounded-md border border-input px-3 py-2 text-sm min-h-[100px]"
+                      value={aprovacaoLogForm.observacao}
+                      disabled={aprovacaoSaving}
+                      onChange={(e) =>
+                        handleAprovacaoLogFieldChange("observacao", e.target.value)
+                      }
+                      placeholder="Descreva o andamento da negociação ou justificativa."
+                    />
                   </div>
                 </div>
               </div>
