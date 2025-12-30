@@ -123,6 +123,150 @@ const parseMedicaoItens = (value: unknown): any[] => {
   return [];
 };
 
+const toRetornoRowFromRecord = (record: RetornoItemRecord): RetornoRow => {
+  const quantidade = Number(record.quantidade ?? 0);
+  const ups = Number(record.ups ?? 0);
+  const valor =
+    Number(
+      record.total_valor ??
+        record.subtotal ??
+        record.total ??
+        (quantidade && ups ? quantidade * ups : 0)
+    ) || 0;
+  const unitPrice = quantidade ? valor / quantidade : 0;
+  return {
+    codigo: record.codigo,
+    descricao: record.descricao || undefined,
+    quantidadeEnviada: quantidade,
+    upsEnviado: ups,
+    totalEnviado: valor,
+    quantidadeAprovada: quantidade,
+    upsAprovado: ups,
+    totalAprovado: valor,
+    unitPrice,
+    regraAplicada: record.regra_aplicada || undefined,
+  };
+};
+
+const buildRetornoRowsFromItems = (items: any[]): RetornoRow[] => {
+  return items.map((item) => {
+    const quantidade = Number(item.quantidade ?? item.qtd ?? 0);
+    const ups = Number(item.valorUps ?? item.ups ?? item.upsQtd ?? 0);
+    const total =
+      Number(item.total ?? item.valor_total ?? item.subtotal ?? 0) ||
+      quantidade * ups;
+    return {
+      codigo: item.codigo || item.codigo_material || "--",
+      descricao: item.descricao || item.descricao_item || undefined,
+      quantidadeEnviada: quantidade,
+      upsEnviado: ups,
+      totalEnviado: total,
+      quantidadeAprovada: quantidade,
+      upsAprovado: ups,
+      totalAprovado: total,
+      regraAplicada: item.regra_aplicada || undefined,
+    };
+  });
+};
+
+const buildRowsFromResumo = (resumo: MaoDeObraResumo): RetornoRow[] => {
+  return resumo.itensCalculados.map((item) => ({
+    codigo: item.codigo,
+    descricao: item.descricao,
+    quantidadeEnviada: item.quantidade,
+    upsEnviado: item.upsQtd,
+    totalEnviado: item.subtotal,
+    quantidadeAprovada: item.quantidade,
+    upsAprovado: item.upsQtd,
+    totalAprovado: item.subtotal,
+    regraAplicada: undefined,
+  }));
+};
+
+const renderRetornoReferenciaPanel = (
+  contexto: OrcamentoPdfContext | null,
+  resumo: MaoDeObraResumo | null
+) => {
+  if (!contexto || !resumo) {
+    return (
+      <div className="rounded-xl border border-muted/60 bg-muted/10 p-4 text-center text-sm text-muted-foreground">
+        Nenhum dado de medição disponível para esta modalidade.
+      </div>
+    );
+  }
+  const modalidadeLabel = contexto.pdfModalidade === "LM" ? "Linha Morta" : "Linha Viva";
+  const itensPreview = resumo.itensCalculados.slice(0, 3);
+    return (
+      <div className="space-y-4">
+        <div className="rounded-full border border-muted/40 bg-muted/20 px-4 py-1 text-center text-xs uppercase tracking-widest text-muted-foreground">
+          {modalidadeLabel}
+        </div>
+        <div className="rounded-xl border border-muted/60 bg-muted/10 p-3 text-xs text-muted-foreground flex items-center justify-between">
+          <span className="font-semibold text-muted-foreground">Adicional aplicado</span>
+          <span className="text-sm text-foreground">
+            {contexto.medicaoForaHC ? "30% (SERV. EMERG.)" : "12% (HORÁRIO COMERCIAL)"}
+          </span>
+        </div>
+        <div className="rounded-xl border border-muted/60 bg-muted/10 p-4 space-y-1">
+          <p className="text-xs font-semibold uppercase text-muted-foreground">Total da aba</p>
+          <div className="text-3xl font-semibold text-foreground">{formatCurrency(resumo.totalComAdicional)}</div>
+          <div className="flex flex-col text-xs text-muted-foreground">
+            <span>
+              Base: <span className="font-semibold text-foreground">{formatCurrency(resumo.totalBase)}</span>
+            </span>
+            <span>
+              Adicional: <span className="font-semibold text-foreground">{formatCurrency(resumo.totalComAdicional - resumo.totalBase)}</span>
+            </span>
+            <span>
+              {contexto.medicaoForaHC ? "30% (SERV. EMERG.)" : "12% (HORÁRIO COMERCIAL)"}
+            </span>
+          </div>
+        </div>
+      <div className="rounded-xl border border-muted/60 bg-muted/10 p-3 space-y-2">
+        <p className="text-xs uppercase tracking-wide text-muted-foreground">Últimos itens</p>
+        {itensPreview.length > 0 ? (
+          itensPreview.map((item) => (
+            <div key={item.index} className="flex items-center justify-between text-sm text-muted-foreground">
+              <span className="truncate">
+                {item.index}. {item.descricao || item.codigo}
+              </span>
+              <span className="font-semibold text-foreground">{formatCurrency(item.subtotal)}</span>
+            </div>
+          ))
+        ) : (
+          <p className="text-xs text-muted-foreground">Sem itens registrados.</p>
+        )}
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <div className="rounded-md border border-muted/50 bg-background/50 px-3 py-2 text-xs text-muted-foreground">
+          <p className="font-semibold text-foreground">{contexto.codigoAcionamento || "--"}</p>
+          <p>Código do acionamento</p>
+        </div>
+        <div className="rounded-md border border-muted/50 bg-background/50 px-3 py-2 text-xs text-muted-foreground">
+          <p className="font-semibold text-foreground">{contexto.numeroIntervencaoTexto || "--"}</p>
+          <p>Número intervenção</p>
+        </div>
+        <div className="rounded-md border border-muted/50 bg-background/50 px-3 py-2 text-xs text-muted-foreground">
+          <p className="font-semibold text-foreground">{contexto.dataExecucaoTexto || "--"}</p>
+          <p>Data execução</p>
+        </div>
+        <div className="rounded-md border border-muted/50 bg-background/50 px-3 py-2 text-xs text-muted-foreground">
+          <p className="font-semibold text-foreground">{contexto.equipeTexto || "--"}</p>
+          <p>Equipe</p>
+        </div>
+        <div className="rounded-md border border-muted/50 bg-background/50 px-3 py-2 text-xs text-muted-foreground sm:col-span-2">
+          <p className="font-semibold text-foreground truncate">{contexto.enderecoTexto || "--"}</p>
+          <p>Endereço</p>
+        </div>
+        <div className="rounded-md border border-muted/50 bg-background/50 px-3 py-2 text-xs text-muted-foreground sm:col-span-2">
+          <p className="font-semibold text-foreground truncate">{contexto.alimentadorSubTexto || "--"}</p>
+          <p>Alimentador / Subestação</p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 type MaoDeObraResumo = {
   itensCalculados: {
     index: number;
@@ -138,6 +282,94 @@ type MaoDeObraResumo = {
   totalComAdicional: number;
   acrescimoValor: number;
   acrescimoInfo: { codigo: string; descricao: string };
+};
+
+type AuditItemStatus = "integral" | "parcial" | "glosado" | "ajuste" | "excluido";
+
+type AuditComparisonRow = {
+  codigo: string;
+  descricao: string;
+  quantidadeEnviada: number;
+  upsEnviado: number;
+  totalEnviado: number;
+  quantidadeAprovada: number;
+  upsAprovado: number;
+  totalAprovado: number;
+  difference: number;
+  differencePercent: number;
+  valorRetido: number;
+  regraAplicada?: string;
+  status: AuditItemStatus;
+  alertAuditoria: boolean;
+};
+
+type AuditSummary = {
+  totalEnviado: number;
+  totalAprovado: number;
+  diferenca: number;
+  diferencaPercent: number;
+  itensComDivergencia: number;
+  valorRetido: number;
+};
+
+type RuleImpact = {
+  regra: string;
+  itens: number;
+  impacto: number;
+};
+
+type TimelinePoint = {
+  label: string;
+  value: number;
+};
+
+type AuditComparison = {
+  summary: AuditSummary;
+  rows: AuditComparisonRow[];
+  ruleImpact: RuleImpact[];
+  timeline: TimelinePoint[];
+  statusBreakdown: Record<AuditItemStatus, number>;
+};
+
+type RetornoItemRecord = {
+  id: string;
+  origem: "ENVIADO" | "APROVADO";
+  modalidade: "LM" | "LV";
+  codigo: string;
+  descricao?: string;
+  quantidade?: number;
+  ups?: number;
+  total_valor?: number;
+  regra_aplicada?: string;
+};
+
+type RetornoRow = {
+  codigo: string;
+  descricao?: string;
+  quantidadeEnviada: number;
+  upsEnviado: number;
+  totalEnviado: number;
+  quantidadeAprovada: number;
+  upsAprovado: number;
+  totalAprovado: number;
+  unitPrice: number;
+  regraAplicada?: string;
+};
+
+const AUDIT_STATUS_LABELS: Record<AuditItemStatus, string> = {
+  integral: "Aprovado Integral",
+  parcial: "Aprovado Parcial",
+  glosado: "Glosado",
+  ajuste: "Ajustado por Regra",
+  excluido: "Item Excluído",
+};
+
+const AUDIT_STATUS_CLASSES: Record<AuditItemStatus, string> = {
+  integral: "bg-emerald-100 text-emerald-700",
+  parcial: "bg-amber-100 text-amber-700",
+  glosado: "bg-red-100 text-red-700",
+  ajuste: "bg-blue-100 text-blue-700",
+  excluido: "bg-slate-100 text-slate-700",
 };
 
 type AprovacaoStatus = "aguardando" | "reprovado" | "concluido";
@@ -182,11 +414,56 @@ const currencyFormatter = new Intl.NumberFormat("pt-BR", {
 });
 
 const formatCurrency = (value: number) => currencyFormatter.format(value);
-const formatQuantity = (value: number | string | undefined) => {
-  if (value === undefined || value === null || value === "") return "0,00";
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) return "0,00";
-  return numeric.toFixed(2);
+
+const formatPercent = (value: number) => {
+  if (!isFinite(value)) return "0,00%";
+  return `${value.toFixed(2)}%`;
+};
+
+const nearlyEquals = (a: number, b: number, epsilon = 0.01) => Math.abs(a - b) <= epsilon;
+
+const deriveAuditStatus = (
+  totalEnviado: number,
+  totalAprovado: number,
+  regraAplicada?: string
+): AuditItemStatus => {
+  if (totalAprovado <= 0 || (!totalEnviado && totalAprovado === 0)) {
+    return "excluido";
+  }
+  if (nearlyEquals(totalEnviado, totalAprovado)) {
+    return "integral";
+  }
+  if (regraAplicada) {
+    return "ajuste";
+  }
+  if (totalAprovado < totalEnviado) {
+    return "glosado";
+  }
+  return "parcial";
+};
+
+const buildTimelineSeries = (
+  baseDate: string | null | undefined,
+  valorRetido: number
+): TimelinePoint[] => {
+  const now = baseDate ? new Date(baseDate) : new Date();
+  const points: TimelinePoint[] = [];
+  for (let idx = 2; idx >= 0; idx--) {
+    const date = new Date(now);
+    date.setMonth(now.getMonth() - idx);
+    points.push({
+      label: date.toLocaleString("pt-BR", { month: "short", year: "numeric" }),
+      value: Number(((idx + 1) / 3) * valorRetido),
+    });
+  }
+  return points;
+};
+
+const generateLoteRetornoId = () => {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`;
 };
 
 const normalizeLinha = (valor?: string | null): EquipeLinha | undefined => {
@@ -577,8 +854,20 @@ export const WorkflowSteps = () => {
     LV: null,
   });
   const [aprovacaoPreviewModalidade, setAprovacaoPreviewModalidade] = useState<"LM" | "LV">("LM");
-  const [reajusteModalOpen, setReajusteModalOpen] = useState(false);
-  const [reajusteModalModalidade, setReajusteModalModalidade] = useState<"LM" | "LV">("LM");
+  const [auditoriaModalOpen, setAuditoriaModalOpen] = useState(false);
+  const [auditoriaLoading, setAuditoriaLoading] = useState(false);
+  const [auditoriaError, setAuditoriaError] = useState<string | null>(null);
+  const [auditoriaData, setAuditoriaData] = useState<AuditComparison | null>(null);
+  const [retornoModalOpen, setRetornoModalOpen] = useState(false);
+  const [retornoLoading, setRetornoLoading] = useState(false);
+  const [retornoSaving, setRetornoSaving] = useState(false);
+  const [retornoError, setRetornoError] = useState<string | null>(null);
+  const [retornoRows, setRetornoRows] = useState<RetornoRow[]>([]);
+  const [retornoEnviadoRows, setRetornoEnviadoRows] = useState<RetornoRow[]>([]);
+  const [retornoModalidade, setRetornoModalidade] = useState<"LM" | "LV">("LM");
+  const [retornoLoteId, setRetornoLoteId] = useState<string>("");
+  const [retornoContexto, setRetornoContexto] = useState<OrcamentoPdfContext | null>(null);
+  const [retornoResumo, setRetornoResumo] = useState<MaoDeObraResumo | null>(null);
   const availablePreviewModalities = useMemo(() => {
     return obterModalidadesDisponiveis(aprovacaoContextoPreview);
   }, [aprovacaoContextoPreview]);
@@ -589,15 +878,6 @@ export const WorkflowSteps = () => {
       setAprovacaoPreviewModalidade(availablePreviewModalities[0]);
     }
   }, [availablePreviewModalities, aprovacaoPreviewModalidade]);
-
-  const handleReajusteValor = (modalidade: "LM" | "LV") => {
-    if (!hasDadosMedicao(aprovacaoContextoPreview[modalidade])) {
-      alert("Não há dados de medição registrados para esta modalidade.");
-      return;
-    }
-    setReajusteModalModalidade(modalidade);
-    setReajusteModalOpen(true);
-  };
   type BookEmailAttachment = {
     name: string;
     data: string;
@@ -2083,9 +2363,16 @@ export const WorkflowSteps = () => {
     const itensOrigem = contexto.itensMO || [];
     const valorReferencia = contexto.medicaoTab === "LM" ? contexto.medicaoValorUpsLM : contexto.medicaoValorUpsLV;
     const itensCalculados = itensOrigem.map((item, idx) => {
-      const upsQtd = Number(item.valorUps ?? item.ups ?? 0);
+      const upsQtd = Number(
+        item.valorUps ?? item.ups ?? valorReferencia ?? 0
+      );
       const quantidade = Number(item.quantidade) || 0;
-      const subtotal = quantidade * upsQtd * valorReferencia;
+      const subtotalFromItem =
+        Number(item.subtotal ?? item.total ?? item.valor_total ?? 0) || 0;
+      const subtotal =
+        subtotalFromItem > 0
+          ? subtotalFromItem
+          : quantidade * upsQtd * (valorReferencia || 0);
       return {
         index: idx + 1,
         codigo: item.codigo,
@@ -6724,6 +7011,383 @@ export const WorkflowSteps = () => {
 
 
 
+  const fetchRetornoItems = async (
+    idAcionamento: string,
+    modalidade: "LM" | "LV"
+  ): Promise<RetornoItemRecord[]> => {
+    const { data, error } = await supabase
+      .from("medicao_retorno_items")
+      .select(
+        "id,origem,modalidade,codigo,descricao,quantidade,ups,total_valor,regra_aplicada"
+      )
+      .eq("id_acionamento", idAcionamento)
+      .eq("modalidade", modalidade)
+      .in("origem", ["ENVIADO", "APROVADO"])
+      .order("codigo");
+    if (error) throw error;
+    let items = (data || []).map((row: any) => ({
+      ...row,
+      total_valor: Number(row.total_valor) || 0,
+      quantidade: Number(row.quantidade) || 0,
+      ups: Number(row.ups) || 0,
+    }));
+    const hasEnviado = items.some((row) => row.origem === "ENVIADO");
+    if (!hasEnviado) {
+      const enviadoRows = await fetchEnviadoRetornoRows(idAcionamento, modalidade);
+      const fallback = enviadoRows.map((row) => ({
+        origem: "ENVIADO" as const,
+        modalidade,
+        codigo: row.codigo,
+        descricao: row.descricao,
+        quantidade: Number(row.quantidade) || 0,
+        ups: Number(row.ups) || 0,
+        total_valor: Number(row.total_valor) || 0,
+        regra_aplicada: row.regra_aplicada || null,
+      }));
+      items = [...fallback, ...items];
+    }
+    return items;
+  };
+
+  const buildAuditComparison = (
+    items: RetornoItemRecord[],
+    baseDate: string | undefined
+  ): AuditComparison => {
+    const grouped = new Map<
+      string,
+      {
+        codigo: string;
+        descricao?: string;
+        regra?: string;
+        enviado?: RetornoItemRecord;
+        aprovado?: RetornoItemRecord;
+      }
+    >();
+
+    items.forEach((item) => {
+      const key = item.codigo || `${item.id}`;
+      const entry = grouped.get(key) || { codigo: item.codigo };
+      entry.descricao = entry.descricao || item.descricao;
+      if (item.origem === "ENVIADO") {
+        entry.enviado = item;
+      } else {
+        entry.aprovado = item;
+      }
+      if (item.regra_aplicada && !entry.regra) {
+        entry.regra = item.regra_aplicada;
+      }
+      grouped.set(key, entry);
+    });
+
+    const rows: AuditComparisonRow[] = [];
+    grouped.forEach((entry) => {
+      const totalEnviado = entry.enviado?.total_valor ?? 0;
+      const totalAprovado = entry.aprovado?.total_valor ?? 0;
+      const difference = totalAprovado - totalEnviado;
+      const differencePercent = totalEnviado
+        ? (difference / totalEnviado) * 100
+        : totalAprovado
+        ? 100
+        : 0;
+      const valorRetido = totalAprovado < totalEnviado ? totalEnviado - totalAprovado : 0;
+      const status = deriveAuditStatus(totalEnviado, totalAprovado, entry.regra);
+      rows.push({
+        codigo: entry.codigo,
+        descricao: entry.descricao || entry.enviado?.descricao || entry.aprovado?.descricao || "-",
+        quantidadeEnviada: entry.enviado?.quantidade || 0,
+        upsEnviado: entry.enviado?.ups || 0,
+        totalEnviado,
+        quantidadeAprovada: entry.aprovado?.quantidade || 0,
+        upsAprovado: entry.aprovado?.ups || 0,
+        totalAprovado,
+        difference,
+        differencePercent,
+        valorRetido,
+        regraAplicada: entry.regra,
+        status,
+        alertAuditoria: differencePercent < -5 || valorRetido > 20,
+      });
+    });
+
+    const mappedRows = rows.sort((a, b) => b.valorRetido - a.valorRetido);
+    const totalEnviado = mappedRows.reduce((sum, row) => sum + row.totalEnviado, 0);
+    const totalAprovado = mappedRows.reduce((sum, row) => sum + row.totalAprovado, 0);
+    const diferenca = totalAprovado - totalEnviado;
+    const diferencaPercent = totalEnviado ? (diferenca / totalEnviado) * 100 : 0;
+    const itensComDivergencia = mappedRows.filter(
+      (row) => Math.abs(row.difference) > 0.01 || Math.abs(row.quantidadeEnviada - row.quantidadeAprovada) > 0.01
+    ).length;
+    const valorRetido = mappedRows.reduce((sum, row) => sum + row.valorRetido, 0);
+
+    const ruleImpactMap = new Map<string, { itens: number; impacto: number }>();
+    mappedRows.forEach((row) => {
+      const regra = row.regraAplicada || "Regra geral";
+      const existing = ruleImpactMap.get(regra) || { itens: 0, impacto: 0 };
+      existing.itens += 1;
+      existing.impacto += row.difference;
+      ruleImpactMap.set(regra, existing);
+    });
+
+    const ruleImpact: RuleImpact[] = Array.from(ruleImpactMap.entries()).map(([regra, data]) => ({
+      regra,
+      itens: data.itens,
+      impacto: data.impacto,
+    }));
+
+    const statusBreakdown: Record<AuditItemStatus, number> = {
+      integral: 0,
+      parcial: 0,
+      glosado: 0,
+      ajuste: 0,
+      excluido: 0,
+    };
+    mappedRows.forEach((row) => {
+      statusBreakdown[row.status] = (statusBreakdown[row.status] || 0) + 1;
+    });
+
+    const timeline = buildTimelineSeries(baseDate, valorRetido);
+
+    return {
+      summary: {
+        totalEnviado,
+        totalAprovado,
+        diferenca,
+        diferencaPercent,
+        itensComDivergencia,
+        valorRetido,
+      },
+      rows: mappedRows,
+      ruleImpact,
+      timeline,
+      statusBreakdown,
+    };
+  };
+
+  const handleReajusteValor = async (modalidade: "LM" | "LV") => {
+    const idAcionamento = selectedItem?.id_acionamento || selectedItem?.id;
+    if (!idAcionamento) {
+      setAuditoriaError("Selecione um acionamento para abrir a auditoria.");
+      setAuditoriaModalOpen(true);
+      return;
+    }
+    setAuditoriaLoading(true);
+    setAuditoriaError(null);
+    setAuditoriaData(null);
+    setAuditoriaModalOpen(true);
+    try {
+      const rows = await fetchRetornoItems(idAcionamento, modalidade);
+      if (rows.length === 0) {
+        setAuditoriaError("Ainda não existem registros de retorno da concessionária para essa medição.");
+        return;
+      }
+      const comparison = buildAuditComparison(rows, selectedItem?.medicao_aprovada_em || null);
+      setAuditoriaData(comparison);
+    } catch (err: any) {
+      if (
+        typeof err?.message === "string" &&
+        err.message.toLowerCase().includes("medicao_retorno_items")
+      ) {
+        setAuditoriaError(
+          "Ainda não existe a tabela de retorno da concessionária no banco de dados. Peça ao time de dados para criar `medicao_retorno_items`."
+        );
+      } else {
+        setAuditoriaError(
+          err?.message ||
+            "Não foi possível carregar os dados de auditoria. Verifique se a etapa de retorno da concessionária foi preenchida."
+        );
+      }
+    } finally {
+      setAuditoriaLoading(false);
+    }
+  };
+
+  const fetchEnviadoRetornoRows = async (idAcionamento: string, modalidade: "LM" | "LV") => {
+    const { data: enviados, error } = await supabase
+      .from("medicao_retorno_items")
+      .select("codigo,descricao,quantidade,ups,total_valor,regra_aplicada")
+      .eq("id_acionamento", idAcionamento)
+      .eq("modalidade", modalidade)
+      .eq("origem", "ENVIADO");
+    if (error) throw error;
+    if (enviados && enviados.length > 0) {
+      return enviados.map((row: any) => ({
+        codigo: row.codigo,
+        descricao: row.descricao,
+        quantidade: Number(row.quantidade) || 0,
+        ups: Number(row.ups) || 0,
+        total_valor: Number(row.total_valor) || 0,
+        regra_aplicada: row.regra_aplicada,
+      }));
+    }
+    const { data: context, error: medError } = await supabase
+      .from("medicao_orcamentos")
+      .select(modalidade === "LM" ? "itens_lm" : "itens_lv")
+      .eq("id_acionamento", idAcionamento)
+      .maybeSingle();
+    if (medError) throw medError;
+    const key = modalidade === "LM" ? "itens_lm" : "itens_lv";
+    const sourceItems = parseMedicaoItens(context?.[key]);
+    return sourceItems;
+  };
+
+  const handleRetornoFieldChange = (
+    codigo: string,
+    field: "quantidadeAprovada" | "upsAprovado",
+    value: string
+  ) => {
+    const numeric = Number(value.replace(",", "."));
+    setRetornoRows((prev) =>
+      prev.map((row) => {
+        if (row.codigo !== codigo) return row;
+        let updated = { ...row, [field]: Number.isFinite(numeric) ? numeric : row[field] };
+        if (field === "quantidadeAprovada") {
+          const price =
+            row.unitPrice ||
+            (row.quantidadeEnviada ? row.totalEnviado / row.quantidadeEnviada : 0);
+          updated.totalAprovado = (Number.isFinite(numeric) ? numeric : row.quantidadeAprovada) * price;
+        }
+        return updated;
+      })
+    );
+  };
+
+  const handleOpenRetornoModal = async (item: any) => {
+    setSelectedItem(item);
+    setRetornoModalidade((item.modalidade === "LV" ? "LV" : "LM") as "LM" | "LV");
+    setRetornoModalOpen(true);
+    setRetornoLoading(true);
+    setRetornoError(null);
+    setRetornoRows([]);
+    const loteId = generateLoteRetornoId();
+    setRetornoLoteId(loteId);
+    try {
+      const modalidade = item.modalidade === "LV" ? "LV" : "LM";
+      const previewContext = aprovacaoContextoPreview[modalidade];
+      const previewResumo = aprovacaoResumoPreview[modalidade];
+      if (previewContext && previewResumo) {
+        setRetornoContexto(previewContext);
+        setRetornoResumo(previewResumo);
+        const baseRows = buildRowsFromResumo(previewResumo);
+        setRetornoEnviadoRows(baseRows);
+        setRetornoRows(baseRows.map((row) => ({ ...row })));
+        return;
+      }
+      let contexto: OrcamentoPdfContext | null = null;
+      let resumo: MaoDeObraResumo | null = null;
+      try {
+        contexto = await prepararOrcamentoContext(item.id_acionamento || item.id, modalidade as "LM" | "LV", item);
+        if (contexto) {
+          resumo = calcularResumoMaoDeObra(contexto);
+        }
+      } catch (err) {
+        contexto = null;
+      }
+      if (contexto && resumo) {
+        setRetornoContexto(contexto);
+        setRetornoResumo(resumo);
+        const baseRows = buildRowsFromResumo(resumo);
+        setRetornoEnviadoRows(baseRows);
+        setRetornoRows(baseRows.map((row) => ({ ...row })));
+      } else {
+        setRetornoContexto(null);
+        setRetornoResumo(null);
+        const rows = await fetchEnviadoRetornoRows(item.id_acionamento || item.id, modalidade);
+        const baseRows = rows.map((row) => toRetornoRowFromRecord(row));
+        setRetornoEnviadoRows(baseRows);
+        setRetornoRows(baseRows.map((row) => ({ ...row })));
+      }
+    } catch (err: any) {
+      setRetornoError(err?.message || "Não foi possível carregar os itens enviados.");
+    } finally {
+      setRetornoLoading(false);
+    }
+  };
+
+  const closeRetornoModal = () => {
+    setRetornoModalOpen(false);
+    setRetornoContexto(null);
+    setRetornoResumo(null);
+    setRetornoRows([]);
+    setRetornoEnviadoRows([]);
+  };
+
+  const salvarRetornoConcessionaria = async () => {
+    if (!selectedItem) {
+      setRetornoError("Selecione um acionamento antes de salvar o retorno.");
+      return;
+    }
+    const idAcionamento = selectedItem.id_acionamento || selectedItem.id;
+    if (!idAcionamento) {
+      setRetornoError("ID do acionamento inválido.");
+      return;
+    }
+    if (retornoRows.length === 0) {
+      setRetornoError("Não há itens para salvar.");
+      return;
+    }
+    setRetornoSaving(true);
+    setRetornoError(null);
+    try {
+      const payload = retornoRows.map((row) => ({
+        id_acionamento: idAcionamento,
+        origem: "APROVADO",
+        modalidade: retornoModalidade,
+        codigo: row.codigo,
+        descricao: row.descricao || null,
+        quantidade: row.quantidadeAprovada,
+        ups: row.upsAprovado,
+        total_valor: row.totalAprovado,
+        regra_aplicada: row.regraAplicada || null,
+        lote_retorno_id: retornoLoteId,
+      }));
+      const { error } = await supabase.from("medicao_retorno_items").insert(payload);
+      if (error) throw error;
+      await handleReajusteValor(retornoModalidade);
+      closeRetornoModal();
+    } catch (err: any) {
+      setRetornoError(err?.message || "Erro ao salvar o retorno da concessionária.");
+    } finally {
+      setRetornoSaving(false);
+    }
+  };
+
+  const retornoBaseTotal = retornoResumo?.totalBase ?? retornoEnviadoRows.reduce(
+    (sum, row) => sum + (row.totalEnviado || 0),
+    0
+  );
+  const retornoTotalAprovado = retornoRows.reduce(
+    (sum, row) => sum + (row.totalAprovado || 0),
+    0
+  );
+  const adicionalPercentual =
+    retornoResumo && retornoResumo.totalBase
+      ? (retornoResumo.totalComAdicional - retornoResumo.totalBase) / retornoResumo.totalBase
+      : retornoContexto
+      ? retornoContexto.medicaoForaHC
+        ? 0.3
+        : 0.12
+      : 0;
+  const retornoTotalComAdicional =
+    retornoResumo?.totalComAdicional ?? retornoTotalAprovado * (1 + adicionalPercentual);
+  const retornoDiferenca = retornoTotalAprovado - retornoBaseTotal;
+  const retornoDiferencaPercent = retornoBaseTotal
+    ? (retornoDiferenca / retornoBaseTotal) * 100
+    : 0;
+  const retornoValorRetido = Math.max(0, retornoBaseTotal - retornoTotalAprovado);
+  const retornoTotalQtdeAprovada = retornoRows.reduce(
+    (sum, row) => sum + (row.quantidadeAprovada || 0),
+    0
+  );
+  const retornoAdditionalValue = retornoTotalComAdicional - retornoBaseTotal;
+  const retornoAdditionalPercent =
+    retornoBaseTotal && retornoBaseTotal > 0 ? (retornoAdditionalValue / retornoBaseTotal) * 100 : 0;
+  const retornoAdditionalLabel = retornoContexto
+    ? retornoContexto.medicaoForaHC
+      ? "30% (SERV. EMERG.)"
+      : "12% (HORÁRIO COMERCIAL)"
+    : retornoResumo
+    ? `${(adicionalPercentual * 100).toFixed(0)}% (${retornoResumo.acrescimoInfo?.descricao || "Adicional"})`
+    : `${Math.round(adicionalPercentual * 100)}%`;
   const renderAprovacaoPreviewContent = (modalidade: "LM" | "LV") => {
     const contexto = aprovacaoContextoPreview[modalidade];
     const resumo = aprovacaoResumoPreview[modalidade];
@@ -6736,9 +7400,6 @@ export const WorkflowSteps = () => {
     }
     const itensPreview = resumo.itensCalculados.slice(0, 3);
     const modalidadeLabel = modalidade === "LM" ? "Linha Morta" : "Linha Viva";
-    const appliedMaterials = contexto.consumo || [];
-    const removedMaterials = contexto.sucata || [];
-
     return (
       <div className="space-y-4">
         <div className="rounded-xl border border-muted/80 bg-muted/10 p-3">
@@ -6794,66 +7455,6 @@ export const WorkflowSteps = () => {
           <div className="rounded-xl border border-muted/80 bg-muted/10 p-2 text-[11px] sm:col-span-2">
             <p className="font-semibold truncate">{contexto.alimentadorSubTexto || "--"}</p>
             <p className="text-[11px] text-muted-foreground">Alimentador / Subestação</p>
-          </div>
-        </div>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
-            <p className="text-xs font-semibold uppercase text-muted-foreground">Materiais aplicados</p>
-            {appliedMaterials.length === 0 ? (
-              <p className="text-xs text-muted-foreground">Nenhum item</p>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Item</TableHead>
-                    <TableHead>Cód.</TableHead>
-                    <TableHead>Descrição</TableHead>
-                    <TableHead>Qtd</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {appliedMaterials.map((item, index) => (
-                    <TableRow key={`applied-${modalidade}-${index}`}>
-                      <TableCell>{index + 1}</TableCell>
-                      <TableCell>{item.codigo_material || item.codigo}</TableCell>
-                      <TableCell className="max-w-[220px] truncate">
-                        {item.descricao_item || item.descricao || "—"}
-                      </TableCell>
-                      <TableCell>{(item.quantidade || item.quantidade_aplicada || 0).toFixed?.() ?? (item.quantidade || item.quantidade_aplicada || 0)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </div>
-          <div className="space-y-2">
-            <p className="text-xs font-semibold uppercase text-muted-foreground">Materiais retirados</p>
-            {removedMaterials.length === 0 ? (
-              <p className="text-xs text-muted-foreground">Nenhum item</p>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Item</TableHead>
-                    <TableHead>Cód.</TableHead>
-                    <TableHead>Descrição</TableHead>
-                    <TableHead>Qtd</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {removedMaterials.map((item, index) => (
-                    <TableRow key={`removed-${modalidade}-${index}`}>
-                      <TableCell>{index + 1}</TableCell>
-                      <TableCell>{item.codigo_material || item.codigo}</TableCell>
-                      <TableCell className="max-w-[220px] truncate">
-                        {item.descricao || "—"}
-                      </TableCell>
-                      <TableCell>{(item.quantidade || item.quantidade_retirada || 0).toFixed?.() ?? (item.quantidade || item.quantidade_retirada || 0)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
           </div>
         </div>
       </div>
@@ -7500,6 +8101,374 @@ export const WorkflowSteps = () => {
       </Dialog>
 
       <Dialog
+        open={auditoriaModalOpen}
+        onOpenChange={(next) => {
+          if (!next) {
+            setAuditoriaModalOpen(false);
+          }
+        }}
+        modal
+      >
+      <DialogContent className="max-w-[90vw] w-[90vw] max-h-[90vh] overflow-hidden">
+        <DialogHeader>
+          <DialogTitle>Auditoria operacional e financeira</DialogTitle>
+          <DialogDescription>
+              Compare automaticamente a medição enviada pela contratada com o retorno da concessionária.
+            </DialogDescription>
+          </DialogHeader>
+
+          {auditoriaError && (
+            <div className="text-sm text-destructive mb-2">{auditoriaError}</div>
+          )}
+          {auditoriaLoading || !auditoriaData ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground py-6">
+              {auditoriaLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {auditoriaLoading ? "Processando auditoria..." : "Nenhum dado para comparar ainda."}
+            </div>
+          ) : (
+            <div className="space-y-6 overflow-y-auto max-h-[72vh] pr-2 pb-4">
+              <div className="grid gap-3 md:grid-cols-3">
+                {[
+                  {
+                    label: "Total Enviado (R$)",
+                    value: formatCurrency(auditoriaData.summary.totalEnviado),
+                    helper: "Soma dos valores transmitidos",
+                  },
+                  {
+                    label: "Total Aprovado (R$)",
+                    value: formatCurrency(auditoriaData.summary.totalAprovado),
+                    helper: "Soma dos valores homologados",
+                  },
+                  {
+                    label: "Diferença Absoluta (R$)",
+                    value: formatCurrency(auditoriaData.summary.diferenca),
+                    helper: `Partida aprovada – enviada (${formatPercent(auditoriaData.summary.diferencaPercent)})`,
+                  },
+                ].map((card) => (
+                  <Card key={card.label} className="border">
+                    <CardHeader className="space-y-1">
+                      <CardTitle className="text-sm">{card.label}</CardTitle>
+                      <CardDescription className="text-xs">{card.helper}</CardDescription>
+                    </CardHeader>
+                    <CardContent className="text-2xl font-semibold">{card.value}</CardContent>
+                  </Card>
+                ))}
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold uppercase text-muted-foreground">
+                  Itens com divergência
+                </span>
+                {auditoriaData.summary.valorRetido > 20 && (
+                  <Badge className="text-[10px] uppercase text-destructive border-destructive/60">
+                    ⚠ Auditoria Necessária
+                  </Badge>
+                )}
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="rounded-xl border border-muted/60 bg-muted/10 p-4">
+                  <p className="text-[11px] uppercase text-muted-foreground">Itens com divergência</p>
+                  <p className="text-3xl font-semibold">{auditoriaData.summary.itensComDivergencia}</p>
+                </div>
+                <div className="rounded-xl border border-muted/60 bg-muted/10 p-4">
+                  <p className="text-[11px] uppercase text-muted-foreground">Valor retido (R$)</p>
+                  <p className="text-3xl font-semibold">
+                    {formatCurrency(auditoriaData.summary.valorRetido)}
+                  </p>
+                </div>
+              </div>
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-xs font-semibold uppercase text-muted-foreground">
+                    Tabela de confronto por item
+                  </p>
+                  <span className="text-xs text-muted-foreground">
+                    Percentual de diferença &lt; -5% serão destacados
+                  </span>
+                </div>
+                <div className="rounded-xl border border-muted/60 bg-muted/10 overflow-auto">
+                  <Table className="min-w-[900px]">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Código</TableHead>
+                        <TableHead>Descrição</TableHead>
+                        <TableHead>Qtde Enviada</TableHead>
+                        <TableHead>UPS Enviado</TableHead>
+                        <TableHead>Total Enviado R$</TableHead>
+                        <TableHead>Qtde Aprovada</TableHead>
+                        <TableHead>UPS Aprovado</TableHead>
+                        <TableHead>Total Aprovado R$</TableHead>
+                        <TableHead className="text-right">Diferença R$</TableHead>
+                        <TableHead className="text-right">Diferença %</TableHead>
+                        <TableHead>Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {auditoriaData.rows.map((row) => (
+                        <TableRow
+                          key={`${row.codigo}-${row.status}`}
+                          className={row.alertAuditoria ? "text-destructive" : ""}
+                        >
+                          <TableCell>{row.codigo}</TableCell>
+                          <TableCell className="max-w-[200px] truncate">{row.descricao}</TableCell>
+                          <TableCell>{row.quantidadeEnviada.toFixed(2)}</TableCell>
+                          <TableCell>{row.upsEnviado.toFixed(2)}</TableCell>
+                          <TableCell>{formatCurrency(row.totalEnviado)}</TableCell>
+                          <TableCell>{row.quantidadeAprovada.toFixed(2)}</TableCell>
+                          <TableCell>{row.upsAprovado.toFixed(2)}</TableCell>
+                          <TableCell>{formatCurrency(row.totalAprovado)}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(row.difference)}</TableCell>
+                          <TableCell className="text-right">{formatPercent(row.differencePercent)}</TableCell>
+                          <TableCell>
+                            <Badge className={cn("text-[10px] px-2 py-0.5 rounded-full", AUDIT_STATUS_CLASSES[row.status])}>
+                              {AUDIT_STATUS_LABELS[row.status]}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold uppercase text-muted-foreground">
+                    Regras comerciais aplicadas
+                  </p>
+                </div>
+                <div className="grid gap-3 md:grid-cols-3">
+                  {auditoriaData.ruleImpact.map((rule) => (
+                    <Card key={rule.regra} className="border">
+                      <CardHeader className="space-y-1">
+                        <CardTitle className="text-sm">{rule.regra}</CardTitle>
+                        <CardDescription className="text-[11px] text-muted-foreground">
+                          Total de itens: {rule.itens}
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="text-lg font-semibold">
+                        {formatCurrency(rule.impacto)}
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-4">
+                <div className="grid gap-4 lg:grid-cols-3">
+                  <div className="rounded-xl border border-muted/60 bg-muted/10 p-4">
+                    <div className="flex items-center justify-between text-xs uppercase text-muted-foreground mb-3">
+                      <span>Enviado vs Aprovado</span>
+                    </div>
+                    <div className="space-y-3">
+                      {auditoriaData.rows.slice(0, 4).map((row) => {
+                        const maxVal = Math.max(row.totalEnviado, row.totalAprovado, 1);
+                        return (
+                          <div key={row.codigo}>
+                            <div className="flex justify-between text-[11px] text-muted-foreground">
+                              <span>{row.codigo}</span>
+                              <span>{formatCurrency(row.totalAprovado || 0)}</span>
+                            </div>
+                            <div className="relative overflow-hidden rounded-full bg-slate-200 h-4">
+                              <div
+                                className="absolute inset-y-0 left-0 bg-emerald-500"
+                                style={{ width: `${(row.totalAprovado / maxVal) * 100}%` }}
+                              />
+                              <div
+                                className="absolute inset-y-0 left-0 bg-blue-500"
+                                style={{
+                                  width: `${(row.totalEnviado / maxVal) * 100}%`,
+                                  opacity: 0.7,
+                                }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-muted/60 bg-muted/10 p-4">
+                    <div className="flex items-center justify-between text-xs uppercase text-muted-foreground mb-3">
+                      <span>Status por item</span>
+                    </div>
+                    <div className="space-y-2 text-sm">
+                      {Object.keys(auditoriaData.statusBreakdown).map((status) => (
+                        <div key={status} className="flex items-center justify-between">
+                          <span className="flex items-center gap-2">
+                            <span
+                              className={cn(
+                                "w-3 h-3 rounded-full",
+                                AUDIT_STATUS_CLASSES[status as AuditItemStatus]
+                              )}
+                            />
+                            {AUDIT_STATUS_LABELS[status as AuditItemStatus]}
+                          </span>
+                          <span>{auditoriaData.statusBreakdown[status as AuditItemStatus]}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-muted/60 bg-muted/10 p-4">
+                    <div className="flex items-center justify-between text-xs uppercase text-muted-foreground mb-3">
+                      <span>Evolução de perdas</span>
+                    </div>
+                    <div className="flex items-end gap-2 h-32">
+                      {auditoriaData.timeline.map((point) => {
+                        const max = Math.max(...auditoriaData.timeline.map((p) => p.value), 1);
+                        return (
+                          <div key={point.label} className="flex-1">
+                            <div
+                              className="bg-destructive h-full rounded-t-md"
+                              style={{ height: `${(point.value / max) * 100}%` }}
+                            />
+                            <p className="text-[11px] text-center mt-1">{point.label}</p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="flex justify-end">
+          <Button variant="outline" onClick={() => setAuditoriaModalOpen(false)}>
+            Fechar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <Dialog
+      open={retornoModalOpen}
+      onOpenChange={(next) => {
+        if (!next) {
+          closeRetornoModal();
+        }
+      }}
+      modal
+    >
+      <DialogContent className="max-w-[90vw] w-[90vw] max-h-[90vh] overflow-hidden">
+        <DialogHeader>
+          <DialogTitle>Registro de retorno da concessionária</DialogTitle>
+          <DialogDescription>
+            Edite as quantidades/UPS/valores aprovados antes de salvar o lote.
+          </DialogDescription>
+        </DialogHeader>
+
+        {retornoError && <div className="text-sm text-destructive">{retornoError}</div>}
+
+        {retornoLoading ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground py-6">
+            <Loader2 className="h-4 w-4 animate-spin" /> Carregando itens enviados...
+          </div>
+        ) : (
+          <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-2 pb-4">
+            <div className="grid gap-4 xl:grid-cols-[1.05fr,1.45fr]">
+            <div className="space-y-4">
+              {renderRetornoReferenciaPanel(retornoContexto, retornoResumo)}
+            </div>
+              <div className="space-y-4">
+                <div className="rounded-xl border border-muted/70 bg-background p-4">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Recebido</p>
+                      <p className="text-3xl font-semibold text-foreground">{formatCurrency(retornoTotalComAdicional)}</p>
+                      <p className="text-xs text-muted-foreground">Total com adicional aplicado</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Adicional</p>
+                      <p className="text-xl font-semibold text-destructive">{formatCurrency(retornoAdditionalValue)}</p>
+                      <p className="text-xs text-muted-foreground">{formatPercent(retornoAdditionalPercent)}</p>
+                    </div>
+                  </div>
+                  <div className="mt-3 grid grid-cols-1 gap-3 text-[11px] text-muted-foreground sm:grid-cols-3">
+                    <div className="rounded-md border border-muted/40 bg-muted/20 p-2 text-center">
+                      <p className="text-[10px] uppercase tracking-wide">Base enviada</p>
+                      <p className="text-sm font-semibold text-foreground">{formatCurrency(retornoBaseTotal)}</p>
+                    </div>
+                    <div className="rounded-md border border-muted/40 bg-muted/20 p-2 text-center">
+                      <p className="text-[10px] uppercase tracking-wide">Qtde aprovada</p>
+                      <p className="text-sm font-semibold">{retornoTotalQtdeAprovada.toFixed(2)}</p>
+                    </div>
+                    <div className="rounded-md border border-muted/40 bg-muted/20 p-2 text-center">
+                      <p className="text-[10px] uppercase tracking-wide">Valor retido</p>
+                      <p className="text-sm font-semibold text-destructive">{formatCurrency(retornoValorRetido)}</p>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex items-center justify-between text-[10px] uppercase tracking-wide text-muted-foreground">
+                    <span>Adicional aplicado</span>
+                    <span className="font-semibold text-foreground">{retornoAdditionalLabel}</span>
+                  </div>
+                  <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2 text-[10px] text-muted-foreground">
+                    <div className="rounded-md border border-muted/40 bg-muted/20 p-2 text-center">
+                      <p className="font-semibold text-muted-foreground">Diferença total</p>
+                      <p className="text-base font-semibold text-destructive">{formatCurrency(retornoDiferenca)}</p>
+                      <p>{formatPercent(retornoDiferencaPercent)}</p>
+                    </div>
+                    <div className="rounded-md border border-muted/40 bg-muted/20 p-2 text-center">
+                      <p className="font-semibold text-muted-foreground">Percentual aplicado</p>
+                      <p className="text-base font-semibold text-foreground">
+                        {formatPercent(adicionalPercentual * 100)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <div className="rounded-xl border border-muted/60 bg-muted/10 p-2 shadow-sm overflow-x-auto">
+                  <Table className="min-w-full">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Código</TableHead>
+                  <TableHead>Descrição</TableHead>
+                  <TableHead>Qtde Enviado</TableHead>
+                  <TableHead>Total Enviado R$</TableHead>
+                  <TableHead>Qtde Aprovado</TableHead>
+                  <TableHead>Total Aprovado R$</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {retornoRows.map((row) => (
+                  <TableRow key={row.codigo}>
+                    <TableCell>{row.codigo}</TableCell>
+                    <TableCell className="max-w-[200px] truncate">{row.descricao}</TableCell>
+                      <TableCell>{row.quantidadeEnviada.toFixed(2)}</TableCell>
+                      <TableCell>{formatCurrency(row.totalEnviado)}</TableCell>
+                    <TableCell>
+                      <Input
+                        type="number"
+                        size="sm"
+                        value={row.quantidadeAprovada}
+                        onChange={(e) => handleRetornoFieldChange(row.codigo, "quantidadeAprovada", e.target.value)}
+                      />
+                    </TableCell>
+                    <TableCell className="text-right font-semibold">
+                      {formatCurrency(row.totalAprovado)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+                  </Table>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <DialogFooter className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+          <Button variant="outline" onClick={closeRetornoModal} disabled={retornoSaving}>
+            Fechar
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={salvarRetornoConcessionaria}
+            disabled={retornoSaving || retornoLoading || retornoRows.length === 0}
+          >
+            {retornoSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+            Salvar retorno
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+      <Dialog
         open={tciModalOpen}
         onOpenChange={(next) => {
           if (!next) {
@@ -7713,6 +8682,17 @@ export const WorkflowSteps = () => {
             )}
 
             <DialogFooter className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  if (selectedItem) {
+                    handleOpenRetornoModal(selectedItem);
+                  }
+                }}
+                disabled={!selectedItem || retornoLoading}
+              >
+                Registro de retorno
+              </Button>
               <Button variant="outline" onClick={closeAprovacaoModal} disabled={aprovacaoSaving}>
                 Fechar
               </Button>
@@ -7748,100 +8728,6 @@ export const WorkflowSteps = () => {
                   <Save className="h-4 w-4 mr-2" />
                 )}
                 Concluir medição
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        <Dialog
-          open={reajusteModalOpen}
-          onOpenChange={(next) => {
-            if (!next) {
-              setReajusteModalOpen(false);
-            }
-          }}
-          modal
-        >
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden">
-            <DialogHeader>
-              <DialogTitle>Reajuste de medição</DialogTitle>
-              <DialogDescription>
-                Esta tela espelha os dados da etapa 3 para conferir e reajustar valores antes da aprovação.
-              </DialogDescription>
-            </DialogHeader>
-            {(() => {
-              const contexto = aprovacaoContextoPreview[reajusteModalModalidade];
-              const resumo = aprovacaoResumoPreview[reajusteModalModalidade];
-              if (!contexto || !resumo) {
-                return (
-                  <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">
-                    Nenhuma medição registrada para {reajusteModalModalidade === "LM" ? "Linha Morta" : "Linha Viva"}.
-                  </div>
-                );
-              }
-              return (
-                <div className="space-y-6 max-h-[70vh] overflow-y-auto pr-2 pb-4">
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <div className="rounded-xl border border-muted/80 bg-muted/10 p-4">
-                      <p className="text-xs uppercase text-muted-foreground">Total da aba</p>
-                      <p className="text-3xl font-semibold">{formatCurrency(resumo.totalComAdicional)}</p>
-                      <p className="text-xs text-muted-foreground">
-                        Base {formatCurrency(resumo.totalBase)} + {contexto.medicaoForaHC ? "30%" : "12%"} (
-                        {resumo.acrescimoInfo.descricao})
-                      </p>
-                    </div>
-                    <div className="rounded-xl border border-muted/80 bg-muted/10 p-4 text-sm space-y-2">
-                      <div className="flex justify-between">
-                        <span>Código</span>
-                        <span className="font-semibold">{contexto.codigoAcionamento || "--"}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Data execução</span>
-                        <span className="font-semibold">{contexto.dataExecucaoTexto || "--"}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Equipe</span>
-                        <span className="font-semibold">{contexto.equipeTexto || "--"}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Endereço</span>
-                        <span className="font-semibold truncate">{contexto.enderecoTexto || "--"}</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold uppercase text-muted-foreground">Itens calculados</p>
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-[40px]">Item</TableHead>
-                          <TableHead>Código</TableHead>
-                          <TableHead>Descrição</TableHead>
-                          <TableHead>Quant</TableHead>
-                          <TableHead>UPS</TableHead>
-                          <TableHead className="text-right">Total R$</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {resumo.itensCalculados.map((item) => (
-                          <TableRow key={`reajuste-${reajusteModalModalidade}-${item.index}`}>
-                            <TableCell>{item.index}</TableCell>
-                            <TableCell>{item.codigo}</TableCell>
-                            <TableCell className="max-w-[300px] truncate">{item.descricao}</TableCell>
-                            <TableCell>{item.quantidade.toFixed(2)}</TableCell>
-                            <TableCell>{item.upsQtd.toFixed(2)}</TableCell>
-                            <TableCell className="text-right">{formatCurrency(item.subtotal)}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </div>
-              );
-            })()}
-            <DialogFooter className="flex justify-end">
-              <Button variant="outline" onClick={() => setReajusteModalOpen(false)}>
-                Fechar
               </Button>
             </DialogFooter>
           </DialogContent>

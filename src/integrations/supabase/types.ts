@@ -778,6 +778,59 @@ export type Database = {
           },
         ]
       }
+      medicao_retorno_items: {
+        Row: {
+          created_at: string
+          descricao: string | null
+          id: string
+          id_acionamento: string
+          lote_retorno_id: string
+          modalidade: string
+          origem: string
+          regra_aplicada: string | null
+          total_valor: number
+          ups: number
+          quantidade: number
+          codigo: string
+        }
+        Insert: {
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          id_acionamento: string
+          lote_retorno_id?: string
+          modalidade: string
+          origem: string
+          regra_aplicada?: string | null
+          total_valor?: number
+          ups?: number
+          quantidade?: number
+          codigo: string
+        }
+        Update: {
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          id_acionamento?: string
+          lote_retorno_id?: string
+          modalidade?: string
+          origem?: string
+          regra_aplicada?: string | null
+          total_valor?: number
+          ups?: number
+          quantidade?: number
+          codigo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "medicao_retorno_items_id_acionamento_fkey"
+            columns: ["id_acionamento"]
+            isOneToOne: false
+            referencedRelation: "acionamentos"
+            referencedColumns: ["id_acionamento"]
+          },
+        ]
+      }
       notificacoes: {
         Row: {
           criado_em: string | null
