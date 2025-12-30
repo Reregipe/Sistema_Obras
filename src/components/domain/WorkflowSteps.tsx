@@ -8524,53 +8524,7 @@ export const WorkflowSteps = () => {
             <div className="space-y-4">
               {renderRetornoReferenciaPanel(retornoContexto, retornoResumo)}
             </div>
-              <div className="space-y-4">
-                <div className="rounded-xl border border-muted/70 bg-background p-4">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Recebido</p>
-                      <p className="text-3xl font-semibold text-foreground">{formatCurrency(retornoTotalComAdicional)}</p>
-                      <p className="text-xs text-muted-foreground">Total com adicional aplicado</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Adicional</p>
-                      <p className="text-xl font-semibold text-destructive">{formatCurrency(retornoAdditionalValue)}</p>
-                      <p className="text-xs text-muted-foreground">{formatPercent(retornoAdditionalPercent)}</p>
-                    </div>
-                  </div>
-                  <div className="mt-3 grid grid-cols-1 gap-3 text-[11px] text-muted-foreground sm:grid-cols-3">
-                    <div className="rounded-md border border-muted/40 bg-muted/20 p-2 text-center">
-                      <p className="text-[10px] uppercase tracking-wide">Base enviada</p>
-                      <p className="text-sm font-semibold text-foreground">{formatCurrency(retornoBaseTotal)}</p>
-                    </div>
-                    <div className="rounded-md border border-muted/40 bg-muted/20 p-2 text-center">
-                      <p className="text-[10px] uppercase tracking-wide">Qtde aprovada</p>
-                      <p className="text-sm font-semibold">{retornoTotalQtdeAprovada.toFixed(2)}</p>
-                    </div>
-                    <div className="rounded-md border border-muted/40 bg-muted/20 p-2 text-center">
-                      <p className="text-[10px] uppercase tracking-wide">Valor retido</p>
-                      <p className="text-sm font-semibold text-destructive">{formatCurrency(retornoValorRetido)}</p>
-                    </div>
-                  </div>
-                  <div className="mt-3 flex items-center justify-between text-[10px] uppercase tracking-wide text-muted-foreground">
-                    <span>Adicional aplicado</span>
-                    <span className="font-semibold text-foreground">{retornoAdditionalLabel}</span>
-                  </div>
-                  <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2 text-[10px] text-muted-foreground">
-                    <div className="rounded-md border border-muted/40 bg-muted/20 p-2 text-center">
-                      <p className="font-semibold text-muted-foreground">Diferença total</p>
-                      <p className="text-base font-semibold text-destructive">{formatCurrency(retornoDiferenca)}</p>
-                      <p>{formatPercent(retornoDiferencaPercent)}</p>
-                    </div>
-                    <div className="rounded-md border border-muted/40 bg-muted/20 p-2 text-center">
-                      <p className="font-semibold text-muted-foreground">Percentual aplicado</p>
-                      <p className="text-base font-semibold text-foreground">
-                        {formatPercent(adicionalPercentual * 100)}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-                <div className="rounded-xl border border-muted/60 bg-muted/10 p-2 shadow-sm overflow-x-auto">
+              <div className="rounded-xl border border-muted/60 bg-muted/10 p-2 shadow-sm overflow-x-auto">
                   <Table className="min-w-full">
               <TableHeader>
                 <TableRow>
