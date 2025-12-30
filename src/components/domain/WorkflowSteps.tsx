@@ -99,6 +99,7 @@ type MedicaoRascunho = {
 };
 
 const MODALIDADES_MEDICAO: ("LM" | "LV")[] = ["LM", "LV"];
+const RETORNO_MODALIDADES: ("LM" | "LV")[] = ["LM", "LV"];
 
 const hasDadosMedicao = (contexto?: OrcamentoPdfContext | null) =>
   Boolean(contexto && (contexto.itensMO?.length ?? 0) > 0);
@@ -106,6 +107,9 @@ const hasDadosMedicao = (contexto?: OrcamentoPdfContext | null) =>
 const obterModalidadesDisponiveis = (
   contexto: Record<"LM" | "LV", OrcamentoPdfContext | null>
 ): ("LM" | "LV")[] => MODALIDADES_MEDICAO.filter((modalidade) => hasDadosMedicao(contexto[modalidade]));
+
+const formatModalidadeLabel = (modalidade: "LM" | "LV") =>
+  modalidade === "LM" ? "Linha Morta" : "Linha Viva";
 
 const parseMedicaoItens = (value: unknown): any[] => {
   if (!value) return [];
@@ -196,11 +200,8 @@ const renderRetornoReferenciaPanel = (
   }
   const modalidadeLabel = contexto.pdfModalidade === "LM" ? "Linha Morta" : "Linha Viva";
   const itensPreview = resumo.itensCalculados.slice(0, 3);
-    return (
-      <div className="space-y-4">
-        <div className="rounded-full border border-muted/40 bg-muted/20 px-4 py-1 text-center text-xs uppercase tracking-widest text-muted-foreground">
-          {modalidadeLabel}
-        </div>
+  return (
+    <div className="space-y-4">
         <div className="rounded-xl border border-muted/60 bg-muted/10 p-3 text-xs text-muted-foreground flex items-center justify-between">
           <span className="font-semibold text-muted-foreground">Adicional aplicado</span>
           <span className="text-sm text-foreground">
@@ -7230,6 +7231,72 @@ export const WorkflowSteps = () => {
     return sourceItems;
   };
 
+  const loadRetornoModalidadeData = async (modalidade: "LM" | "LV", itemParam?: any) => {
+    const itemToUse = itemParam ?? selectedItem;
+    if (!itemToUse) return;
+    setRetornoModalidade(modalidade);
+    setRetornoLoading(true);
+    setRetornoError(null);
+    setRetornoRows([]);
+    setRetornoEnviadoRows([]);
+    try {
+      const previewContext = aprovacaoContextoPreview[modalidade];
+      const previewResumo = aprovacaoResumoPreview[modalidade];
+      if (previewContext && previewResumo) {
+        setRetornoContexto(previewContext);
+        setRetornoResumo(previewResumo);
+        const baseRows = buildRowsFromResumo(previewResumo);
+        setRetornoEnviadoRows(baseRows);
+        setRetornoRows(baseRows.map((row) => ({ ...row })));
+        return;
+      }
+      let contexto: OrcamentoPdfContext | null = null;
+      let resumo: MaoDeObraResumo | null = null;
+      try {
+        contexto = await prepararOrcamentoContext(
+          itemToUse.id_acionamento || itemToUse.id,
+          modalidade,
+          itemToUse
+        );
+        if (contexto) {
+          resumo = calcularResumoMaoDeObra(contexto);
+        }
+      } catch (err) {
+        contexto = null;
+      }
+      if (contexto && resumo) {
+        setRetornoContexto(contexto);
+        setRetornoResumo(resumo);
+        const baseRows = buildRowsFromResumo(resumo);
+        setRetornoEnviadoRows(baseRows);
+        setRetornoRows(baseRows.map((row) => ({ ...row })));
+      } else {
+        setRetornoContexto(null);
+        setRetornoResumo(null);
+        const rows = await fetchEnviadoRetornoRows(
+          itemToUse.id_acionamento || itemToUse.id,
+          modalidade
+        );
+        const baseRows = rows.map((row) => toRetornoRowFromRecord(row));
+        setRetornoEnviadoRows(baseRows);
+        setRetornoRows(baseRows.map((row) => ({ ...row })));
+      }
+    } catch (err: any) {
+      setRetornoError(err?.message || "Não foi possível carregar os itens enviados.");
+    } finally {
+      setRetornoLoading(false);
+    }
+  };
+
+  const handleRetornoModalidadeChange = (modalidade: "LM" | "LV") => {
+    if (!selectedItem) return;
+    if (modalidade === retornoModalidade && retornoRows.length > 0) {
+      setRetornoModalidade(modalidade);
+      return;
+    }
+    loadRetornoModalidadeData(modalidade);
+  };
+
   const handleRetornoFieldChange = (
     codigo: string,
     field: "quantidadeAprovada" | "upsAprovado",
@@ -7253,7 +7320,6 @@ export const WorkflowSteps = () => {
 
   const handleOpenRetornoModal = async (item: any) => {
     setSelectedItem(item);
-    setRetornoModalidade((item.modalidade === "LV" ? "LV" : "LM") as "LM" | "LV");
     setRetornoModalOpen(true);
     setRetornoLoading(true);
     setRetornoError(null);
@@ -7261,41 +7327,8 @@ export const WorkflowSteps = () => {
     const loteId = generateLoteRetornoId();
     setRetornoLoteId(loteId);
     try {
-      const modalidade = item.modalidade === "LV" ? "LV" : "LM";
-      const previewContext = aprovacaoContextoPreview[modalidade];
-      const previewResumo = aprovacaoResumoPreview[modalidade];
-      if (previewContext && previewResumo) {
-        setRetornoContexto(previewContext);
-        setRetornoResumo(previewResumo);
-        const baseRows = buildRowsFromResumo(previewResumo);
-        setRetornoEnviadoRows(baseRows);
-        setRetornoRows(baseRows.map((row) => ({ ...row })));
-        return;
-      }
-      let contexto: OrcamentoPdfContext | null = null;
-      let resumo: MaoDeObraResumo | null = null;
-      try {
-        contexto = await prepararOrcamentoContext(item.id_acionamento || item.id, modalidade as "LM" | "LV", item);
-        if (contexto) {
-          resumo = calcularResumoMaoDeObra(contexto);
-        }
-      } catch (err) {
-        contexto = null;
-      }
-      if (contexto && resumo) {
-        setRetornoContexto(contexto);
-        setRetornoResumo(resumo);
-        const baseRows = buildRowsFromResumo(resumo);
-        setRetornoEnviadoRows(baseRows);
-        setRetornoRows(baseRows.map((row) => ({ ...row })));
-      } else {
-        setRetornoContexto(null);
-        setRetornoResumo(null);
-        const rows = await fetchEnviadoRetornoRows(item.id_acionamento || item.id, modalidade);
-        const baseRows = rows.map((row) => toRetornoRowFromRecord(row));
-        setRetornoEnviadoRows(baseRows);
-        setRetornoRows(baseRows.map((row) => ({ ...row })));
-      }
+      const modalidadeInicial = item.modalidade === "LV" ? "LV" : "LM";
+      await loadRetornoModalidadeData(modalidadeInicial, item);
     } catch (err: any) {
       setRetornoError(err?.message || "Não foi possível carregar os itens enviados.");
     } finally {
@@ -8362,6 +8395,23 @@ export const WorkflowSteps = () => {
           </div>
         ) : (
           <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-2 pb-4">
+            <Tabs
+              value={retornoModalidade}
+              onValueChange={(value) => handleRetornoModalidadeChange(value as "LM" | "LV")}
+              className="space-y-3"
+            >
+              <TabsList className="grid grid-cols-2 gap-2 rounded-full bg-muted/20 p-1">
+                {RETORNO_MODALIDADES.map((modalidade) => (
+                  <TabsTrigger
+                    key={modalidade}
+                    value={modalidade}
+                    className="text-xs font-medium rounded-full"
+                  >
+                    {formatModalidadeLabel(modalidade)}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
             <div className="grid gap-4 xl:grid-cols-[1.05fr,1.45fr]">
             <div className="space-y-4">
               {renderRetornoReferenciaPanel(retornoContexto, retornoResumo)}
