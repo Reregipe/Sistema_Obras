@@ -187,6 +187,57 @@ const buildRowsFromResumo = (resumo: MaoDeObraResumo): RetornoRow[] => {
   }));
 };
 
+const buildRowsFromRetornoRecords = (records: RetornoItemRecord[]): RetornoRow[] => {
+  const grouped = new Map<
+    string,
+    {
+      codigo: string;
+      descricao?: string;
+      enviado?: RetornoItemRecord;
+      aprovado?: RetornoItemRecord;
+    }
+  >();
+
+  records.forEach((record) => {
+    const key = record.codigo || `${record.id}`;
+    const entry = grouped.get(key) || { codigo: record.codigo || "--" };
+    entry.descricao = entry.descricao || record.descricao;
+    if (record.origem === "APROVADO") {
+      entry.aprovado = record;
+    } else {
+      entry.enviado = record;
+    }
+    grouped.set(key, entry);
+  });
+
+  const rows: RetornoRow[] = [];
+  grouped.forEach((entry) => {
+    const quantidadeEnviada = entry.enviado?.quantidade ?? entry.aprovado?.quantidade ?? 0;
+    const upsEnviado = entry.enviado?.ups ?? entry.aprovado?.ups ?? 0;
+    const totalEnviado =
+      entry.enviado?.total_valor ?? quantidadeEnviada * upsEnviado ?? 0;
+    const quantidadeAprovada = entry.aprovado?.quantidade ?? quantidadeEnviada;
+    const upsAprovado = entry.aprovado?.ups ?? upsEnviado;
+    const totalAprovado =
+      entry.aprovado?.total_valor ?? quantidadeAprovada * upsAprovado ?? 0;
+    const unitPrice = quantidadeEnviada ? totalEnviado / quantidadeEnviada : upsEnviado;
+    rows.push({
+      codigo: entry.codigo,
+      descricao: entry.descricao,
+      quantidadeEnviada,
+      upsEnviado,
+      totalEnviado,
+      quantidadeAprovada,
+      upsAprovado,
+      totalAprovado,
+      unitPrice,
+      regraAplicada: entry.aprovado?.regra_aplicada || entry.enviado?.regra_aplicada,
+    });
+  });
+
+  return rows;
+};
+
 const renderRetornoReferenciaPanel = (
   contexto: OrcamentoPdfContext | null,
   resumo: MaoDeObraResumo | null
@@ -7242,6 +7293,26 @@ export const WorkflowSteps = () => {
     try {
       const previewContext = aprovacaoContextoPreview[modalidade];
       const previewResumo = aprovacaoResumoPreview[modalidade];
+      const records = await fetchRetornoItems(
+        itemToUse.id_acionamento || itemToUse.id,
+        modalidade
+      );
+      const hasApproved = records.some((record) => record.origem === "APROVADO");
+      if (hasApproved) {
+        setRetornoContexto(previewContext ?? null);
+        setRetornoResumo(previewResumo ?? null);
+        const rows = buildRowsFromRetornoRecords(records);
+        setRetornoEnviadoRows(
+          rows.map((row) => ({
+            ...row,
+            quantidadeAprovada: row.quantidadeEnviada,
+            upsAprovado: row.upsEnviado,
+            totalAprovado: row.totalEnviado,
+          }))
+        );
+        setRetornoRows(rows);
+        return;
+      }
       if (previewContext && previewResumo) {
         setRetornoContexto(previewContext);
         setRetornoResumo(previewResumo);
@@ -7273,13 +7344,20 @@ export const WorkflowSteps = () => {
       } else {
         setRetornoContexto(null);
         setRetornoResumo(null);
-        const rows = await fetchEnviadoRetornoRows(
-          itemToUse.id_acionamento || itemToUse.id,
-          modalidade
-        );
-        const baseRows = rows.map((row) => toRetornoRowFromRecord(row));
-        setRetornoEnviadoRows(baseRows);
-        setRetornoRows(baseRows.map((row) => ({ ...row })));
+        const baseRecords = records.filter((record) => record.origem === "ENVIADO");
+        if (baseRecords.length > 0) {
+          const baseRows = baseRecords.map((record) => toRetornoRowFromRecord(record));
+          setRetornoEnviadoRows(baseRows);
+          setRetornoRows(baseRows.map((row) => ({ ...row })));
+        } else {
+          const rows = await fetchEnviadoRetornoRows(
+            itemToUse.id_acionamento || itemToUse.id,
+            modalidade
+          );
+          const baseRows = rows.map((row) => toRetornoRowFromRecord(row));
+          setRetornoEnviadoRows(baseRows);
+          setRetornoRows(baseRows.map((row) => ({ ...row })));
+        }
       }
     } catch (err: any) {
       setRetornoError(err?.message || "Não foi possível carregar os itens enviados.");
@@ -7378,6 +7456,7 @@ export const WorkflowSteps = () => {
       }));
       const { error } = await supabase.from("medicao_retorno_items").insert(payload);
       if (error) throw error;
+      await loadRetornoModalidadeData(retornoModalidade);
       setRetornoSaveMessage("Retorno salvo com sucesso.");
     } catch (err: any) {
       setRetornoError(err?.message || "Erro ao salvar o retorno da concessionária.");
