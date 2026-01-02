@@ -34,47 +34,6 @@ export default function Acionamentos() {
   const [rows, setRows] = useState<Acionamento[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const kpis = useMemo(() => {
-    const counts: Record<string, number> = {};
-    const urgentes: Record<string, number> = {};
-
-    rows.forEach((r) => {
-      const st = (r.status || "").toLowerCase();
-      const prio = (r.prioridade || "").toLowerCase();
-      counts[st] = (counts[st] || 0) + 1;
-      if (prio === "urgente") {
-        urgentes[st] = (urgentes[st] || 0) + 1;
-      }
-    });
-
-    return [
-      {
-        label: "Abertos",
-        value: counts["recebido"] || 0,
-        badge: urgentes["recebido"] ? `Urgentes: ${urgentes["recebido"]}` : "Urgentes: 0",
-        color: "text-primary",
-      },
-      {
-        label: "Despachados / Execução",
-        value: counts["executando"] || 0,
-        badge: urgentes["executando"] ? `Urgentes: ${urgentes["executando"]}` : "Sem equipe: -",
-        color: "text-warning",
-      },
-      {
-        label: "Concluídos (medir)",
-        value: counts["medir"] || 0,
-        badge: "Pendente orçamento",
-        color: "text-muted-foreground",
-      },
-      {
-        label: "Prontos para OS",
-        value: counts["os_criada"] || 0,
-        badge: "Listas ok",
-        color: "text-success",
-      },
-    ];
-  }, [rows]);
-
   const loadData = async () => {
     setLoading(true);
     const { data, error } = await supabase
@@ -125,20 +84,6 @@ export default function Acionamentos() {
             </DialogContent>
           </Dialog>
         </div>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-2">
-        {kpis.map((item) => (
-          <Card key={item.label}>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm text-muted-foreground">{item.label}</CardTitle>
-            </CardHeader>
-            <CardContent className="flex items-center justify-between">
-              <div className={`text-3xl font-bold ${item.color}`}>{item.value}</div>
-              <Badge variant="secondary">{item.badge}</Badge>
-            </CardContent>
-          </Card>
-        ))}
       </div>
 
       <Card className="mb-6">
