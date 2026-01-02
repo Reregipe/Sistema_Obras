@@ -214,12 +214,14 @@ const buildRowsFromRetornoRecords = (records: RetornoItemRecord[]): RetornoRow[]
   grouped.forEach((entry) => {
     const quantidadeEnviada = entry.enviado?.quantidade ?? entry.aprovado?.quantidade ?? 0;
     const upsEnviado = entry.enviado?.ups ?? entry.aprovado?.ups ?? 0;
-    const totalEnviado =
+    const totalEnviadoRaw =
       entry.enviado?.total_valor ?? quantidadeEnviada * upsEnviado ?? 0;
+    const totalEnviado = parseNumberValue(totalEnviadoRaw);
     const quantidadeAprovada = entry.aprovado?.quantidade ?? quantidadeEnviada;
     const upsAprovado = entry.aprovado?.ups ?? upsEnviado;
-    const totalAprovado =
+    const totalAprovadoRaw =
       entry.aprovado?.total_valor ?? quantidadeAprovada * upsAprovado ?? 0;
+    const totalAprovado = parseNumberValue(totalAprovadoRaw);
     const unitPrice = quantidadeEnviada ? totalEnviado / quantidadeEnviada : upsEnviado;
     rows.push({
       codigo: entry.codigo,
@@ -467,6 +469,14 @@ const formatCurrency = (value: number) => currencyFormatter.format(value);
 const formatPercent = (value: number) => {
   if (!isFinite(value)) return "0,00%";
   return `${value.toFixed(2)}%`;
+};
+
+const parseNumberValue = (value?: string | number | null) => {
+  if (typeof value === "number") return value;
+  if (value == null) return 0;
+  const normalized = String(value).replace(/\./g, "").replace(",", ".");
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
 };
 
 const nearlyEquals = (a: number, b: number, epsilon = 0.01) => Math.abs(a - b) <= epsilon;
@@ -903,6 +913,23 @@ export const WorkflowSteps = () => {
     LV: null,
   });
   const [aprovacaoPreviewModalidade, setAprovacaoPreviewModalidade] = useState<"LM" | "LV">("LM");
+  const [etapa9ModalOpen, setEtapa9ModalOpen] = useState(false);
+  const [etapa9Loading, setEtapa9Loading] = useState(false);
+  const [etapa9Saving, setEtapa9Saving] = useState(false);
+  const [etapa9Error, setEtapa9Error] = useState<string | null>(null);
+  const [etapa9NumeroLote, setEtapa9NumeroLote] = useState("");
+  const [etapa9Ciclo, setEtapa9Ciclo] = useState("");
+  const [etapa9DataEmissao, setEtapa9DataEmissao] = useState("");
+  const [etapa10ModalOpen, setEtapa10ModalOpen] = useState(false);
+  const [etapa10Loading, setEtapa10Loading] = useState(false);
+  const [etapa10Saving, setEtapa10Saving] = useState(false);
+  const [etapa10Error, setEtapa10Error] = useState<string | null>(null);
+  const [etapa10NumeroNF, setEtapa10NumeroNF] = useState("");
+  const [etapa10DataEmissao, setEtapa10DataEmissao] = useState("");
+  const [etapa10Observacao, setEtapa10Observacao] = useState("");
+  const [etapa9Observacao, setEtapa9Observacao] = useState("");
+  const [etapa9Confirmado, setEtapa9Confirmado] = useState(false);
+  const [etapa9ValorFinal, setEtapa9ValorFinal] = useState<number | null>(null);
   const [auditoriaModalOpen, setAuditoriaModalOpen] = useState(false);
   const [auditoriaLoading, setAuditoriaLoading] = useState(false);
   const [auditoriaError, setAuditoriaError] = useState<string | null>(null);
@@ -5359,6 +5386,158 @@ export const WorkflowSteps = () => {
     await registrarAprovacaoLog(true);
   };
 
+  const fetchValorFinalAprovado = async (idAcionamento: string) => {
+    const { data, error } = await supabase
+      .from("medicao_retorno_items")
+      .select("total_valor")
+      .eq("id_acionamento", idAcionamento)
+      .eq("origem", "APROVADO");
+    if (error) throw error;
+    return (data || []).reduce(
+      (sum, row: any) => sum + (Number(row.total_valor) || 0),
+      0
+    );
+  };
+
+  const handleOpenEtapa9Modal = async (item: any) => {
+    setSelectedItem(item);
+    setEtapa9ModalOpen(true);
+    setEtapa9Error(null);
+    setEtapa9NumeroLote("");
+    setEtapa9Ciclo("");
+    setEtapa9DataEmissao(new Date().toISOString().slice(0, 10));
+    setEtapa9Observacao("");
+    setEtapa9Confirmado(false);
+    setEtapa9ValorFinal(null);
+    setEtapa9Loading(true);
+    try {
+      const idAcionamento = item.id_acionamento || item.id;
+      if (!idAcionamento) {
+        throw new Error("ID do acionamento inválido.");
+      }
+      const valor = await fetchValorFinalAprovado(idAcionamento);
+      setEtapa9ValorFinal(valor);
+    } catch (err: any) {
+      setEtapa9Error(err?.message || "Não foi possível carregar o valor final.");
+    } finally {
+      setEtapa9Loading(false);
+    }
+  };
+
+  const closeEtapa9Modal = () => {
+    setEtapa9ModalOpen(false);
+    setEtapa9Error(null);
+  };
+
+  const salvarEtapa9 = async () => {
+    if (!selectedItem) {
+      setEtapa9Error("Nenhum acionamento selecionado.");
+      return;
+    }
+    if (!etapa9Confirmado) {
+      setEtapa9Error("Confirme o pagamento para prosseguir.");
+      return;
+    }
+    const idAcionamento = selectedItem.id_acionamento || selectedItem.id;
+    if (!idAcionamento) {
+      setEtapa9Error("ID do acionamento inválido.");
+      return;
+    }
+    setEtapa9Saving(true);
+    setEtapa9Error(null);
+    try {
+      const { error } = await supabase
+        .from("acionamentos")
+        .update({ etapa_atual: 10 })
+        .eq("id_acionamento", idAcionamento);
+      if (error) throw error;
+
+      setSelectedItem((prev: any) => (prev ? { ...prev, etapa_atual: 10 } : prev));
+      setItems((prev) => prev.filter((it) => it.id_acionamento !== idAcionamento));
+      setSteps((prev) =>
+        prev.map((step) => {
+          if (step.id === 9) {
+            return { ...step, count: Math.max(0, step.count - 1) };
+          }
+          if (step.id === 10) {
+            return { ...step, count: step.count + 1 };
+          }
+          return step;
+        })
+      );
+      setEtapa9ModalOpen(false);
+    } catch (err: any) {
+      setEtapa9Error(err?.message || "Erro ao registrar a etapa.");
+    } finally {
+      setEtapa9Saving(false);
+    }
+  };
+
+  const handleOpenEtapa10Modal = async (item: any) => {
+    setSelectedItem(item);
+    setEtapa10ModalOpen(true);
+    setEtapa10Error(null);
+    setEtapa10NumeroNF("");
+    setEtapa10DataEmissao(new Date().toISOString().slice(0, 10));
+    setEtapa10Observacao("");
+    setEtapa10ValorFinal(null);
+    setEtapa10Loading(true);
+    try {
+      const idAcionamento = item.id_acionamento || item.id;
+      if (!idAcionamento) {
+        throw new Error("ID do acionamento inválido.");
+      }
+      const valor = await fetchValorFinalAprovado(idAcionamento);
+      setEtapa10ValorFinal(valor);
+    } catch (err: any) {
+      setEtapa10Error(err?.message || "Não foi possível carregar o valor final.");
+    } finally {
+      setEtapa10Loading(false);
+    }
+  };
+
+  const closeEtapa10Modal = () => {
+    setEtapa10ModalOpen(false);
+    setEtapa10Error(null);
+  };
+
+  const salvarEtapa10 = async () => {
+    if (!selectedItem) {
+      setEtapa10Error("Nenhum acionamento selecionado.");
+      return;
+    }
+    const idAcionamento = selectedItem.id_acionamento || selectedItem.id;
+    if (!idAcionamento) {
+      setEtapa10Error("ID do acionamento inválido.");
+      return;
+    }
+    setEtapa10Saving(true);
+    setEtapa10Error(null);
+    try {
+      const { error } = await supabase
+        .from("acionamentos")
+        .update({ etapa_atual: 10 })
+        .eq("id_acionamento", idAcionamento);
+      if (error) throw error;
+
+      setSelectedItem((prev: any) => (prev ? { ...prev, etapa_atual: 10 } : prev));
+      setItems((prev) => prev.filter((it) => it.id_acionamento !== idAcionamento));
+      setSteps((prev) =>
+        prev.map((step) => {
+          if (step.id === 10) {
+            return { ...step, count: Math.max(0, step.count - 1) };
+          }
+          return step;
+        })
+      );
+      setEtapa10ModalOpen(false);
+    } catch (err: any) {
+      setEtapa10Error(err?.message || "Erro ao registrar a etapa.");
+    } finally {
+      setEtapa10Saving(false);
+    }
+  };
+
   const registrarStatusAprovacao = async () => {
     if (aprovacaoLogForm.status === "concluido") {
       setAprovacaoError("Use o botão de conclusão para finalizar a medição.");
@@ -7003,6 +7182,57 @@ export const WorkflowSteps = () => {
           </div>
 
           <div className="flex flex-wrap gap-2">
+            {selectedStep?.id === 1 && (
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setSelectedItem(item);
+                    openMaterialsModal(item);
+                  }}
+                >
+                  Lista de materiais
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    navigate(`/acionamentos/${item.codigo_acionamento || item.id_acionamento}`);
+                    setOpen(false);
+                  }}
+                >
+                  Editar acionamento
+                </Button>
+              </>
+            )}
+            {selectedStep?.id === 2 && (
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setSelectedItem(item);
+                    openMaterialsModal(item);
+                  }}
+                >
+                  Lista de materiais
+                </Button>
+                <Button size="sm" onClick={() => openExecModal(item)}>
+                  Dados da execução
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    navigate(`/acionamentos/${item.codigo_acionamento || item.id_acionamento}`);
+                    setOpen(false);
+                  }}
+                >
+                  Editar acionamento
+                </Button>
+              </>
+            )}
             {selectedStep?.id === 6 && (
               <Button size="sm" onClick={() => openFiscalModal(item)}>
                 Registrar aprovação fiscal
@@ -7018,6 +7248,25 @@ export const WorkflowSteps = () => {
             {selectedStep?.id === 8 && (
               <Button size="sm" onClick={() => openAprovacaoModal(item)}>
                 Registrar aprovação da medição
+              </Button>
+            )}
+
+            {selectedStep?.id === 9 && (
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => handleOpenEtapa9Modal(item)}
+              >
+                Registrar lote
+              </Button>
+            )}
+            {selectedStep?.id === 10 && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => handleOpenEtapa10Modal(item)}
+              >
+                Registrar NF
               </Button>
             )}
 
@@ -8833,6 +9082,191 @@ export const WorkflowSteps = () => {
         </Dialog>
 
         <Dialog
+          open={etapa9ModalOpen}
+          onOpenChange={(next) => {
+            if (!next) {
+              closeEtapa9Modal();
+            } else {
+              setEtapa9ModalOpen(true);
+            }
+          }}
+          modal
+        >
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden">
+            <DialogHeader>
+              <DialogTitle>Registro da etapa 9</DialogTitle>
+              <DialogDescription>
+                Informe o número do lote, o ciclo e confirme o pagamento acordado.
+              </DialogDescription>
+            </DialogHeader>
+
+            {etapa9Error && <div className="text-sm text-destructive">{etapa9Error}</div>}
+
+            {etapa9Loading ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground py-6">
+                <Loader2 className="h-4 w-4 animate-spin" /> Carregando dados da etapa...
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="rounded-md border px-3 py-2 bg-muted/50">
+                    <Label>Número do lote</Label>
+                    <Input
+                      type="text"
+                      value={etapa9NumeroLote}
+                      onChange={(e) => setEtapa9NumeroLote(e.target.value)}
+                    />
+                  </div>
+                  <div className="rounded-md border px-3 py-2 bg-muted/50">
+                    <Label>Ciclo</Label>
+                    <Input
+                      type="text"
+                      value={etapa9Ciclo}
+                      onChange={(e) => setEtapa9Ciclo(e.target.value)}
+                    />
+                  </div>
+                  <div className="rounded-md border px-3 py-2 bg-muted/50">
+                    <Label>Data de emissão do Lote</Label>
+                    <Input
+                      type="date"
+                      value={etapa9DataEmissao}
+                      onChange={(e) => setEtapa9DataEmissao(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-muted/60 bg-muted/10 p-4">
+                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                    Valor final acordado
+                  </p>
+                  <div className="text-3xl font-semibold">
+                    {etapa9ValorFinal !== null ? formatCurrency(etapa9ValorFinal) : "R$ 0,00"}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Valor homologado na etapa anterior.
+                  </p>
+                </div>
+
+                <div>
+                  <Label>Observação</Label>
+                  <textarea
+                    className="w-full rounded-md border border-input px-3 py-2 text-sm min-h-[100px]"
+                    value={etapa9Observacao}
+                    onChange={(e) => setEtapa9Observacao(e.target.value)}
+                    placeholder="Registre detalhes importantes para o fechamento."
+                  />
+                </div>
+
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={etapa9Confirmado}
+                    onChange={(e) => setEtapa9Confirmado(e.target.checked)}
+                  />
+                  Confirmar pagamento acordado
+                </label>
+              </div>
+            )}
+
+            <DialogFooter className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <Button variant="outline" onClick={closeEtapa9Modal} disabled={etapa9Saving}>
+                Fechar
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={salvarEtapa9}
+                disabled={etapa9Saving || etapa9Loading || !etapa9Confirmado}
+              >
+                {etapa9Saving ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <Save className="h-4 w-4 mr-2" />
+                )}
+                Confirmar etapa
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog
+          open={etapa10ModalOpen}
+          onOpenChange={(next) => {
+            if (!next) {
+              closeEtapa10Modal();
+            } else {
+              setEtapa10ModalOpen(true);
+            }
+          }}
+          modal
+        >
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden">
+            <DialogHeader>
+              <DialogTitle>Registro da etapa 10</DialogTitle>
+              <DialogDescription>
+                Confirme os dados do lote fiscal antes de emitir a nota.
+              </DialogDescription>
+            </DialogHeader>
+
+            {etapa10Error && <div className="text-sm text-destructive">{etapa10Error}</div>}
+
+            {etapa10Loading ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground py-6">
+                <Loader2 className="h-4 w-4 animate-spin" /> Carregando dados da etapa...
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="rounded-md border px-3 py-2 bg-muted/50">
+                    <Label>Numero da NF</Label>
+                    <Input
+                      type="text"
+                      value={etapa10NumeroNF}
+                      onChange={(e) => setEtapa10NumeroNF(e.target.value)}
+                    />
+                  </div>
+                  <div className="rounded-md border px-3 py-2 bg-muted/50">
+                    <Label>Data de emissão da NF</Label>
+                    <Input
+                      type="date"
+                      value={etapa10DataEmissao}
+                      onChange={(e) => setEtapa10DataEmissao(e.target.value)}
+                    />
+                  </div>
+                  <div />
+                </div>
+                <div>
+                  <Label>Observação</Label>
+                  <textarea
+                    className="w-full rounded-md border border-input px-3 py-2 text-sm min-h-[100px]"
+                    value={etapa10Observacao}
+                    onChange={(e) => setEtapa10Observacao(e.target.value)}
+                    placeholder="Registre detalhes adicionais da emissão."
+                  />
+                </div>
+                </div>
+            )}
+
+            <DialogFooter className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <Button variant="outline" onClick={closeEtapa10Modal} disabled={etapa10Saving}>
+                Fechar
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={salvarEtapa10}
+                disabled={etapa10Saving || etapa10Loading}
+              >
+                {etapa10Saving ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <Save className="h-4 w-4 mr-2" />
+                )}
+                Confirmar etapa
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog
           open={bookModalOpen}
           onOpenChange={(next) => {
             if (!next) {
@@ -9691,7 +10125,7 @@ export const WorkflowSteps = () => {
 
             </DialogTitle>
 
-            {selectedStep?.id !== 1 && (
+            {selectedStep?.id !== 1 && selectedStep?.id !== 2 && (
 
               <DialogDescription className="text-base">{"Materiais da Execu\u00e7\u00e3o"}</DialogDescription>
 
