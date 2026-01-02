@@ -7077,7 +7077,7 @@ export const WorkflowSteps = () => {
 
       <Badge variant="outline" className={cn("text-xs", statusMap[step.status])}>
 
-        {step.status === "completed" ? "Concludo" : step.status === "active" ? "Em andamento" : step.status === "alert" ? "Alerta" : "Pendente"}
+        {step.status === "completed" ? "Concluído" : step.status === "active" ? "Em andamento" : step.status === "alert" ? "Alerta" : "Pendente"}
 
       </Badge>
 
