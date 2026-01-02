@@ -10,6 +10,7 @@ import { WorkflowSteps } from "@/components/domain/WorkflowSteps";
 import { Plus, Download, Filter, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useNavigate } from "react-router-dom";
 
 type Acionamento = {
   codigo_acionamento: string;
@@ -30,9 +31,23 @@ const statusMap = {
 
 export default function Acionamentos() {
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [rows, setRows] = useState<Acionamento[]>([]);
   const [loading, setLoading] = useState(false);
+
+  const sortedRows = useMemo(() => {
+    const priorityScore = (item: Acionamento) =>
+      (item.prioridade || "").toLowerCase() === "urgente" ? 0 : 1;
+
+    return [...rows].sort((a, b) => {
+      const scoreDiff = priorityScore(b) - priorityScore(a);
+      if (scoreDiff !== 0) return scoreDiff;
+      const dateA = a.data_abertura ? new Date(a.data_abertura).getTime() : 0;
+      const dateB = b.data_abertura ? new Date(b.data_abertura).getTime() : 0;
+      return dateB - dateA;
+    });
+  }, [rows]);
 
   const loadData = async () => {
     setLoading(true);
@@ -102,13 +117,13 @@ export default function Acionamentos() {
           </div>
         </CardHeader>
         <Separator />
-        <CardContent className="p-0">
-          {loading ? (
-            <div className="flex items-center gap-2 p-4 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Carregando...
-            </div>
-          ) : (
+          <CardContent className="p-0">
+            {loading ? (
+              <div className="flex items-center gap-2 p-4 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Carregando...
+              </div>
+            ) : (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -118,22 +133,32 @@ export default function Acionamentos() {
                   <TableHead>Prioridade</TableHead>
                   <TableHead>Município</TableHead>
                   <TableHead>Abertura</TableHead>
+                  <TableHead>Ação</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {rows.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center text-muted-foreground">
-                      Nenhum acionamento encontrado
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  rows.map((item) => (
+                  {sortedRows.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center text-muted-foreground">
+                        Nenhum acionamento encontrado
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                  sortedRows.map((item) => (
                     <TableRow key={item.codigo_acionamento}>
                       <TableCell className="font-semibold">{item.codigo_acionamento}</TableCell>
                       <TableCell>{item.numero_os || "--"}</TableCell>
                       <TableCell>
-                        <Badge variant="secondary">{item.status || "--"}</Badge>
+                        <Badge
+                          variant="secondary"
+                          className={
+                            (item.prioridade || "").toLowerCase() === "urgente"
+                              ? "text-destructive"
+                              : ""
+                          }
+                        >
+                          {(item.status || "--").replace("_", " ")}
+                        </Badge>
                       </TableCell>
                       <TableCell className={(item.prioridade || "").toLowerCase() === "urgente" ? "text-destructive" : ""}>
                         {item.prioridade || "--"}
@@ -143,6 +168,15 @@ export default function Acionamentos() {
                         {item.data_abertura
                           ? new Date(item.data_abertura).toLocaleDateString("pt-BR")
                           : "--"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => navigate(`/acionamentos/${item.codigo_acionamento}`)}
+                        >
+                          Ver etapa
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))
