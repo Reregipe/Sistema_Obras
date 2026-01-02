@@ -86,15 +86,7 @@ export default function Acionamentos() {
         </div>
       </div>
 
-      <div className="rounded-xl border border-muted-foreground/40 bg-background px-4 py-5 mb-6">
-        <div className="flex flex-col gap-1 mb-4">
-          <h2 className="text-lg font-semibold text-foreground">Régua de etapas (Acionamentos)</h2>
-          <p className="text-sm text-muted-foreground">
-            Use os cartões abaixo para abrir os itens filtrados em cada etapa.
-          </p>
-        </div>
-        <WorkflowSteps />
-      </div>
+      <WorkflowSteps />
 
       <Card>
         <CardHeader className="pb-3">
