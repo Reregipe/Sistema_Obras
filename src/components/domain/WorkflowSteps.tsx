@@ -765,6 +765,7 @@ export const WorkflowSteps = () => {
   const [open, setOpen] = useState(false);
 
   const [selectedStep, setSelectedStep] = useState<WorkflowStep | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
 
   const [items, setItems] = useState<any[]>([]);
 
@@ -7100,12 +7101,31 @@ export const WorkflowSteps = () => {
       return <div className="text-sm text-destructive">{error}</div>;
     }
 
-    if (items.length === 0) {
+    const filteredItems = items.filter((item) => {
+      const term = searchTerm.trim().toLowerCase();
+
+      if (!term) {
+        return true;
+      }
+
+      const codigo = (item.codigo_acionamento || item.id_acionamento || "").toString().toLowerCase();
+      const municipio = (item.municipio || "").toString().toLowerCase();
+      const modalidade = (item.modalidade || "").toString().toLowerCase();
+      const numeroObra = (item.numero_obra || "").toString().toLowerCase();
+
+      return (
+        codigo.includes(term) ||
+        municipio.includes(term) ||
+        modalidade.includes(term) ||
+        numeroObra.includes(term)
+      );
+    });
+
+    if (filteredItems.length === 0) {
       return <div className="text-sm text-muted-foreground">Nenhum item nesta etapa.</div>;
     }
 
-    return items.map((item) => {
-      const bookRegistrado = Boolean(item.book_enviado_em);
+    return filteredItems.map((item) => {
 
       return (
         <div
@@ -7181,130 +7201,129 @@ export const WorkflowSteps = () => {
             </Badge>
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            {selectedStep?.id === 1 && (
-              <>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    setSelectedItem(item);
-                    openMaterialsModal(item);
-                  }}
-                >
-                  Lista de materiais
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    navigate(`/acionamentos/${item.codigo_acionamento || item.id_acionamento}`);
-                    setOpen(false);
-                  }}
-                >
-                  Editar acionamento
-                </Button>
-              </>
-            )}
-            {selectedStep?.id === 2 && (
-              <>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    setSelectedItem(item);
-                    openMaterialsModal(item);
-                  }}
-                >
-                  Lista de materiais
-                </Button>
-                <Button size="sm" onClick={() => openExecModal(item)}>
-                  Dados da execução
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    navigate(`/acionamentos/${item.codigo_acionamento || item.id_acionamento}`);
-                    setOpen(false);
-                  }}
-                >
-                  Editar acionamento
-                </Button>
-              </>
-            )}
-            {selectedStep?.id === 6 && (
-              <Button size="sm" onClick={() => openFiscalModal(item)}>
-                Registrar aprovação fiscal
-              </Button>
-            )}
-
-            {selectedStep?.id === 7 && (
-              <Button size="sm" onClick={() => openTciModal(item)}>
-                Registrar TCI
-              </Button>
-            )}
-
-            {selectedStep?.id === 8 && (
-              <Button size="sm" onClick={() => openAprovacaoModal(item)}>
-                Registrar aprovação da medição
-              </Button>
-            )}
-
-            {selectedStep?.id === 9 && (
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => handleOpenEtapa9Modal(item)}
-              >
-                Registrar lote
-              </Button>
-            )}
-            {selectedStep?.id === 10 && (
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => handleOpenEtapa10Modal(item)}
-              >
-                Registrar NF
-              </Button>
-            )}
-
-            {selectedStep?.id === 3 && (
-              <Button size="sm" variant="outline" onClick={() => openMedicaoModal(item)}>
-                Medição / Orçamento
-              </Button>
-            )}
-
-            {selectedStep?.id === 4 && (
-              <Button size="sm" onClick={() => openOsModal(item)}
-              >
-                Registrar OS
-              </Button>
-            )}
-
-            {selectedStep?.id === 5 && (
-              <>
-                <Button size="sm" onClick={() => handleStage5BookClick(item)}
-                >
-                  Criar book
-                </Button>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  disabled={!bookRegistrado}
-                  onClick={() => openNumeroObraModal(item)}
-                  title={bookRegistrado ? undefined : "Registre o book e a data de envio antes"}
-                >
-                  Inserir numero da obra
-                </Button>
-              </>
-            )}
-
-          </div>
+          {renderStepActions(selectedStep?.id || 0, item)}
         </div>
       );
     });
+  };
+
+  const renderStepActions = (stepId: number, item: any) => {
+    const baseEditAction = (
+      <Button
+        key="edit"
+        size="sm"
+        variant="outline"
+        onClick={() => {
+          navigate(`/acionamentos/${item.codigo_acionamento || item.id_acionamento}`);
+          setOpen(false);
+        }}
+      >
+        Editar acionamento
+      </Button>
+    );
+
+    const bookRegistrado = Boolean(item.book_enviado_em);
+    const actions: JSX.Element[] = [];
+
+    if (stepId === 1 || stepId === 2) {
+      actions.push(
+        <Button
+          key="list"
+          size="sm"
+          variant="outline"
+          onClick={() => {
+            setSelectedItem(item);
+            openMaterialsModal(item);
+          }}
+        >
+          Lista de materiais
+        </Button>
+      );
+      if (stepId === 2) {
+        actions.push(
+          <Button key="exec" size="sm" onClick={() => openExecModal(item)}>
+            Dados da execução
+          </Button>
+        );
+      }
+      actions.push(baseEditAction);
+    } else {
+      if (stepId === 6) {
+        actions.push(
+          <Button key="fiscal" size="sm" onClick={() => openFiscalModal(item)}>
+            Registrar aprovação fiscal
+          </Button>
+        );
+      }
+      if (stepId === 7) {
+        actions.push(
+          <Button key="tci" size="sm" onClick={() => openTciModal(item)}>
+            Registrar TCI
+          </Button>
+        );
+      }
+      if (stepId === 8) {
+        actions.push(
+          <Button key="auditoria" size="sm" onClick={() => openAprovacaoModal(item)}>
+            Registrar aprovação da medição
+          </Button>
+        );
+      }
+      if (stepId === 9) {
+        actions.push(
+          <Button key="lote" size="sm" variant="secondary" onClick={() => handleOpenEtapa9Modal(item)}>
+            Registrar lote
+          </Button>
+        );
+      }
+      if (stepId === 10) {
+        actions.push(
+          <Button key="nf" size="sm" variant="ghost" onClick={() => handleOpenEtapa10Modal(item)}>
+            Registrar NF
+          </Button>
+        );
+      }
+      if (stepId === 3) {
+        actions.push(
+          <Button key="medicao" size="sm" variant="outline" onClick={() => openMedicaoModal(item)}>
+            Medição / Orçamento
+          </Button>
+        );
+      }
+      if (stepId === 4) {
+        actions.push(
+          <Button key="os" size="sm" onClick={() => openOsModal(item)}>
+            Registrar OS
+          </Button>
+        );
+      }
+      if (stepId === 5) {
+        actions.push(
+          <Button key="book" size="sm" onClick={() => handleStage5BookClick(item)}>
+            Criar book
+          </Button>
+        );
+        actions.push(
+          <Button
+            key="obra"
+            size="sm"
+            variant="secondary"
+            disabled={!bookRegistrado}
+            onClick={() => openNumeroObraModal(item)}
+            title={bookRegistrado ? undefined : "Registre o book e a data de envio antes"}
+          >
+            Inserir numero da obra
+          </Button>
+        );
+      }
+      if (stepId === 4) {
+        actions.push(baseEditAction);
+      }
+    }
+
+    if (actions.length === 0) return null;
+
+    return <div className="flex flex-wrap gap-2">{actions}</div>;
   };
 
 
@@ -8075,13 +8094,22 @@ export const WorkflowSteps = () => {
 
         <DialogContent className="max-w-4xl max-h-[85vh] overflow-hidden">
 
-          <DialogHeader>
+        <DialogHeader>
 
-            <DialogTitle>{selectedStep?.title || "Etapa"}</DialogTitle>
+          <DialogTitle>{selectedStep?.title || "Etapa"}</DialogTitle>
 
-            <DialogDescription>Itens associados a esta etapa do fluxo de trabalho.</DialogDescription>
+          <DialogDescription>Itens associados a esta etapa do fluxo de trabalho.</DialogDescription>
 
-          </DialogHeader>
+        </DialogHeader>
+
+        <div className="px-6">
+          <Input
+            placeholder="Buscar acionamento, município ou código"
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+            className="mb-3"
+          />
+        </div>
 
           {selectedStep?.id === 1 && (
 
