@@ -137,49 +137,61 @@ export default function Acionamentos() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                  {sortedRows.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={7} className="text-center text-muted-foreground">
-                        Nenhum acionamento encontrado
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                  sortedRows.map((item) => (
-                    <TableRow key={item.codigo_acionamento}>
-                      <TableCell className="font-semibold">{item.codigo_acionamento}</TableCell>
-                      <TableCell>{item.numero_os || "--"}</TableCell>
-                      <TableCell>
-                        <Badge
-                          variant="secondary"
+                {sortedRows.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center text-muted-foreground">
+                      Nenhum acionamento encontrado
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  sortedRows.map((item) => {
+                    const isCompleted = (item.status || "").toLowerCase() === "concluido";
+                    return (
+                      <TableRow
+                        key={item.codigo_acionamento}
+                        className={isCompleted ? "bg-emerald-50/40" : ""}
+                      >
+                        <TableCell className="font-semibold">{item.codigo_acionamento}</TableCell>
+                        <TableCell>{item.numero_os || "--"}</TableCell>
+                        <TableCell>
+                          <Badge
+                            variant="secondary"
+                            className={
+                              (item.prioridade || "").toLowerCase() === "urgente"
+                                ? "text-destructive"
+                                : ""
+                            }
+                          >
+                            {(item.status || "--").replace("_", " ")}
+                          </Badge>
+                        </TableCell>
+                        <TableCell
                           className={
                             (item.prioridade || "").toLowerCase() === "urgente"
                               ? "text-destructive"
                               : ""
                           }
                         >
-                          {(item.status || "--").replace("_", " ")}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className={(item.prioridade || "").toLowerCase() === "urgente" ? "text-destructive" : ""}>
-                        {item.prioridade || "--"}
-                      </TableCell>
-                      <TableCell>{item.municipio || "--"}</TableCell>
-                      <TableCell>
-                        {item.data_abertura
-                          ? new Date(item.data_abertura).toLocaleDateString("pt-BR")
-                          : "--"}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => navigate(`/acionamentos/${item.codigo_acionamento}`)}
-                        >
-                          Ver etapa
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))
+                          {item.prioridade || "--"}
+                        </TableCell>
+                        <TableCell>{item.municipio || "--"}</TableCell>
+                        <TableCell>
+                          {item.data_abertura
+                            ? new Date(item.data_abertura).toLocaleDateString("pt-BR")
+                            : "--"}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => navigate(`/acionamentos/${item.codigo_acionamento}`)}
+                          >
+                            Ver etapa
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
                 )}
               </TableBody>
             </Table>
