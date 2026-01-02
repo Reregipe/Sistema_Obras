@@ -7367,61 +7367,6 @@ export const WorkflowSteps = () => {
     return items;
   };
 
-  const stepById = useMemo(() => new Map(steps.map((step) => [step.id, step])), [steps]);
-
-  const frontKpis = useMemo(() => {
-    const statusLabels: Record<string, string> = {
-      completed: "Concluído",
-      active: "Em andamento",
-      alert: "Alerta",
-      pending: "Pendente",
-    };
-
-    const descriptorMap: Record<
-      number,
-      { title: string; detail: (step?: WorkflowStep) => string }
-    > = {
-      1: {
-        title: "Abertos",
-        detail: (step) =>
-          step?.status === "alert" ? "Urgências detectadas" : "Urgências sob controle",
-      },
-      2: {
-        title: "Despachados / Execução",
-        detail: (step) =>
-          step?.status === "active"
-            ? "Equipes em campo"
-            : "Deslocamento aguardando confirmação",
-      },
-      3: {
-        title: "Concluídos (medir)",
-        detail: (step) =>
-          step?.status === "alert"
-            ? "Pendências de orçamento"
-            : "Medições em revisão final",
-      },
-      4: {
-        title: "Prontos para OS",
-        detail: (step) =>
-          step?.status === "completed"
-            ? "Listas ok"
-            : "Aguardando dados do book",
-      },
-    };
-
-    return Object.entries(descriptorMap).map(([key, config]) => {
-      const stepId = Number(key);
-      const step = stepById.get(stepId);
-      return {
-        stepId,
-        title: config.title,
-        value: step?.count ?? 0,
-        statusLabel: statusLabels[step?.status ?? "pending"] ?? "Pendente",
-        detail: config.detail(step),
-      };
-    });
-  }, [stepById]);
-
   const buildAuditComparison = (
     items: RetornoItemRecord[],
     baseDate: string | undefined
@@ -7962,26 +7907,6 @@ export const WorkflowSteps = () => {
       </CardHeader>
 
       <CardContent>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          {frontKpis.map((kpi) => (
-            <div
-              key={kpi.stepId}
-              className="rounded-xl border border-muted-foreground/50 bg-background p-4 shadow-sm"
-            >
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  {kpi.title}
-                </p>
-                <Badge variant="outline" className="text-[11px]">
-                  {kpi.statusLabel}
-                </Badge>
-              </div>
-              <div className="text-3xl font-bold text-foreground">{kpi.value}</div>
-              <p className="text-xs text-muted-foreground mt-1">{kpi.detail}</p>
-            </div>
-          ))}
-        </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
 
