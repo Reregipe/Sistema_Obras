@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import { FormEvent, useEffect, useState, useCallback, useRef, useMemo, createContext, useContext } from "react";
 import logoEngeletrica from "@/assets/logo-engeletrica.png";
 import lmMedicaoTemplateUrl from "@/assets/A - PLANILHA LM MEDIÇAO - MODELO.xlsx?url";
 import lvMedicaoTemplateUrl from "@/assets/A - PLANILHA LV MEDIÇÃO - MODELO.xlsx?url";
@@ -22,6 +22,8 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 
 import { Label } from "@/components/ui/label";
 
@@ -100,6 +102,33 @@ type MedicaoRascunho = {
 
 const MODALIDADES_MEDICAO: ("LM" | "LV")[] = ["LM", "LV"];
 const RETORNO_MODALIDADES: ("LM" | "LV")[] = ["LM", "LV"];
+const STATUS_OPTIONS = [
+  { label: "Aberto", value: "aberto" },
+  { label: "Despachado", value: "despachado" },
+  { label: "Em execução", value: "em_execucao" },
+  { label: "Concluído", value: "concluido" },
+];
+const PRIORIDADE_OPTIONS = [
+  { label: "Emergência", value: "emergencia" },
+  { label: "Programado", value: "programado" },
+  { label: "Planejado", value: "planejado" },
+];
+const MODALIDADE_OPTIONS = ["LM", "LV", "LM+LV"];
+const STATUS_LABELS: Record<string, string> = {
+  pending: "Pendente",
+  active: "Em andamento",
+  alert: "Alerta",
+  completed: "Concluído",
+};
+const DOSSIER_TABS = [
+  { id: "registro", label: "Registro" },
+  { id: "book", label: "Book" },
+  { id: "ditais", label: "DITAIS" },
+  { id: "trafo", label: "Trafo" },
+  { id: "retorno", label: "Retorno" },
+  { id: "auditoria", label: "Auditoria" },
+  { id: "aprovacao", label: "Aprovação" },
+];
 
 const hasDadosMedicao = (contexto?: OrcamentoPdfContext | null) =>
   Boolean(contexto && (contexto.itensMO?.length ?? 0) > 0);
@@ -756,6 +785,20 @@ const workflowSteps: WorkflowStep[] = [
 
 const CLASSIFICACOES_SUCATA = ["sucata", "reforma", "bom", "descarte"];
 
+export type WorkflowModalContextValue = {
+  openAcionamento: (item: any) => void;
+};
+
+export const WorkflowModalContext = createContext<WorkflowModalContextValue | null>(null);
+
+export const useWorkflowModal = () => {
+  const ctx = useContext(WorkflowModalContext);
+  if (!ctx) {
+    throw new Error("useWorkflowModal must be used within WorkflowSteps");
+  }
+  return ctx;
+};
+
 
 
 export const WorkflowSteps = () => {
@@ -944,6 +987,22 @@ export const WorkflowSteps = () => {
   const [retornoModalidade, setRetornoModalidade] = useState<"LM" | "LV">("LM");
   const [retornoLoteId, setRetornoLoteId] = useState<string>("");
   const [retornoContexto, setRetornoContexto] = useState<OrcamentoPdfContext | null>(null);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({
+    modalidade: "",
+    status: "",
+    prioridade: "",
+    municipio: "",
+    endereco: "",
+    encarregado: "",
+    numero_os: "",
+    data_abertura: "",
+    data_despacho: "",
+    data_execucao: "",
+    observacao: "",
+  });
   const [retornoResumo, setRetornoResumo] = useState<MaoDeObraResumo | null>(null);
   const availablePreviewModalities = useMemo(() => {
     return obterModalidadesDisponiveis(aprovacaoContextoPreview);
@@ -7002,12 +7061,94 @@ export const WorkflowSteps = () => {
 
 
 
+  const stepsMap = useMemo(() => new Map(steps.map((step) => [step.id, step])), [steps]);
+
+  const openAcionamentoModal = useCallback(
+    (item: any) => {
+      const defaultStep = stepsMap.get(1) || workflowSteps[0];
+      setSelectedItem(item);
+      if (defaultStep) {
+        setSelectedStep(defaultStep);
+      }
+      setOpen(true);
+    },
+    [stepsMap]
+  );
+
+  const openEditModal = useCallback((item: any) => {
+    setSelectedItem(item);
+    setEditForm({
+      modalidade: item.modalidade || "",
+      status: item.status || "",
+      prioridade: item.prioridade || "",
+      municipio: item.municipio || "",
+      endereco: item.endereco || "",
+      encarregado: item.encarregado || "",
+      numero_os: item.numero_os || "",
+      data_abertura: item.data_abertura || "",
+      data_despacho: item.data_despacho || "",
+      data_execucao: item.data_execucao || "",
+      observacao: item.observacao || "",
+    });
+    setEditModalOpen(true);
+  }, []);
+
+  const handleEditSubmit = useCallback(
+    async (event: React.FormEvent) => {
+      event.preventDefault();
+      if (!selectedItem) return;
+      setEditSaving(true);
+      setEditError(null);
+      const payload = {
+        modalidade: editForm.modalidade || undefined,
+        status: editForm.status || undefined,
+        prioridade: editForm.prioridade || undefined,
+        municipio: editForm.municipio || undefined,
+        endereco: editForm.endereco || undefined,
+        encarregado: editForm.encarregado || undefined,
+        numero_os: editForm.numero_os || undefined,
+        data_abertura: editForm.data_abertura || undefined,
+        data_despacho: editForm.data_despacho || undefined,
+        data_execucao: editForm.data_execucao || undefined,
+        observacao: editForm.observacao || undefined,
+      };
+      try {
+        const { error } = await supabase
+          .from("acionamentos")
+          .update(payload)
+          .eq("id_acionamento", selectedItem.id_acionamento);
+        if (error) throw error;
+        setSelectedItem((prev) => (prev ? { ...prev, ...payload } : prev));
+        setEditModalOpen(false);
+      } catch (err: any) {
+        setEditError(err.message || "Erro ao salvar acionamento.");
+      } finally {
+        setEditSaving(false);
+      }
+    },
+    [editForm, selectedItem]
+  );
+
+  const modalContextValue = useMemo(
+    () => ({
+      openAcionamento: openAcionamentoModal,
+    }),
+    [openAcionamentoModal]
+  );
+
+  useEffect(() => {
+    const handler = (event: CustomEvent) => {
+      if (event?.detail?.item) {
+        openAcionamentoModal(event.detail.item);
+      }
+    };
+    window.addEventListener("workflow:open-item", handler as EventListener);
+    return () => window.removeEventListener("workflow:open-item", handler as EventListener);
+  }, [openAcionamentoModal]);
+
   const handleStepClick = (step: WorkflowStep) => {
-
     setSelectedStep(step);
-
     setOpen(true);
-
   };
 
 
@@ -7213,10 +7354,10 @@ export const WorkflowSteps = () => {
         key="edit"
         size="sm"
         variant="outline"
-        onClick={() => {
-          navigate(`/acionamentos/${item.codigo_acionamento || item.id_acionamento}`);
-          setOpen(false);
-        }}
+          onClick={() => {
+            openEditModal(item);
+            setOpen(false);
+          }}
       >
         Editar acionamento
       </Button>
@@ -7296,7 +7437,6 @@ export const WorkflowSteps = () => {
             Registrar OS
           </Button>
         );
-        actions.push(baseEditAction);
       }
       if (stepId === 5) {
         actions.push(
@@ -7316,9 +7456,6 @@ export const WorkflowSteps = () => {
             Inserir numero da obra
           </Button>
         );
-      }
-      if (stepId === 4) {
-        actions.push(baseEditAction);
       }
     }
 
@@ -7864,8 +8001,9 @@ export const WorkflowSteps = () => {
   };
 
   return (
+    <WorkflowModalContext.Provider value={modalContextValue}>
 
-    <Card>
+      <Card>
 
       <CardHeader>
 
@@ -7904,7 +8042,10 @@ export const WorkflowSteps = () => {
 
         </div>
 
+
+
       </CardHeader>
+
 
       <CardContent>
 
@@ -10970,7 +11111,174 @@ export const WorkflowSteps = () => {
 
       </Dialog>
 
+      <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Editar acionamento</DialogTitle>
+            <DialogDescription>Atualize os dados principais deste acionamento.</DialogDescription>
+          </DialogHeader>
+          {editError && (
+            <div className="text-sm text-destructive mb-2">{editError}</div>
+          )}
+          <form className="space-y-4" onSubmit={handleEditSubmit}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label>Modalidade</Label>
+                <Select
+                  value={editForm.modalidade}
+                  onValueChange={(value) =>
+                    setEditForm((prev) => ({ ...prev, modalidade: value }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione a modalidade" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {MODALIDADE_OPTIONS.map((option) => (
+                      <SelectItem key={option} value={option}>
+                        {option}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label>Status</Label>
+                <Select
+                  value={editForm.status}
+                  onValueChange={(value) =>
+                    setEditForm((prev) => ({ ...prev, status: value }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {STATUS_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label>Prioridade</Label>
+                <Select
+                  value={editForm.prioridade}
+                  onValueChange={(value) =>
+                    setEditForm((prev) => ({ ...prev, prioridade: value }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione a prioridade" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PRIORIDADE_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label>Município</Label>
+                <Input
+                  placeholder="Município"
+                  value={editForm.municipio}
+                  onChange={(event) =>
+                    setEditForm((prev) => ({ ...prev, municipio: event.target.value }))
+                  }
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Endereço</Label>
+                <Input
+                  placeholder="Endereço"
+                  value={editForm.endereco}
+                  onChange={(event) =>
+                    setEditForm((prev) => ({ ...prev, endereco: event.target.value }))
+                  }
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Encarregado</Label>
+                <Input
+                  placeholder="Encarregado"
+                  value={editForm.encarregado}
+                  onChange={(event) =>
+                    setEditForm((prev) => ({ ...prev, encarregado: event.target.value }))
+                  }
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Número da OS</Label>
+                <Input
+                  placeholder="Número da OS"
+                  value={editForm.numero_os}
+                  onChange={(event) =>
+                    setEditForm((prev) => ({ ...prev, numero_os: event.target.value }))
+                  }
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Data de abertura</Label>
+                <Input
+                  type="date"
+                  placeholder="Data de abertura"
+                  value={editForm.data_abertura}
+                  onChange={(event) =>
+                    setEditForm((prev) => ({ ...prev, data_abertura: event.target.value }))
+                  }
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Data de despacho</Label>
+                <Input
+                  type="date"
+                  placeholder="Data de despacho"
+                  value={editForm.data_despacho}
+                  onChange={(event) =>
+                    setEditForm((prev) => ({ ...prev, data_despacho: event.target.value }))
+                  }
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Data de execução</Label>
+                <Input
+                  type="date"
+                  placeholder="Data de execução"
+                  value={editForm.data_execucao}
+                  onChange={(event) =>
+                    setEditForm((prev) => ({ ...prev, data_execucao: event.target.value }))
+                  }
+                />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label>Observação</Label>
+              <Textarea
+                value={editForm.observacao}
+                onChange={(event) =>
+                  setEditForm((prev) => ({ ...prev, observacao: event.target.value }))
+                }
+              />
+            </div>
+            <DialogFooter className="flex justify-between">
+              <Button variant="outline" onClick={() => setEditModalOpen(false)}>
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={editSaving}>
+                {editSaving ? "Salvando..." : "Salvar"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
     </Card>
+    </WorkflowModalContext.Provider>
 
   );
 

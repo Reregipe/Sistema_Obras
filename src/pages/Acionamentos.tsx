@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { WorkflowSteps } from "@/components/domain/WorkflowSteps";
 import { Plus, Download, Filter, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { Input } from "@/components/ui/input";
 import { useNavigate } from "react-router-dom";
 
 type Acionamento = {
@@ -22,11 +23,16 @@ type Acionamento = {
   modalidade: string | null;
 };
 
-const statusMap = {
+const statusMap: Record<string, string> = {
   recebido: "Abertos",
   executando: "Despachados / Execução",
+  em_execucao: "Despachados / Execução",
   medir: "Concluídos (medir)",
   os_criada: "Prontos para OS",
+  concluido: "Concluído",
+  "concluído": "Concluído",
+  enviado: "Abertos",
+  aprovado: "Aprovação",
 };
 
 export default function Acionamentos() {
@@ -35,6 +41,7 @@ export default function Acionamentos() {
   const [open, setOpen] = useState(false);
   const [rows, setRows] = useState<Acionamento[]>([]);
   const [loading, setLoading] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
 
   const sortedRows = useMemo(() => {
     const priorityScore = (item: Acionamento) =>
@@ -48,6 +55,24 @@ export default function Acionamentos() {
       return dateB - dateA;
     });
   }, [rows]);
+
+  const filteredRows = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    if (!term) return sortedRows;
+    return sortedRows.filter((item) => {
+      const fields = [
+        item.codigo_acionamento,
+        item.numero_os,
+        item.status,
+        item.prioridade,
+        item.municipio,
+        item.modalidade,
+      ];
+      return fields.some((value) =>
+        value?.toLowerCase().includes(term) ?? false
+      );
+    });
+  }, [searchTerm, sortedRows]);
 
   const loadData = async () => {
     setLoading(true);
@@ -111,83 +136,87 @@ export default function Acionamentos() {
               <CardDescription>Acompanhe os acionamentos em andamento, com OS vinculada.</CardDescription>
             </div>
             <Button variant="ghost" size="sm" className="gap-2" disabled>
-              <Filter className="h-4 w-4" />
-              Filtros rápidos (breve)
+              <Input
+              placeholder="Buscar por código, status, prioridade, município..."
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              className="max-w-lg"
+            />
+              
             </Button>
           </div>
+         
         </CardHeader>
         <Separator />
-          <CardContent className="p-0">
-            {loading ? (
-              <div className="flex items-center gap-2 p-4 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Carregando...
-              </div>
-            ) : (
+        <CardContent className="p-0">
+          {loading ? (
+            <div className="flex items-center gap-2 p-4 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Carregando...
+            </div>
+          ) : (
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Código</TableHead>
-                  <TableHead>OS</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Prioridade</TableHead>
                   <TableHead>Município</TableHead>
+                  <TableHead>Modalidade</TableHead>
+                  <TableHead>Etapa atual</TableHead>
                   <TableHead>Abertura</TableHead>
-                  <TableHead>Ação</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {sortedRows.length === 0 ? (
+                {filteredRows.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={7} className="text-center text-muted-foreground">
                       Nenhum acionamento encontrado
                     </TableCell>
                   </TableRow>
                 ) : (
-                  sortedRows.map((item) => {
-                    const isCompleted = (item.status || "").toLowerCase() === "concluido";
+                  filteredRows.map((item) => {
+                    const isUrgent =
+                      (item.prioridade || "").toLowerCase() === "urgente";
+                    const statusKey = (item.status || "").toLowerCase();
+                    const etapaLabel =
+                      statusMap[statusKey] || item.status || "--";
+                    const isCompleted = etapaLabel
+                      .toLowerCase()
+                      .includes("conclu");
+                    const rowClass = isCompleted
+                      ? "bg-emerald-50/60 cursor-pointer"
+                      : isUrgent
+                      ? "bg-destructive/10 cursor-pointer"
+                      : "cursor-pointer";
                     return (
                       <TableRow
                         key={item.codigo_acionamento}
-                        className={isCompleted ? "bg-emerald-50/40" : ""}
+                        className={`${rowClass} transition-colors cursor-pointer`}
+                        onClick={() =>
+                          navigate(`/acionamentos/${item.codigo_acionamento}`)
+                        }
                       >
                         <TableCell className="font-semibold">{item.codigo_acionamento}</TableCell>
-                        <TableCell>{item.numero_os || "--"}</TableCell>
                         <TableCell>
-                          <Badge
-                            variant="secondary"
-                            className={
-                              (item.prioridade || "").toLowerCase() === "urgente"
-                                ? "text-destructive"
-                                : ""
-                            }
-                          >
+                          <Badge variant="secondary" className={isUrgent ? "text-destructive" : undefined}>
                             {(item.status || "--").replace("_", " ")}
                           </Badge>
                         </TableCell>
-                        <TableCell
-                          className={
-                            (item.prioridade || "").toLowerCase() === "urgente"
-                              ? "text-destructive"
-                              : ""
-                          }
-                        >
+                        <TableCell className={isUrgent ? "text-destructive" : undefined}>
                           {item.prioridade || "--"}
                         </TableCell>
                         <TableCell>{item.municipio || "--"}</TableCell>
+                        <TableCell>{item.modalidade || "--"}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="px-2 text-xs">
+                            {etapaLabel}
+                          </Badge>
+                        </TableCell>
                         <TableCell>
                           {item.data_abertura
                             ? new Date(item.data_abertura).toLocaleDateString("pt-BR")
                             : "--"}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => navigate(`/acionamentos/${item.codigo_acionamento}`)}
-                          >
-                            Ver etapa
-                          </Button>
                         </TableCell>
                       </TableRow>
                     );
@@ -201,3 +230,5 @@ export default function Acionamentos() {
     </div>
   );
 }
+
+
