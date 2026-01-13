@@ -23,7 +23,18 @@ export const SystemSettings = () => {
   const [editedValues, setEditedValues] = useState<Record<string, string>>({});
   const { toast } = useToast();
 
-  const requiredKeys = ["ups_valor_lm", "ups_valor_lv"];
+  const requiredKeys = [
+    "ups_valor_lm", "ups_valor_lv",
+    "prazo_medir_servico_executado",
+    "prazo_criar_os",
+    "prazo_enviar_book",
+    "prazo_abertura_obra_energisa",
+    "prazo_aprovacao_fiscal",
+    "prazo_apresentacao_tci",
+    "prazo_aprovacao_medicao",
+    "prazo_geracao_lote",
+    "prazo_emissao_nf"
+  ];
 
   const fetchSettings = async () => {
     setLoading(true);
@@ -166,6 +177,15 @@ export const SystemSettings = () => {
       ups_valor_lm: { label: "Valor padrao da UPS - Linha Morta", keyHint: "ups_valor_lm" },
       ups_valor_lv: { label: "Valor padrao da UPS - Linha Viva", keyHint: "ups_valor_lv" },
       upr_valor_padrao: { label: "Valor padrao da UPS (legado)", keyHint: "upr_valor_padrao (legado)" },
+      prazo_medir_servico_executado: { label: "Prazo Medir Serviço Executado", keyHint: "prazo_medir_servico_executado" },
+      prazo_criar_os: { label: "Prazo Criar OS", keyHint: "prazo_criar_os" },
+      prazo_enviar_book: { label: "Prazo Enviar Book", keyHint: "prazo_enviar_book" },
+      prazo_abertura_obra_energisa: { label: "Prazo padrão em dias para abertura de obra pela Energisa", keyHint: "prazo_abertura_obra_energisa" },
+      prazo_aprovacao_fiscal: { label: "Prazo para aprovação fiscal", keyHint: "prazo_aprovacao_fiscal" },
+      prazo_apresentacao_tci: { label: "Prazo de Apresentação do TCI", keyHint: "prazo_apresentacao_tci" },
+      prazo_aprovacao_medicao: { label: "Prazo Aprovação da Medição", keyHint: "prazo_aprovacao_medicao" },
+      prazo_geracao_lote: { label: "Prazo Geração de Lote", keyHint: "prazo_geracao_lote" },
+      prazo_emissao_nf: { label: "Prazo Emissão de NF", keyHint: "prazo_emissao_nf" },
     };
     return map[setting.chave] || { label: setting.descricao || setting.chave, keyHint: setting.chave };
   };

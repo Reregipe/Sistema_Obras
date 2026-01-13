@@ -21,6 +21,7 @@ import Acionamentos from "./pages/Acionamentos";
 import AcionamentoDetalhe from "./pages/AcionamentoDetalhe";
 import AcionamentoMateriais from "./pages/AcionamentoMateriais";
 import Obras from "./pages/Obras";
+import ObraDetalhe from "./pages/ObraDetalhe";
 import Medicoes from "./pages/Medicoes";
 import MedicaoFinal from "./pages/MedicaoFinal";
 import Materiais from "./pages/Materiais";
@@ -73,6 +74,13 @@ const App = () => (
             <ProtectedRoute>
               <MainLayout>
                 <Obras />
+              </MainLayout>
+            </ProtectedRoute>
+          } />
+          <Route path="/obras/:obraId" element={
+            <ProtectedRoute>
+              <MainLayout>
+                <ObraDetalhe />
               </MainLayout>
             </ProtectedRoute>
           } />
