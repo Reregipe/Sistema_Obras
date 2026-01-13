@@ -10,10 +10,27 @@ import { Separator } from "@/components/ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Plus, Download, ArrowRight } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { WorkflowStepsObras } from "@/components/domain/WorkflowStepsObras";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const Obras = () => {
+            // Estado para armazenar medições parciais por obra
+            const [medicoesParciais, setMedicoesParciais] = useState({});
+            const [novaMedicaoParcial, setNovaMedicaoParcial] = useState({
+              dataMedicao: '',
+              valorMedido: '',
+              numeroLote: '',
+              dataLote: '',
+              numeroNotaFiscal: '',
+              dataNotaFiscal: '',
+              observacoes: '',
+            });
+          const [modalMedicoesOpen, setModalMedicoesOpen] = useState(false);
+        const [modalMedicaoParcialOpen, setModalMedicaoParcialOpen] = useState(false);
+      const [obraExecucaoSelecionada, setObraExecucaoSelecionada] = useState(null);
+      const [modalExecucaoDetalheOpen, setModalExecucaoDetalheOpen] = useState(false);
+    const [execucaoModalOpen, setExecucaoModalOpen] = useState(false);
   const navigate = useNavigate();
   const [modalOpen, setModalOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -93,7 +110,8 @@ const Obras = () => {
     descricaoObra: "",
     solicitante: "",
     contato: "",
-  });
+      valorPrevisto: "",
+      });
 
   const handleChange = (e) => {
     setNovaObra({ ...novaObra, [e.target.name]: e.target.value });
@@ -142,7 +160,7 @@ const Obras = () => {
     () => [
       { title: "Planejamento", desc: "Escopo, cronograma e orçamento", status: "em andamento" },
       { title: "Execução", desc: "Equipe em campo, medições parciais", status: "7 obras" },
-      { title: "Medições parciais", desc: "Consolidar MO/material", status: "3 pendentes" },
+      { title: "Medições", desc: "Consolidar MO/material", status: "3 pendentes" },
       { title: "TCI / Tratativas", desc: "Ajustes e pendências", status: "2 TCI pendentes" },
       { title: "Aprovação", desc: "Gestor/Fiscal", status: "4 aguardando" },
       { title: "Faturamento", desc: "Lote / NF", status: "3 prontas" },
@@ -274,6 +292,28 @@ const Obras = () => {
                                     onChange={e => setObraSelecionada({ ...obraSelecionada, dataPrevisaoTermino: e.target.value })}
                                   />
                                 </div>
+                              <DialogFooter>
+                                <Button variant="outline" onClick={() => setDetalheObraModalOpen(false)}>Cancelar</Button>
+                                <Button
+                                  onClick={() => {
+                                    if (!obraSelecionada) return;
+                                    setObras(prevObras => prevObras.map(o => {
+                                      if (o.obra === obraSelecionada.obra) {
+                                        // Só move para execução se estava em planejamento e agora tem início físico
+                                        const vaiParaExecucao = o.status === "planejamento" && obraSelecionada.inicioFisicoObra;
+                                        return {
+                                          ...o,
+                                          ...obraSelecionada,
+                                          status: vaiParaExecucao ? "execucao" : o.status,
+                                          inicio: obraSelecionada.inicioFisicoObra || o.inicio,
+                                        };
+                                      }
+                                      return o;
+                                    }));
+                                    setDetalheObraModalOpen(false);
+                                  }}
+                                >Salvar</Button>
+                              </DialogFooter>
                               </div>
                             )}
                           </DialogContent>
@@ -356,6 +396,10 @@ const Obras = () => {
                       <label className="text-sm font-medium">Contato</label>
                       <Input name="contato" value={novaObra.contato} onChange={handleChange} />
                     </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-sm font-medium">Valor Previsto (R$)</label>
+                        <Input name="valorPrevisto" type="number" value={novaObra.valorPrevisto} onChange={handleChange} />
+                      </div>
                   </div>
                   <DialogFooter>
                     <Button variant="outline" onClick={() => setModalOpen(false)}>Cancelar</Button>
@@ -383,23 +427,277 @@ const Obras = () => {
           <CardDescription>Visual rápido do progresso. Clique para detalhar.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-3">
-          {etapas.map((etapa) => (
-            <div
-              key={etapa.title}
-              className="rounded-lg border p-4 hover:border-primary transition-colors cursor-pointer"
-              onClick={etapa.title === "Planejamento" ? () => setPlanejamentoModalOpen(true) : undefined}
-            >
-              <div className="flex items-center justify-between mb-2">
-                <div className="text-sm font-semibold text-foreground">{etapa.title}</div>
-                <ArrowRight className="h-4 w-4 text-muted-foreground" />
+          {etapas.map((etapa) => {
+            let clickHandler = undefined;
+            if (etapa.title === "Planejamento") clickHandler = () => setPlanejamentoModalOpen(true);
+            if (etapa.title === "Execução") clickHandler = () => setExecucaoModalOpen(true);
+            if (etapa.title === "Medições") clickHandler = () => {
+              setModalMedicoesOpen(true);
+            };
+            if (etapa.title === "TCI / Tratativas") clickHandler = () => {/* TODO: handler TCI */};
+            if (etapa.title === "Aprovação") clickHandler = () => {/* TODO: handler Aprovação */};
+            if (etapa.title === "Faturamento") clickHandler = () => {/* TODO: handler Faturamento */};
+            return (
+              <div
+                key={etapa.title}
+                className="rounded-lg border p-4 hover:border-primary transition-colors cursor-pointer"
+                onClick={clickHandler}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-sm font-semibold text-foreground">{etapa.title}</div>
+                  <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                </div>
+                <p className="text-sm text-muted-foreground">{etapa.desc}</p>
+                <div className="mt-2">
+                  <Badge variant="secondary">{etapa.status}</Badge>
+                </div>
               </div>
-              <p className="text-sm text-muted-foreground">{etapa.desc}</p>
-              <div className="mt-2">
-                <Badge variant="secondary">{etapa.status}</Badge>
+            );
+          })}
+        </CardContent>
+        {/* Dialog Execução */}
+        <Dialog open={execucaoModalOpen} onOpenChange={setExecucaoModalOpen}>
+          <DialogContent className="max-w-2xl">
+                    {/* Modal exclusivo para Medições */}
+                    <Dialog open={modalMedicoesOpen} onOpenChange={setModalMedicoesOpen}>
+                      <DialogContent className="max-w-2xl">
+                        <DialogHeader>
+                          <DialogTitle>Medições - Consolidação MO/Material</DialogTitle>
+                          <p className="text-sm text-muted-foreground mt-1">Consolide as medições de mão de obra e materiais das obras em andamento.</p>
+                        </DialogHeader>
+                        <div className="grid gap-3">
+                          {obras.filter(o => o.status === "medicao").length === 0 ? (
+                            <div className="py-4 text-muted-foreground">Nenhuma obra disponível para medição.</div>
+                          ) : (
+                            obras.filter(o => o.status === "medicao").map((obra) => (
+                              <Card key={obra.obra} className="border shadow-sm">
+                                <CardHeader className="py-2">
+                                  <CardTitle className="text-base font-bold">{obra.obra}</CardTitle>
+                                  <CardDescription>OS: {obra.os} | Cidade: {obra.cidade}</CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                  <div>Status: <Badge variant="secondary">{obra.status}</Badge></div>
+                                  <div>Início: {obra.inicio || "-"}</div>
+                                  {/* Aqui pode adicionar botões para consolidar MO/material, visualizar detalhes, etc. */}
+                                </CardContent>
+                              </Card>
+                            ))
+                          )}
+                        </div>
+                        <DialogFooter>
+                          <Button variant="outline" onClick={() => setModalMedicoesOpen(false)}>Fechar</Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
+            <DialogHeader>
+              <DialogTitle>Obras em Execução</DialogTitle>
+              <p className="text-sm text-muted-foreground mt-1">Obras com status "execução" e sem data de término.</p>
+            </DialogHeader>
+            <div className="grid gap-3">
+              {obras.filter(o => o.status === "execucao" && (!o.dataPrevisaoTermino && !o.dataTerminoObra)).length === 0 ? (
+                <div className="py-4 text-muted-foreground">Nenhuma obra em execução no momento.</div>
+              ) : (
+                obras
+                  .filter(o => o.status === "execucao" && (!o.dataPrevisaoTermino && !o.dataTerminoObra))
+                  .map((obra) => (
+                    <Card key={obra.obra} className="border shadow-sm cursor-pointer" onClick={() => { setObraExecucaoSelecionada(obra); setModalExecucaoDetalheOpen(true); }}>
+                      <CardHeader className="py-2">
+                        <CardTitle className="text-base font-bold">{obra.obra}</CardTitle>
+                        <CardDescription>OS: {obra.os} | Cidade: {obra.cidade}</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div>Status: <Badge variant="secondary">{obra.status}</Badge></div>
+                        <div>Início: {obra.inicio || "-"}</div>
+                      </CardContent>
+                    </Card>
+                  ))
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+        {/* Dialog Medições (detalhe da execução) */}
+        <Dialog open={modalExecucaoDetalheOpen} onOpenChange={setModalExecucaoDetalheOpen}>
+          <DialogContent className="max-w-xl">
+            <DialogHeader>
+              <DialogTitle>Detalhes da Obra em Execução: {obraExecucaoSelecionada?.obra}</DialogTitle>
+            </DialogHeader>
+            {obraExecucaoSelecionada && (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-sm font-medium">Data Término da Obra</label>
+                    <Input type="date" value={obraExecucaoSelecionada.dataTerminoObra || ''} onChange={e => setObraExecucaoSelecionada({ ...obraExecucaoSelecionada, dataTerminoObra: e.target.value })} />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-sm font-medium">Qtde. Postes</label>
+                    <Input type="number" value={obraExecucaoSelecionada.qtdePostes || ''} onChange={e => setObraExecucaoSelecionada({ ...obraExecucaoSelecionada, qtdePostes: e.target.value })} />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-sm font-medium">Qtde. Trafo/Equipamento</label>
+                    <Input value={obraExecucaoSelecionada.qtdeTrafoEquipamento || ''} onChange={e => setObraExecucaoSelecionada({ ...obraExecucaoSelecionada, qtdeTrafoEquipamento: e.target.value })} />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-sm font-medium">Patrimônio Instalado</label>
+                    <Input value={obraExecucaoSelecionada.patrimonioInstalado || ''} onChange={e => setObraExecucaoSelecionada({ ...obraExecucaoSelecionada, patrimonioInstalado: e.target.value })} />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-sm font-medium">Patrimônio Retirado</label>
+                    <Input value={obraExecucaoSelecionada.patrimonioRetirado || ''} onChange={e => setObraExecucaoSelecionada({ ...obraExecucaoSelecionada, patrimonioRetirado: e.target.value })} />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-sm font-medium">Placa PT/Eq. Cadastro</label>
+                    <Input value={obraExecucaoSelecionada.placaPtEqCadastro || ''} onChange={e => setObraExecucaoSelecionada({ ...obraExecucaoSelecionada, placaPtEqCadastro: e.target.value })} />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-sm font-medium">KM Inicial</label>
+                    <Input type="number" value={obraExecucaoSelecionada.kmInicial || ''} onChange={e => setObraExecucaoSelecionada({ ...obraExecucaoSelecionada, kmInicial: e.target.value })} />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-sm font-medium">KM Final</label>
+                    <Input type="number" value={obraExecucaoSelecionada.kmFinal || ''} onChange={e => setObraExecucaoSelecionada({ ...obraExecucaoSelecionada, kmFinal: e.target.value })} />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-sm font-medium">KM Rodado</label>
+                    <Input type="number" value={obraExecucaoSelecionada.kmFinal && obraExecucaoSelecionada.kmInicial ? obraExecucaoSelecionada.kmFinal - obraExecucaoSelecionada.kmInicial : ''} readOnly />
+                  </div>
+                  <div className="flex flex-col gap-1 md:col-span-2">
+                    <label className="text-sm font-medium">Observações</label>
+                    <Input value={obraExecucaoSelecionada.observacoes || ''} onChange={e => setObraExecucaoSelecionada({ ...obraExecucaoSelecionada, observacoes: e.target.value })} />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-sm font-medium">Encerradas</label>
+                    <select value={obraExecucaoSelecionada.encerradas || ''} onChange={e => setObraExecucaoSelecionada({ ...obraExecucaoSelecionada, encerradas: e.target.value })} className="border rounded px-2 py-1 focus:outline-none focus:ring w-full">
+                      <option value="">Selecione</option>
+                      <option value="sim">Sim</option>
+                      <option value="nao">Não</option>
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-sm font-medium">Fiscal Energisa</label>
+                    <Input value={obraExecucaoSelecionada.fiscalEnergisa || ''} onChange={e => setObraExecucaoSelecionada({ ...obraExecucaoSelecionada, fiscalEnergisa: e.target.value })} />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-sm font-medium">Número Caixa</label>
+                    <Input value={obraExecucaoSelecionada.numeroCaixa || ''} onChange={e => setObraExecucaoSelecionada({ ...obraExecucaoSelecionada, numeroCaixa: e.target.value })} />
+                  </div>
+                  <div className="flex flex-col gap-1 md:col-span-2">
+                    <label className="text-sm font-medium">Motivo Atraso</label>
+                    <Input value={obraExecucaoSelecionada.motivoAtraso || ''} onChange={e => setObraExecucaoSelecionada({ ...obraExecucaoSelecionada, motivoAtraso: e.target.value })} />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setModalExecucaoDetalheOpen(false)}>Cancelar</Button>
+                  <Button variant="secondary" onClick={() => setModalMedicaoParcialOpen(true)}>
+                    Realizar Medição Parcial
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      // Campos obrigatórios
+                      const obrigatorios = [
+                        'dataTerminoObra',
+                        'patrimonioRetirado',
+                        'placaPtEqCadastro',
+                        'kmInicial',
+                        'kmFinal',
+                      ];
+                      const faltando = obrigatorios.filter(
+                        (campo) => !obraExecucaoSelecionada[campo] || obraExecucaoSelecionada[campo].toString().trim() === ''
+                      );
+                      if (faltando.length > 0) {
+                        alert('Preencha todos os campos obrigatórios para encerrar a execução: Data Término da Obra, Patrimônio Retirado, Placa PT/Eq. Cadastro, KM Inicial e KM Final.');
+                        return;
+                      }
+                      setObras(prevObras => prevObras.map(o =>
+                        o.obra === obraExecucaoSelecionada.obra
+                          ? { ...o, ...obraExecucaoSelecionada, status: 'medicao' }
+                          : o
+                      ));
+                      setModalExecucaoDetalheOpen(false);
+                    }}
+                  >Salvar</Button>
+                </DialogFooter>
+              </>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Modal Medição Parcial independente - múltiplas medições */}
+        <Dialog open={modalMedicaoParcialOpen} onOpenChange={setModalMedicaoParcialOpen}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Medição Parcial - {obraExecucaoSelecionada?.obra}</DialogTitle>
+            </DialogHeader>
+            {/* Lista de medições parciais já realizadas */}
+            <div className="mb-4">
+              <h4 className="text-sm font-semibold mb-2">Medições parciais realizadas:</h4>
+              {(obraExecucaoSelecionada && medicoesParciais[obraExecucaoSelecionada.obra]?.length > 0) ? (
+                <ul className="list-disc pl-4">
+                  {medicoesParciais[obraExecucaoSelecionada.obra].map((med, idx) => (
+                    <li key={idx} className="mb-1">
+                      {med.dataMedicao} - R$ {med.valorMedido} - Lote: {med.numeroLote} - NF: {med.numeroNotaFiscal}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="text-muted-foreground text-xs">Nenhuma medição parcial registrada.</div>
+              )}
+            </div>
+            {/* Formulário para nova medição parcial */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 py-2">
+              <div className="flex flex-col gap-1">
+                <label className="text-sm font-medium">Data da Medição</label>
+                <Input type="date" value={novaMedicaoParcial.dataMedicao} onChange={e => setNovaMedicaoParcial({ ...novaMedicaoParcial, dataMedicao: e.target.value })} />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-sm font-medium">Valor Medido Parcialmente (R$)</label>
+                <Input type="number" min="0" step="0.01" value={novaMedicaoParcial.valorMedido} onChange={e => setNovaMedicaoParcial({ ...novaMedicaoParcial, valorMedido: e.target.value })} />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-sm font-medium">Número do Lote</label>
+                <Input type="text" value={novaMedicaoParcial.numeroLote} onChange={e => setNovaMedicaoParcial({ ...novaMedicaoParcial, numeroLote: e.target.value })} />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-sm font-medium">Data do Lote</label>
+                <Input type="date" value={novaMedicaoParcial.dataLote} onChange={e => setNovaMedicaoParcial({ ...novaMedicaoParcial, dataLote: e.target.value })} />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-sm font-medium">Número da Nota Fiscal</label>
+                <Input type="text" value={novaMedicaoParcial.numeroNotaFiscal} onChange={e => setNovaMedicaoParcial({ ...novaMedicaoParcial, numeroNotaFiscal: e.target.value })} />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-sm font-medium">Data da Nota Fiscal</label>
+                <Input type="date" value={novaMedicaoParcial.dataNotaFiscal} onChange={e => setNovaMedicaoParcial({ ...novaMedicaoParcial, dataNotaFiscal: e.target.value })} />
+              </div>
+              <div className="flex flex-col gap-1 md:col-span-2">
+                <label className="text-sm font-medium">Observações</label>
+                <Input type="text" value={novaMedicaoParcial.observacoes} onChange={e => setNovaMedicaoParcial({ ...novaMedicaoParcial, observacoes: e.target.value })} />
               </div>
             </div>
-          ))}
-        </CardContent>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setModalMedicaoParcialOpen(false)}>Cancelar</Button>
+              <Button onClick={() => {
+                if (!obraExecucaoSelecionada) return;
+                // Adiciona nova medição parcial à obra
+                setMedicoesParciais(prev => {
+                  const lista = prev[obraExecucaoSelecionada.obra] || [];
+                  return {
+                    ...prev,
+                    [obraExecucaoSelecionada.obra]: [...lista, novaMedicaoParcial],
+                  };
+                });
+                setNovaMedicaoParcial({
+                  dataMedicao: '',
+                  valorMedido: '',
+                  numeroLote: '',
+                  dataLote: '',
+                  numeroNotaFiscal: '',
+                  dataNotaFiscal: '',
+                  observacoes: '',
+                });
+              }}>Salvar Medição</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </Card>
 
       <Card>
