@@ -56,6 +56,8 @@ export default function Acionamentos() {
     });
   }, [rows]);
 
+  const showQuickList = false;
+
   const filteredRows = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
     if (!term) return sortedRows;
@@ -128,105 +130,106 @@ export default function Acionamentos() {
 
       <WorkflowSteps />
 
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Lista rápida</CardTitle>
-              <CardDescription>Acompanhe os acionamentos em andamento, com OS vinculada.</CardDescription>
+      {showQuickList && (
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Lista rápida</CardTitle>
+                <CardDescription>Acompanhe os acionamentos em andamento, com OS vinculada.</CardDescription>
+              </div>
+              <Button variant="ghost" size="sm" className="gap-2" disabled>
+                <Input
+                  placeholder="Buscar por código, status, prioridade, município..."
+                  value={searchTerm}
+                  onChange={(event) => setSearchTerm(event.target.value)}
+                  className="max-w-lg"
+                />
+              </Button>
             </div>
-            <Button variant="ghost" size="sm" className="gap-2" disabled>
-              <Input
-              placeholder="Buscar por código, status, prioridade, município..."
-              value={searchTerm}
-              onChange={(event) => setSearchTerm(event.target.value)}
-              className="max-w-lg"
-            />
-              
-            </Button>
-          </div>
-         
-        </CardHeader>
-        <Separator />
-        <CardContent className="p-0">
-          {loading ? (
-            <div className="flex items-center gap-2 p-4 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Carregando...
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Código</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Prioridade</TableHead>
-                  <TableHead>Município</TableHead>
-                  <TableHead>Modalidade</TableHead>
-                  <TableHead>Etapa atual</TableHead>
-                  <TableHead>Abertura</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredRows.length === 0 ? (
+
+          </CardHeader>
+          <Separator />
+          <CardContent className="p-0">
+            {loading ? (
+              <div className="flex items-center gap-2 p-4 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Carregando...
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center text-muted-foreground">
-                      Nenhum acionamento encontrado
-                    </TableCell>
+                    <TableHead>Código</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Prioridade</TableHead>
+                    <TableHead>Município</TableHead>
+                    <TableHead>Modalidade</TableHead>
+                    <TableHead>Etapa atual</TableHead>
+                    <TableHead>Abertura</TableHead>
                   </TableRow>
-                ) : (
-                  filteredRows.map((item) => {
-                    const isUrgent =
-                      (item.prioridade || "").toLowerCase() === "urgente";
-                    const statusKey = (item.status || "").toLowerCase();
-                    const etapaLabel =
-                      statusMap[statusKey] || item.status || "--";
-                    const isCompleted = etapaLabel
-                      .toLowerCase()
-                      .includes("conclu");
-                    const rowClass = isCompleted
-                      ? "bg-emerald-50/60 cursor-pointer"
-                      : isUrgent
-                      ? "bg-destructive/10 cursor-pointer"
-                      : "cursor-pointer";
-                    return (
-                      <TableRow
-                        key={item.codigo_acionamento}
-                        className={`${rowClass} transition-colors cursor-pointer`}
-                        onClick={() =>
-                          navigate(`/acionamentos/${item.codigo_acionamento}`)
-                        }
-                      >
-                        <TableCell className="font-semibold">{item.codigo_acionamento}</TableCell>
-                        <TableCell>
-                          <Badge variant="secondary" className={isUrgent ? "text-destructive" : undefined}>
-                            {(item.status || "--").replace("_", " ")}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className={isUrgent ? "text-destructive" : undefined}>
-                          {item.prioridade || "--"}
-                        </TableCell>
-                        <TableCell>{item.municipio || "--"}</TableCell>
-                        <TableCell>{item.modalidade || "--"}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="px-2 text-xs">
-                            {etapaLabel}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {item.data_abertura
-                            ? new Date(item.data_abertura).toLocaleDateString("pt-BR")
-                            : "--"}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })
-                )}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+                </TableHeader>
+                <TableBody>
+                  {filteredRows.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center text-muted-foreground">
+                        Nenhum acionamento encontrado
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    filteredRows.map((item) => {
+                      const isUrgent =
+                        (item.prioridade || "").toLowerCase() === "urgente";
+                      const statusKey = (item.status || "").toLowerCase();
+                      const etapaLabel =
+                        statusMap[statusKey] || item.status || "--";
+                      const isCompleted = etapaLabel
+                        .toLowerCase()
+                        .includes("conclu");
+                      const rowClass = isCompleted
+                        ? "bg-emerald-50/60 cursor-pointer"
+                        : isUrgent
+                        ? "bg-destructive/10 cursor-pointer"
+                        : "cursor-pointer";
+                      return (
+                        <TableRow
+                          key={item.codigo_acionamento}
+                          className={`${rowClass} transition-colors cursor-pointer`}
+                          onClick={() =>
+                            navigate(`/acionamentos/${item.codigo_acionamento}`)
+                          }
+                        >
+                          <TableCell className="font-semibold">{item.codigo_acionamento}</TableCell>
+                          <TableCell>
+                            <Badge variant="secondary" className={isUrgent ? "text-destructive" : undefined}>
+                              {(item.status || "--").replace("_", " ")}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className={isUrgent ? "text-destructive" : undefined}>
+                            {item.prioridade || "--"}
+                          </TableCell>
+                          <TableCell>{item.municipio || "--"}</TableCell>
+                          <TableCell>{item.modalidade || "--"}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="px-2 text-xs">
+                              {etapaLabel}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            {item.data_abertura
+                              ? new Date(item.data_abertura).toLocaleDateString("pt-BR")
+                              : "--"}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

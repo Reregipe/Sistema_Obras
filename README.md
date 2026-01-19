@@ -64,6 +64,16 @@ This project is built with:
 
 Simply open [Lovable](https://lovable.dev/projects/d584966a-c2d6-421a-b13b-ee7fbb6a7610) and click on Share -> Publish.
 
+## Sincronizar dados localmente
+
+- Configure as credenciais do Supabase no `.env` local (ou exporte no shell):
+  - `VITE_SUPABASE_URL` (ou `SUPABASE_URL`)
+  - `VITE_SUPABASE_PUBLISHABLE_KEY` (ou `SUPABASE_KEY`, `SUPABASE_SERVICE_ROLE_KEY`)
+- Execute `npm run sync:supabase` para gerar/atualizar o arquivo `supabase-local.db` na raiz.
+  - Por padrão o script sincroniza `codigos_mao_de_obra` (os códigos de mão de obra que a aplicação usa).
+  - Também é possível pedir tabelas extras passando nomes de tabela: `npm run sync:supabase obras medicoes`.
+- O script usa `better-sqlite3` e cria automaticamente as colunas com base no payload retornado pelo Supabase, então basta executar sempre que quiser testar com dados offline.
+
 ## Can I connect a custom domain to my Lovable project?
 
 Yes, you can!
