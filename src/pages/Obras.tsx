@@ -27,17 +27,20 @@ const parseDecimal = (value) => {
 
 const Obras = () => {
                       // Estado para tipo de mão de obra (linha viva/morta)
-  const [tipoMO, setTipoMO] = useState('');
+  const [tipoMOEnv, setTipoMOEnv] = useState('');
   // Estado para inclusão rápida de mão de obra no modal de consolidação
-  const [novoMO, setNovoMO] = useState({ codigo: '', descricao: '', unidade: '', ups: '', quantidadeInstalada: 1 });
+  const [novoMOEnv, setNovoMOEnv] = useState({ codigo: '', descricao: '', unidade: '', ups: '', quantidadeInstalada: 1 });
   // Estado para opções de autocomplete vindas do banco
   const [opcoesMO, setOpcoesMO] = useState<any[]>([]);
   const [loadingMO, setLoadingMO] = useState(false);
+  const [tipoMORecebida, setTipoMORecebida] = useState('');
+  const [novoMORecebida, setNovoMORecebida] = useState({ codigo: '', descricao: '', unidade: '', ups: '', quantidadeInstalada: 1 });
+  const [maoDeObraRecebida, setMaoDeObraRecebida] = useState<any[]>([]);
   const [upsConfigs, setUpsConfigs] = useState({ lm: 0, lv: 0 });
 
   // Busca dinâmica dos códigos de mão de obra do Supabase
   useEffect(() => {
-    if (!tipoMO && !novoMO.descricao.trim()) {
+    if (!tipoMOEnv && !novoMOEnv.descricao.trim()) {
       setOpcoesMO([]);
       return;
     }
@@ -48,12 +51,12 @@ const Obras = () => {
         .select('codigo_mao_de_obra, descricao, tipo, unidade, ups')
         .eq('ativo', true)
         .order('codigo_mao_de_obra', { ascending: true });
-      if (tipoMO) {
-        query = query.eq('tipo', tipoMO);
+      if (tipoMOEnv) {
+        query = query.eq('tipo', tipoMOEnv);
       }
-      if (novoMO.descricao.trim()) {
+      if (novoMOEnv.descricao.trim()) {
         query = query.or(
-          `codigo_mao_de_obra.ilike.%${novoMO.descricao.trim()}%,descricao.ilike.%${novoMO.descricao.trim()}%`
+          `codigo_mao_de_obra.ilike.%${novoMOEnv.descricao.trim()}%,descricao.ilike.%${novoMOEnv.descricao.trim()}%`
         );
       }
       const { data, error } = await query.limit(20);
@@ -61,7 +64,102 @@ const Obras = () => {
       setLoadingMO(false);
     }, 350);
     return () => clearTimeout(handler);
-  }, [tipoMO, novoMO.descricao]);
+  }, [tipoMOEnv, novoMOEnv.descricao]);
+
+  const resolverMaoDeObra = async (texto: string, fallbackTipo: string) => {
+    const inicial = {
+      codigo: '',
+      descricao: texto,
+      unidade: '',
+      tipo: fallbackTipo,
+      ups: '',
+    };
+    const trimmed = texto.trim();
+    if (!trimmed) return inicial;
+    const parts = trimmed.split("-");
+    const codigoLookup = parts[0]?.trim();
+    let matchOption: any = null;
+    if (codigoLookup) {
+      matchOption = opcoesMO.find((mo) => mo.codigo_mao_de_obra === codigoLookup);
+    }
+    if (!matchOption) {
+      const normalizado = trimmed.toLowerCase();
+      matchOption = opcoesMO.find((mo) => {
+        const pair = `${mo.codigo_mao_de_obra} - ${mo.descricao}`.toLowerCase();
+        return (
+          pair === normalizado ||
+          mo.codigo_mao_de_obra.toLowerCase() === normalizado ||
+          mo.descricao?.toLowerCase() === normalizado
+        );
+      });
+    }
+    if (!matchOption && codigoLookup) {
+      const { data: fetched } = await supabase
+        .from("codigos_mao_de_obra")
+        .select("codigo_mao_de_obra, descricao, unidade, tipo, ups")
+        .eq("codigo_mao_de_obra", codigoLookup)
+        .maybeSingle();
+      matchOption = fetched || null;
+    }
+    if (matchOption) {
+      return {
+        codigo: matchOption.codigo_mao_de_obra,
+        descricao: matchOption.descricao || texto,
+        unidade: matchOption.unidade || inicial.unidade,
+        tipo: matchOption.tipo || inicial.tipo,
+        ups: matchOption.ups ?? inicial.ups,
+      };
+    }
+    const fallbackMatch = /^([^\s-]+)\s*-\s*(.+)$/.exec(trimmed);
+    if (fallbackMatch) {
+      const codigo = fallbackMatch[1];
+      const descricao = fallbackMatch[2];
+      const fallback = opcoesMO.find((mo) => mo.codigo_mao_de_obra === codigo);
+      return {
+        codigo,
+        descricao,
+        unidade: fallback?.unidade || inicial.unidade,
+        tipo: fallback?.tipo || inicial.tipo,
+        ups: fallback?.ups ?? inicial.ups,
+      };
+    }
+    const fallback = opcoesMO.find((mo) => mo.codigo_mao_de_obra === trimmed);
+    return {
+      ...inicial,
+      codigo: fallback?.codigo_mao_de_obra || inicial.codigo,
+      descricao: fallback?.descricao || inicial.descricao,
+      unidade: fallback?.unidade || inicial.unidade,
+      tipo: fallback?.tipo || inicial.tipo,
+      ups: fallback?.ups ?? inicial.ups,
+    };
+  };
+
+  const handleAdicionarEnv = async () => {
+    if (!obraMedicaoSelecionada) return;
+    const resolved = await resolverMaoDeObra(novoMOEnv.descricao, tipoMOEnv);
+    const novoItem = {
+      ...resolved,
+      quantidadeInstalada: novoMOEnv.quantidadeInstalada,
+      quantidadeTotal: novoMOEnv.quantidadeInstalada,
+    };
+    const novaLista = [...(obraMedicaoSelecionada.maoDeObraUtilizada || []), novoItem];
+    setObraMedicaoSelecionada({
+      ...obraMedicaoSelecionada,
+      maoDeObraUtilizada: novaLista,
+    });
+    setNovoMOEnv({ codigo: '', descricao: '', unidade: '', ups: '', quantidadeInstalada: 1 });
+  };
+
+  const handleAdicionarRecebida = async () => {
+    const resolved = await resolverMaoDeObra(novoMORecebida.descricao, tipoMORecebida);
+    const novoItem = {
+      ...resolved,
+      quantidadeInstalada: novoMORecebida.quantidadeInstalada,
+      quantidadeTotal: novoMORecebida.quantidadeInstalada,
+    };
+    setMaoDeObraRecebida((prev) => [...prev, novoItem]);
+    setNovoMORecebida({ codigo: '', descricao: '', unidade: '', ups: '', quantidadeInstalada: 1 });
+  };
 
   useEffect(() => {
     const loadUpsConfigs = async () => {
@@ -94,7 +192,7 @@ const Obras = () => {
         opt.codigo_mao_de_obra === mo.codigo &&
         opt.descricao?.toLowerCase() === mo.descricao?.toLowerCase()
     );
-    const tipo = mo.tipo || item?.tipo || tipoMO || "";
+    const tipo = mo.tipo || item?.tipo || fallbackTipo || "";
     const unidade = mo.unidade || item?.unidade || "-";
     const upsFraction = parseDecimal(mo.ups ?? item?.ups ?? 0);
     const quantidade = parseDecimal(mo.quantidadeTotal ?? mo.quantidadeInstalada ?? 0);
@@ -115,6 +213,10 @@ const Obras = () => {
   // Mão de obra utilizada: busca da obra selecionada, se existir
   const maoDeObraUtilizada = obraMedicaoSelecionada?.maoDeObraUtilizada || [];
   const totalValorMaoDeObra = maoDeObraUtilizada.reduce(
+    (acc, mo) => acc + calcularValoresMo(mo).valorTotal,
+    0
+  );
+  const totalValorMaoDeObraRecebida = maoDeObraRecebida.reduce(
     (acc, mo) => acc + calcularValoresMo(mo).valorTotal,
     0
   );
@@ -687,111 +789,34 @@ const Obras = () => {
                                   
                                   <div className="mb-4 flex gap-2 items-end">
                                     <select
-                                      value={tipoMO}
-                                      onChange={e => setTipoMO(e.target.value)}
+                                      value={tipoMOEnv}
+                                      onChange={e => setTipoMOEnv(e.target.value)}
                                       className="px-2 py-1 border rounded w-40"
                                     >
                                       <option value="">Selecione o tipo</option>
                                       <option value="LV">Linha Viva</option>
                                       <option value="LM">Linha Morta</option>
                                     </select>
-                                    <Input
-                                      placeholder="Código ou descrição"
-                                      value={novoMO.descricao}
-                                      onChange={e => setNovoMO({ ...novoMO, descricao: e.target.value })}
-                                      className="flex-1"
-                                      list="maoDeObraOptions"
-                                    />
+                                      <Input
+                                        placeholder="Código ou descrição"
+                                        value={novoMOEnv.descricao}
+                                        onChange={e => setNovoMOEnv({ ...novoMOEnv, descricao: e.target.value })}
+                                        className="flex-1"
+                                        list="maoDeObraOptions"
+                                      />
                                     <datalist id="maoDeObraOptions">
                                       {opcoesMO.map(mo => (
                                         <option key={mo.codigo_mao_de_obra + mo.descricao} value={`${mo.codigo_mao_de_obra} - ${mo.descricao}`} />
                                       ))}
                                     </datalist>
-                                    <Input
-                                      placeholder="Qtd"
-                                      type="number"
-                                      value={String(novoMO.quantidadeInstalada)}
-                                      onChange={e => setNovoMO({ ...novoMO, quantidadeInstalada: Number(e.target.value) })}
-                                      className="w-16"
-                                    />
-                                    <Button onClick={async () => {
-                                        if (!obraMedicaoSelecionada) return;
-                                        const textoDigitado = novoMO.descricao.trim();
-                                        let codigo = '';
-                                        let descricao = novoMO.descricao;
-                                        let unidade = novoMO.unidade || '';
-                                        let tipoSelecionado = tipoMO;
-                                        let upsFracao = parseDecimal(novoMO.ups);
-                                        let matchOption = null;
-
-                                        if (textoDigitado) {
-                                          const parts = textoDigitado.split("-");
-                                          const codigoLookup = parts[0]?.trim();
-                                          if (codigoLookup) {
-                                            matchOption = opcoesMO.find(mo => mo.codigo_mao_de_obra === codigoLookup);
-                                            if (!matchOption) {
-                                              const normalizado = textoDigitado.toLowerCase();
-                                              matchOption = opcoesMO.find((mo) => {
-                                                const pair = `${mo.codigo_mao_de_obra} - ${mo.descricao}`.toLowerCase();
-                                                return (
-                                                  pair === normalizado ||
-                                                  mo.codigo_mao_de_obra.toLowerCase() === normalizado ||
-                                                  mo.descricao?.toLowerCase() === normalizado
-                                                );
-                                              });
-                                            }
-                                          }
-                                          if (!matchOption && parts[0]) {
-                                            const { data: fetched } = await supabase
-                                              .from("codigos_mao_de_obra")
-                                              .select("codigo_mao_de_obra, descricao, unidade, tipo, ups")
-                                              .eq("codigo_mao_de_obra", parts[0].trim())
-                                              .maybeSingle();
-                                            matchOption = fetched || null;
-                                          }
-                                          if (matchOption) {
-                                            codigo = matchOption.codigo_mao_de_obra;
-                                            descricao = matchOption.descricao || descricao;
-                                            unidade = matchOption.unidade || unidade;
-                                            tipoSelecionado = matchOption.tipo || tipoSelecionado;
-                                            upsFracao = parseDecimal(matchOption.ups);
-                                          } else {
-                                            const fallbackMatch = /^([^\s-]+)\s*-\s*(.+)$/.exec(textoDigitado);
-                                            if (fallbackMatch) {
-                                              codigo = fallbackMatch[1];
-                                              descricao = fallbackMatch[2];
-                                              const fallback = opcoesMO.find((mo) => mo.codigo_mao_de_obra === codigo);
-                                              unidade = fallback?.unidade || unidade;
-                                              tipoSelecionado = fallback?.tipo || tipoSelecionado;
-                                              upsFracao = parseDecimal(fallback?.ups ?? upsFracao);
-                                            } else {
-                                              const fallback = opcoesMO.find((mo) => mo.codigo_mao_de_obra === textoDigitado);
-                                              codigo = fallback?.codigo_mao_de_obra || codigo;
-                                              descricao = fallback?.descricao || descricao;
-                                              unidade = fallback?.unidade || unidade;
-                                              tipoSelecionado = fallback?.tipo || tipoSelecionado;
-                                              upsFracao = parseDecimal(fallback?.ups ?? upsFracao);
-                                            }
-                                          }
-                                        }
-                                        const novaLista = [
-                                          ...(obraMedicaoSelecionada.maoDeObraUtilizada || []),
-                                          {
-                                            codigo,
-                                            descricao,
-                                            unidade,
-                                            tipo: tipoSelecionado,
-                                            ups: upsFracao,
-                                            quantidadeInstalada: novoMO.quantidadeInstalada,
-                                            quantidadeTotal: novoMO.quantidadeInstalada,
-                                          }
-                                        ];
-                                        setObraMedicaoSelecionada({
-                                          ...obraMedicaoSelecionada,
-                                          maoDeObraUtilizada: novaLista
-                                        });
-                                        setNovoMO({ codigo: '', descricao: '', unidade: '', ups: '', quantidadeInstalada: 1 });
-                                      }}>
+                                      <Input
+                                        placeholder="Qtd"
+                                        type="number"
+                                        value={String(novoMOEnv.quantidadeInstalada)}
+                                        onChange={e => setNovoMOEnv({ ...novoMOEnv, quantidadeInstalada: Number(e.target.value) })}
+                                        className="w-16"
+                                      />
+                                    <Button onClick={handleAdicionarEnv}>
                                       Adicionar
                                     </Button>
                                   </div>
@@ -840,13 +865,13 @@ const Obras = () => {
                     </table>
                   </div>
                 </div>
-                {/* Bloco duplicado */}
+                {/* Bloco duplicado independente */}
                 <div className="mt-8 p-4 border rounded-lg bg-muted">
                   <h4 className="text-base font-bold mb-2">Mão de Obra Recebida</h4>
                   <div className="mb-4 flex gap-2 items-end">
                     <select
-                      value={tipoMO}
-                      onChange={e => setTipoMO(e.target.value)}
+                      value={tipoMORecebida}
+                      onChange={e => setTipoMORecebida(e.target.value)}
                       className="px-2 py-1 border rounded w-40"
                     >
                       <option value="">Selecione o tipo</option>
@@ -855,8 +880,8 @@ const Obras = () => {
                     </select>
                     <Input
                       placeholder="Código ou descrição"
-                      value={novoMO.descricao}
-                      onChange={e => setNovoMO({ ...novoMO, descricao: e.target.value })}
+                      value={novoMORecebida.descricao}
+                      onChange={e => setNovoMORecebida({ ...novoMORecebida, descricao: e.target.value })}
                       className="flex-1"
                       list="maoDeObraOptions"
                     />
@@ -868,88 +893,11 @@ const Obras = () => {
                     <Input
                       placeholder="Qtd"
                       type="number"
-                      value={String(novoMO.quantidadeInstalada)}
-                      onChange={e => setNovoMO({ ...novoMO, quantidadeInstalada: Number(e.target.value) })}
+                      value={String(novoMORecebida.quantidadeInstalada)}
+                      onChange={e => setNovoMORecebida({ ...novoMORecebida, quantidadeInstalada: Number(e.target.value) })}
                       className="w-16"
                     />
-                    <Button onClick={async () => {
-                      if (!obraMedicaoSelecionada) return;
-                      const textoDigitado = novoMO.descricao.trim();
-                      let codigo = '';
-                      let descricao = novoMO.descricao;
-                      let unidade = novoMO.unidade || '';
-                      let tipoSelecionado = tipoMO;
-                      let upsFracao = parseDecimal(novoMO.ups);
-                      let matchOption = null;
-
-                      if (textoDigitado) {
-                        const parts = textoDigitado.split("-");
-                        const codigoLookup = parts[0]?.trim();
-                        if (codigoLookup) {
-                          matchOption = opcoesMO.find(mo => mo.codigo_mao_de_obra === codigoLookup);
-                          if (!matchOption) {
-                            const normalizado = textoDigitado.toLowerCase();
-                            matchOption = opcoesMO.find((mo) => {
-                              const pair = `${mo.codigo_mao_de_obra} - ${mo.descricao}`.toLowerCase();
-                              return (
-                                pair === normalizado ||
-                                mo.codigo_mao_de_obra.toLowerCase() === normalizado ||
-                                mo.descricao?.toLowerCase() === normalizado
-                              );
-                            });
-                          }
-                        }
-                        if (!matchOption && parts[0]) {
-                          const { data: fetched } = await supabase
-                            .from("codigos_mao_de_obra")
-                            .select("codigo_mao_de_obra, descricao, unidade, tipo, ups")
-                            .eq("codigo_mao_de_obra", parts[0].trim())
-                            .maybeSingle();
-                          matchOption = fetched || null;
-                        }
-                        if (matchOption) {
-                          codigo = matchOption.codigo_mao_de_obra;
-                          descricao = matchOption.descricao || descricao;
-                          unidade = matchOption.unidade || unidade;
-                          tipoSelecionado = matchOption.tipo || tipoSelecionado;
-                          upsFracao = parseDecimal(matchOption.ups);
-                        } else {
-                          const fallbackMatch = /^([^\s-]+)\s*-\s*(.+)$/.exec(textoDigitado);
-                          if (fallbackMatch) {
-                            codigo = fallbackMatch[1];
-                            descricao = fallbackMatch[2];
-                            const fallback = opcoesMO.find((mo) => mo.codigo_mao_de_obra === codigo);
-                            unidade = fallback?.unidade || unidade;
-                            tipoSelecionado = fallback?.tipo || tipoSelecionado;
-                            upsFracao = parseDecimal(fallback?.ups ?? upsFracao);
-                          } else {
-                            const fallback = opcoesMO.find((mo) => mo.codigo_mao_de_obra === textoDigitado);
-                            codigo = fallback?.codigo_mao_de_obra || codigo;
-                            descricao = fallback?.descricao || descricao;
-                            unidade = fallback?.unidade || unidade;
-                            tipoSelecionado = fallback?.tipo || tipoSelecionado;
-                            upsFracao = parseDecimal(fallback?.ups ?? upsFracao);
-                          }
-                        }
-                      }
-                      const novaLista = [
-                        ...(obraMedicaoSelecionada.maoDeObraUtilizada || []),
-                        {
-                          codigo,
-                          descricao,
-                          unidade,
-                          tipo: tipoSelecionado,
-                          ups: upsFracao,
-                          quantidadeInstalada: novoMO.quantidadeInstalada,
-                          quantidadeTotal: novoMO.quantidadeInstalada,
-                        }
-                      ];
-                      setObraMedicaoSelecionada({
-                        ...obraMedicaoSelecionada,
-                        maoDeObraUtilizada: novaLista
-                      });
-                      setNovoMO({ codigo: '', descricao: '', unidade: '', ups: '', quantidadeInstalada: 1 });
-                    }}>
+                    <Button onClick={handleAdicionarRecebida}>
                       Adicionar
                     </Button>
                   </div>
@@ -968,7 +916,7 @@ const Obras = () => {
                         </tr>
                       </thead>
                       <tbody>
-                        {maoDeObraUtilizada.map((mo, idx) => {
+                        {maoDeObraRecebida.map((mo, idx) => {
                           const valores = calcularValoresMo(mo);
                           return (
                             <tr key={mo.codigo || `${idx}-${mo.descricao}`}>
@@ -991,7 +939,7 @@ const Obras = () => {
                         })}
                         <tr>
                           <td className="px-2 py-1 border text-center" colSpan={7} style={{ textAlign: 'right', fontWeight: 'bold' }}>R$</td>
-                          <td className="px-2 py-1 border text-center" style={{ fontWeight: 'bold' }}>{totalValorMaoDeObra.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                          <td className="px-2 py-1 border text-center" style={{ fontWeight: 'bold' }}>{totalValorMaoDeObraRecebida.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
                         </tr>
                       </tbody>
                     </table>
