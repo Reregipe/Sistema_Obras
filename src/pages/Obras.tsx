@@ -1,3 +1,6 @@
+// import { maoDeObraCatalog } from "@/data/maoDeObraCatalog";
+import { useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import { useMemo, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { equipesCatalog } from "@/data/equipesCatalog";
@@ -14,9 +17,123 @@ import { WorkflowStepsObras } from "@/components/domain/WorkflowStepsObras";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
+const parseDecimal = (value) => {
+  if (value === undefined || value === null) return 0;
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  const normalized = String(value).replace(",", ".").trim();
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
 const Obras = () => {
+                      // Estado para tipo de mão de obra (linha viva/morta)
+  const [tipoMO, setTipoMO] = useState('');
+  // Estado para inclusão rápida de mão de obra no modal de consolidação
+  const [novoMO, setNovoMO] = useState({ codigo: '', descricao: '', unidade: '', ups: '', quantidadeInstalada: 1 });
+  // Estado para opções de autocomplete vindas do banco
+  const [opcoesMO, setOpcoesMO] = useState<any[]>([]);
+  const [loadingMO, setLoadingMO] = useState(false);
+  const [upsConfigs, setUpsConfigs] = useState({ lm: 0, lv: 0 });
+
+  // Busca dinâmica dos códigos de mão de obra do Supabase
+  useEffect(() => {
+    if (!tipoMO && !novoMO.descricao.trim()) {
+      setOpcoesMO([]);
+      return;
+    }
+    const handler = setTimeout(async () => {
+      setLoadingMO(true);
+      let query = supabase
+        .from('codigos_mao_de_obra')
+        .select('codigo_mao_de_obra, descricao, tipo, unidade, ups')
+        .eq('ativo', true)
+        .order('codigo_mao_de_obra', { ascending: true });
+      if (tipoMO) {
+        query = query.eq('tipo', tipoMO);
+      }
+      if (novoMO.descricao.trim()) {
+        query = query.or(
+          `codigo_mao_de_obra.ilike.%${novoMO.descricao.trim()}%,descricao.ilike.%${novoMO.descricao.trim()}%`
+        );
+      }
+      const { data, error } = await query.limit(20);
+      if (!error && data) setOpcoesMO(data);
+      setLoadingMO(false);
+    }, 350);
+    return () => clearTimeout(handler);
+  }, [tipoMO, novoMO.descricao]);
+
+  useEffect(() => {
+    const loadUpsConfigs = async () => {
+      const { data, error } = await supabase
+        .from("system_settings")
+        .select("chave, valor")
+        .in("chave", ["ups_valor_lm", "ups_valor_lv"]);
+      if (error || !data) return;
+      const next = { lm: 0, lv: 0 };
+      data.forEach((entry) => {
+        if (entry.chave === "ups_valor_lm") next.lm = parseDecimal(entry.valor);
+        if (entry.chave === "ups_valor_lv") next.lv = parseDecimal(entry.valor);
+      });
+      setUpsConfigs(next);
+    };
+    loadUpsConfigs();
+  }, []);
+                  // Exemplo de dados de mão de obra consolidada
+                  const maoDeObraConsolidada = [
+                    { codigo: "MO-001", descricao: "Eletricista", quantidade: 3, valorUnitario: 250, valorTotal: 750 },
+                    { codigo: "MO-002", descricao: "Auxiliar", quantidade: 2, valorUnitario: 180, valorTotal: 360 },
+                    { codigo: "MO-003", descricao: "Encarregado", quantidade: 1, valorUnitario: 350, valorTotal: 350 },
+                  ];
+                // Estado para obra selecionada no modal de medições
+  const [obraMedicaoSelecionada, setObraMedicaoSelecionada] = useState(null);
+
+  const calcularValoresMo = (mo) => {
+    const item = opcoesMO.find(
+      (opt) =>
+        opt.codigo_mao_de_obra === mo.codigo &&
+        opt.descricao?.toLowerCase() === mo.descricao?.toLowerCase()
+    );
+    const tipo = mo.tipo || item?.tipo || tipoMO || "";
+    const unidade = mo.unidade || item?.unidade || "-";
+    const upsFraction = parseDecimal(mo.ups ?? item?.ups ?? 0);
+    const quantidade = parseDecimal(mo.quantidadeTotal ?? mo.quantidadeInstalada ?? 0);
+    const isLV = tipo.toUpperCase() === "LV";
+    const valorConfiguracao = isLV ? upsConfigs.lv : upsConfigs.lm;
+    const valorUnitarioConfigurado = upsFraction * valorConfiguracao;
+    const valorTotal = valorUnitarioConfigurado * quantidade;
+    return {
+      tipo,
+      unidade,
+      quantidade,
+      valorUnitarioFracao: upsFraction,
+      valorUnitarioConfigurado,
+      valorTotal,
+    };
+  };
+
+  // Mão de obra utilizada: busca da obra selecionada, se existir
+  const maoDeObraUtilizada = obraMedicaoSelecionada?.maoDeObraUtilizada || [];
+  const totalValorMaoDeObra = maoDeObraUtilizada.reduce(
+    (acc, mo) => acc + calcularValoresMo(mo).valorTotal,
+    0
+  );
+                const [modalObraMedicaoOpen, setModalObraMedicaoOpen] = useState(false);
+              const [modalMedicoesOpen, setModalMedicoesOpen] = useState(false);
             // Estado para armazenar medições parciais por obra
-            const [medicoesParciais, setMedicoesParciais] = useState({});
+            const [medicoesParciais, setMedicoesParciais] = useState({
+              'OBRA-MEDICAO': [
+                {
+                  dataMedicao: '14/01/2026',
+                  valorMedido: '12345.67',
+                  numeroLote: 'L-001',
+                  dataLote: '14/01/2026',
+                  numeroNotaFiscal: 'NF-9876',
+                  dataNotaFiscal: '14/01/2026',
+                  observacoes: 'Medição parcial'
+                }
+              ]
+            });
             const [novaMedicaoParcial, setNovaMedicaoParcial] = useState({
               dataMedicao: '',
               valorMedido: '',
@@ -26,7 +143,7 @@ const Obras = () => {
               dataNotaFiscal: '',
               observacoes: '',
             });
-          const [modalMedicoesOpen, setModalMedicoesOpen] = useState(false);
+          // Removido: duplicidade de declaração de modalMedicoesOpen
         const [modalMedicaoParcialOpen, setModalMedicaoParcialOpen] = useState(false);
       const [obraExecucaoSelecionada, setObraExecucaoSelecionada] = useState(null);
       const [modalExecucaoDetalheOpen, setModalExecucaoDetalheOpen] = useState(false);
@@ -40,40 +157,76 @@ const Obras = () => {
 
   const [obras, setObras] = useState([
     {
-      obra: "OBRA-LP-001",
-      os: "OS-LP-2301",
+      obra: "OBRA-PLANEJAMENTO",
+      os: "OS-PL-1001",
+      status: "planejamento",
+      tci: "pendente",
+      gestor: "",
+      cidade: "Cuiaba",
+      inicio: "",
+      encerradas: "",
+      dataPrevisaoTermino: "",
+      dataTerminoObra: ""
+    },
+    {
+      obra: "OBRA-EXECUCAO",
+      os: "OS-EX-1002",
       status: "execucao",
       tci: "pendente",
       gestor: "aguardando",
-      cidade: "Cuiaba",
-      inicio: "10/11/2025",
+      cidade: "Varzea Grande",
+      inicio: "10/01/2026",
+      encerradas: "",
+      dataPrevisaoTermino: "",
+      dataTerminoObra: ""
     },
     {
-      obra: "OBRA-LP-002",
-      os: "OS-LP-2305",
+      obra: "OBRA-MEDICAO",
+      os: "OS-ME-1003",
       status: "medicao",
       tci: "emitido",
       gestor: "aguardando",
-      cidade: "Varzea Grande",
-      inicio: "05/11/2025",
+      cidade: "Primavera",
+      inicio: "05/01/2026",
+      encerradas: "sim",
+      dataPrevisaoTermino: "",
+      dataTerminoObra: "12/01/2026"
     },
     {
-      obra: "OBRA-LP-003",
-      os: "OS-LP-2310",
+      obra: "OBRA-TCI",
+      os: "OS-TCI-1004",
       status: "tci",
       tci: "pendente",
       gestor: "pendente",
       cidade: "Cuiaba",
-      inicio: "28/10/2025",
+      inicio: "28/12/2025",
+      encerradas: "",
+      dataPrevisaoTermino: "",
+      dataTerminoObra: ""
     },
     {
-      obra: "OBRA-LP-004",
-      os: "OS-LP-2315",
-      status: "faturar",
+      obra: "OBRA-APROVACAO",
+      os: "OS-AP-1005",
+      status: "aprovacao",
       tci: "validado",
       gestor: "aprovado",
       cidade: "Primavera",
-      inicio: "20/10/2025",
+      inicio: "20/12/2025",
+      encerradas: "",
+      dataPrevisaoTermino: "",
+      dataTerminoObra: ""
+    },
+    {
+      obra: "OBRA-FATURAMENTO",
+      os: "OS-FA-1006",
+      status: "faturar",
+      tci: "validado",
+      gestor: "aprovado",
+      cidade: "Cuiaba",
+      inicio: "15/12/2025",
+      encerradas: "",
+      dataPrevisaoTermino: "",
+      dataTerminoObra: ""
     },
   ]);
 
@@ -129,6 +282,9 @@ const Obras = () => {
         gestor: "",
         cidade: novaObra.municipio || "",
         obra: novaObra.projetoSiagoOdi || "",
+        encerradas: "",
+        dataPrevisaoTermino: "",
+        dataTerminoObra: ""
       },
     ]);
     setModalOpen(false);
@@ -143,6 +299,7 @@ const Obras = () => {
       descricaoObra: "",
       solicitante: "",
       contato: "",
+      valorPrevisto: ""
     });
   };
 
@@ -431,9 +588,7 @@ const Obras = () => {
             let clickHandler = undefined;
             if (etapa.title === "Planejamento") clickHandler = () => setPlanejamentoModalOpen(true);
             if (etapa.title === "Execução") clickHandler = () => setExecucaoModalOpen(true);
-            if (etapa.title === "Medições") clickHandler = () => {
-              setModalMedicoesOpen(true);
-            };
+            if (etapa.title === "Medições") clickHandler = () => setModalMedicoesOpen(true);
             if (etapa.title === "TCI / Tratativas") clickHandler = () => {/* TODO: handler TCI */};
             if (etapa.title === "Aprovação") clickHandler = () => {/* TODO: handler Aprovação */};
             if (etapa.title === "Faturamento") clickHandler = () => {/* TODO: handler Faturamento */};
@@ -455,40 +610,404 @@ const Obras = () => {
             );
           })}
         </CardContent>
-        {/* Dialog Execução */}
+        {/* Modal exclusivo para Medições - fora do modal de execução */}
+        <Dialog open={modalMedicoesOpen} onOpenChange={setModalMedicoesOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Medições - Consolidação MO/Material</DialogTitle>
+              <p className="text-sm text-muted-foreground mt-1">Consolide as medições de mão de obra e materiais das obras encerradas.</p>
+            </DialogHeader>
+            <div className="grid gap-3">
+              {obras.filter(o => o.status === "medicao" && o.encerradas === "sim").length === 0 ? (
+                <div className="py-4 text-muted-foreground">Nenhuma obra encerrada disponível para consolidação.</div>
+              ) : (
+                obras.filter(o => o.status === "medicao" && o.encerradas === "sim").map((obra) => (
+                  <Card key={obra.obra} className="border shadow-sm cursor-pointer" onClick={() => { setObraMedicaoSelecionada(obra); setModalObraMedicaoOpen(true); }}>
+                    <CardHeader className="py-2">
+                      <CardTitle className="text-base font-bold">{obra.obra}</CardTitle>
+                      <CardDescription>OS: {obra.os} | Cidade: {obra.cidade}</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div>Status: <Badge variant="secondary">{obra.status}</Badge></div>
+                      <div>Início: {obra.inicio || "-"}</div>
+                      <div>Encerradas: {obra.encerradas === "sim" ? "Sim" : "Não"}</div>
+                      <div className="mt-2 text-xs text-primary">Clique para consolidar/visualizar detalhes</div>
+                    </CardContent>
+                  </Card>
+                ))
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setModalMedicoesOpen(false)}>Fechar</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+        {/* Modal de detalhes/consolidação da obra selecionada no modal de medições */}
+        <Dialog open={modalObraMedicaoOpen} onOpenChange={setModalObraMedicaoOpen}>
+          <DialogContent className="max-w-5xl">
+            <DialogHeader>
+              <DialogTitle>Consolidação de Medições - {obraMedicaoSelecionada?.obra}</DialogTitle>
+            </DialogHeader>
+            {obraMedicaoSelecionada && (
+              <div className="space-y-2">
+                  <div className="mt-8 p-2 border rounded-lg bg-muted">
+                  <h4 className="text-base font-bold mb-2">Medições Parciais</h4>
+                  <div className="overflow-x-auto">
+                    {(obraMedicaoSelecionada && medicoesParciais[obraMedicaoSelecionada.obra]?.length > 0) ? (
+                      <table className="min-w-full border text-xs">
+                        <thead>
+                          <tr className="bg-muted">
+                            <th className="px-2 py-1 border">Data</th>
+                            <th className="px-2 py-1 border">Valor Medido (R$)</th>
+                            <th className="px-2 py-1 border">Lote</th>
+                            <th className="px-2 py-1 border">Nota Fiscal</th>
+                            <th className="px-2 py-1 border">Observações</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {medicoesParciais[obraMedicaoSelecionada.obra].map((med, idx) => (
+                            <tr key={idx}>
+                              <td className="px-2 py-1 border text-center">{med.dataMedicao}</td>
+                              <td className="px-2 py-1 border text-center">R$ {med.valorMedido}</td>
+                              <td className="px-2 py-1 border text-center">{med.numeroLote}</td>
+                              <td className="px-2 py-1 border text-center">{med.numeroNotaFiscal}</td>
+                              <td className="px-2 py-1 border text-center">{med.observacoes}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    ) : (
+                      <div className="text-muted-foreground text-xs">Nenhuma medição parcial registrada.</div>
+                    )}
+                  </div>
+                </div>
+                {/* Novo bloco customizado */}
+                <div className="mt-8 p-4 border rounded-lg bg-muted">
+                  <h4 className="text-base font-bold mb-2">Mão de Obra Enviada</h4>
+                                  
+                                  <div className="mb-4 flex gap-2 items-end">
+                                    <select
+                                      value={tipoMO}
+                                      onChange={e => setTipoMO(e.target.value)}
+                                      className="px-2 py-1 border rounded w-40"
+                                    >
+                                      <option value="">Selecione o tipo</option>
+                                      <option value="LV">Linha Viva</option>
+                                      <option value="LM">Linha Morta</option>
+                                    </select>
+                                    <Input
+                                      placeholder="Código ou descrição"
+                                      value={novoMO.descricao}
+                                      onChange={e => setNovoMO({ ...novoMO, descricao: e.target.value })}
+                                      className="flex-1"
+                                      list="maoDeObraOptions"
+                                    />
+                                    <datalist id="maoDeObraOptions">
+                                      {opcoesMO.map(mo => (
+                                        <option key={mo.codigo_mao_de_obra + mo.descricao} value={`${mo.codigo_mao_de_obra} - ${mo.descricao}`} />
+                                      ))}
+                                    </datalist>
+                                    <Input
+                                      placeholder="Qtd"
+                                      type="number"
+                                      value={String(novoMO.quantidadeInstalada)}
+                                      onChange={e => setNovoMO({ ...novoMO, quantidadeInstalada: Number(e.target.value) })}
+                                      className="w-16"
+                                    />
+                                    <Button onClick={async () => {
+                                        if (!obraMedicaoSelecionada) return;
+                                        const textoDigitado = novoMO.descricao.trim();
+                                        let codigo = '';
+                                        let descricao = novoMO.descricao;
+                                        let unidade = novoMO.unidade || '';
+                                        let tipoSelecionado = tipoMO;
+                                        let upsFracao = parseDecimal(novoMO.ups);
+                                        let matchOption = null;
+
+                                        if (textoDigitado) {
+                                          const parts = textoDigitado.split("-");
+                                          const codigoLookup = parts[0]?.trim();
+                                          if (codigoLookup) {
+                                            matchOption = opcoesMO.find(mo => mo.codigo_mao_de_obra === codigoLookup);
+                                            if (!matchOption) {
+                                              const normalizado = textoDigitado.toLowerCase();
+                                              matchOption = opcoesMO.find((mo) => {
+                                                const pair = `${mo.codigo_mao_de_obra} - ${mo.descricao}`.toLowerCase();
+                                                return (
+                                                  pair === normalizado ||
+                                                  mo.codigo_mao_de_obra.toLowerCase() === normalizado ||
+                                                  mo.descricao?.toLowerCase() === normalizado
+                                                );
+                                              });
+                                            }
+                                          }
+                                          if (!matchOption && parts[0]) {
+                                            const { data: fetched } = await supabase
+                                              .from("codigos_mao_de_obra")
+                                              .select("codigo_mao_de_obra, descricao, unidade, tipo, ups")
+                                              .eq("codigo_mao_de_obra", parts[0].trim())
+                                              .maybeSingle();
+                                            matchOption = fetched || null;
+                                          }
+                                          if (matchOption) {
+                                            codigo = matchOption.codigo_mao_de_obra;
+                                            descricao = matchOption.descricao || descricao;
+                                            unidade = matchOption.unidade || unidade;
+                                            tipoSelecionado = matchOption.tipo || tipoSelecionado;
+                                            upsFracao = parseDecimal(matchOption.ups);
+                                          } else {
+                                            const fallbackMatch = /^([^\s-]+)\s*-\s*(.+)$/.exec(textoDigitado);
+                                            if (fallbackMatch) {
+                                              codigo = fallbackMatch[1];
+                                              descricao = fallbackMatch[2];
+                                              const fallback = opcoesMO.find((mo) => mo.codigo_mao_de_obra === codigo);
+                                              unidade = fallback?.unidade || unidade;
+                                              tipoSelecionado = fallback?.tipo || tipoSelecionado;
+                                              upsFracao = parseDecimal(fallback?.ups ?? upsFracao);
+                                            } else {
+                                              const fallback = opcoesMO.find((mo) => mo.codigo_mao_de_obra === textoDigitado);
+                                              codigo = fallback?.codigo_mao_de_obra || codigo;
+                                              descricao = fallback?.descricao || descricao;
+                                              unidade = fallback?.unidade || unidade;
+                                              tipoSelecionado = fallback?.tipo || tipoSelecionado;
+                                              upsFracao = parseDecimal(fallback?.ups ?? upsFracao);
+                                            }
+                                          }
+                                        }
+                                        const novaLista = [
+                                          ...(obraMedicaoSelecionada.maoDeObraUtilizada || []),
+                                          {
+                                            codigo,
+                                            descricao,
+                                            unidade,
+                                            tipo: tipoSelecionado,
+                                            ups: upsFracao,
+                                            quantidadeInstalada: novoMO.quantidadeInstalada,
+                                            quantidadeTotal: novoMO.quantidadeInstalada,
+                                          }
+                                        ];
+                                        setObraMedicaoSelecionada({
+                                          ...obraMedicaoSelecionada,
+                                          maoDeObraUtilizada: novaLista
+                                        });
+                                        setNovoMO({ codigo: '', descricao: '', unidade: '', ups: '', quantidadeInstalada: 1 });
+                                      }}>
+                                      Adicionar
+                                    </Button>
+                                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full border text-xs">
+                      <thead>
+                        <tr className="bg-muted">
+                          <th className="px-2 py-1 border">ITEM</th>
+                          <th className="px-2 py-1 border">Tipo</th>
+                          <th className="px-2 py-1 border">CÓD</th>
+                          <th className="px-2 py-1 border">MÃO DE OBRA</th>
+                          <th className="px-2 py-1 border">Un</th>
+                          <th className="px-2 py-1 border">R$</th>
+                          <th className="px-2 py-1 border">TOTAL</th>
+                          <th className="px-2 py-1 border">R$</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {maoDeObraUtilizada.map((mo, idx) => {
+                          const valores = calcularValoresMo(mo);
+                          return (
+                            <tr key={mo.codigo || `${idx}-${mo.descricao}`}>
+                              <td className="px-2 py-1 border text-center">{idx + 1}</td>
+                              <td className="px-2 py-1 border text-center">{valores.tipo}</td>
+                              <td className="px-2 py-1 border text-center">{mo.codigo}</td>
+                              <td className="px-2 py-1 border">{mo.descricao}</td>
+                              <td className="px-2 py-1 border text-center">{valores.unidade}</td>
+                              <td className="px-2 py-1 border text-center">
+                                {valores.valorUnitarioFracao.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                              </td>
+                              <td className="px-2 py-1 border text-center">
+                                {Number.isFinite(valores.quantidade) ? valores.quantidade.toFixed(2) : "-"}
+                              </td>
+                              <td className="px-2 py-1 border text-center">
+                                {valores.valorTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                        {/* Rodapé de total */}
+                        <tr>
+                          <td className="px-2 py-1 border text-center" colSpan={7} style={{ textAlign: 'right', fontWeight: 'bold' }}>R$</td>
+                          <td className="px-2 py-1 border text-center" style={{ fontWeight: 'bold' }}>{totalValorMaoDeObra.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                {/* Bloco duplicado */}
+                <div className="mt-8 p-4 border rounded-lg bg-muted">
+                  <h4 className="text-base font-bold mb-2">Mão de Obra Recebida</h4>
+                  <div className="mb-4 flex gap-2 items-end">
+                    <select
+                      value={tipoMO}
+                      onChange={e => setTipoMO(e.target.value)}
+                      className="px-2 py-1 border rounded w-40"
+                    >
+                      <option value="">Selecione o tipo</option>
+                      <option value="LV">Linha Viva</option>
+                      <option value="LM">Linha Morta</option>
+                    </select>
+                    <Input
+                      placeholder="Código ou descrição"
+                      value={novoMO.descricao}
+                      onChange={e => setNovoMO({ ...novoMO, descricao: e.target.value })}
+                      className="flex-1"
+                      list="maoDeObraOptions"
+                    />
+                    <datalist id="maoDeObraOptions">
+                      {opcoesMO.map(mo => (
+                        <option key={mo.codigo_mao_de_obra + mo.descricao} value={`${mo.codigo_mao_de_obra} - ${mo.descricao}`} />
+                      ))}
+                    </datalist>
+                    <Input
+                      placeholder="Qtd"
+                      type="number"
+                      value={String(novoMO.quantidadeInstalada)}
+                      onChange={e => setNovoMO({ ...novoMO, quantidadeInstalada: Number(e.target.value) })}
+                      className="w-16"
+                    />
+                    <Button onClick={async () => {
+                      if (!obraMedicaoSelecionada) return;
+                      const textoDigitado = novoMO.descricao.trim();
+                      let codigo = '';
+                      let descricao = novoMO.descricao;
+                      let unidade = novoMO.unidade || '';
+                      let tipoSelecionado = tipoMO;
+                      let upsFracao = parseDecimal(novoMO.ups);
+                      let matchOption = null;
+
+                      if (textoDigitado) {
+                        const parts = textoDigitado.split("-");
+                        const codigoLookup = parts[0]?.trim();
+                        if (codigoLookup) {
+                          matchOption = opcoesMO.find(mo => mo.codigo_mao_de_obra === codigoLookup);
+                          if (!matchOption) {
+                            const normalizado = textoDigitado.toLowerCase();
+                            matchOption = opcoesMO.find((mo) => {
+                              const pair = `${mo.codigo_mao_de_obra} - ${mo.descricao}`.toLowerCase();
+                              return (
+                                pair === normalizado ||
+                                mo.codigo_mao_de_obra.toLowerCase() === normalizado ||
+                                mo.descricao?.toLowerCase() === normalizado
+                              );
+                            });
+                          }
+                        }
+                        if (!matchOption && parts[0]) {
+                          const { data: fetched } = await supabase
+                            .from("codigos_mao_de_obra")
+                            .select("codigo_mao_de_obra, descricao, unidade, tipo, ups")
+                            .eq("codigo_mao_de_obra", parts[0].trim())
+                            .maybeSingle();
+                          matchOption = fetched || null;
+                        }
+                        if (matchOption) {
+                          codigo = matchOption.codigo_mao_de_obra;
+                          descricao = matchOption.descricao || descricao;
+                          unidade = matchOption.unidade || unidade;
+                          tipoSelecionado = matchOption.tipo || tipoSelecionado;
+                          upsFracao = parseDecimal(matchOption.ups);
+                        } else {
+                          const fallbackMatch = /^([^\s-]+)\s*-\s*(.+)$/.exec(textoDigitado);
+                          if (fallbackMatch) {
+                            codigo = fallbackMatch[1];
+                            descricao = fallbackMatch[2];
+                            const fallback = opcoesMO.find((mo) => mo.codigo_mao_de_obra === codigo);
+                            unidade = fallback?.unidade || unidade;
+                            tipoSelecionado = fallback?.tipo || tipoSelecionado;
+                            upsFracao = parseDecimal(fallback?.ups ?? upsFracao);
+                          } else {
+                            const fallback = opcoesMO.find((mo) => mo.codigo_mao_de_obra === textoDigitado);
+                            codigo = fallback?.codigo_mao_de_obra || codigo;
+                            descricao = fallback?.descricao || descricao;
+                            unidade = fallback?.unidade || unidade;
+                            tipoSelecionado = fallback?.tipo || tipoSelecionado;
+                            upsFracao = parseDecimal(fallback?.ups ?? upsFracao);
+                          }
+                        }
+                      }
+                      const novaLista = [
+                        ...(obraMedicaoSelecionada.maoDeObraUtilizada || []),
+                        {
+                          codigo,
+                          descricao,
+                          unidade,
+                          tipo: tipoSelecionado,
+                          ups: upsFracao,
+                          quantidadeInstalada: novoMO.quantidadeInstalada,
+                          quantidadeTotal: novoMO.quantidadeInstalada,
+                        }
+                      ];
+                      setObraMedicaoSelecionada({
+                        ...obraMedicaoSelecionada,
+                        maoDeObraUtilizada: novaLista
+                      });
+                      setNovoMO({ codigo: '', descricao: '', unidade: '', ups: '', quantidadeInstalada: 1 });
+                    }}>
+                      Adicionar
+                    </Button>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full border text-xs">
+                      <thead>
+                        <tr className="bg-muted">
+                          <th className="px-2 py-1 border">ITEM</th>
+                          <th className="px-2 py-1 border">Tipo</th>
+                          <th className="px-2 py-1 border">CÓD</th>
+                          <th className="px-2 py-1 border">MÃO DE OBRA</th>
+                          <th className="px-2 py-1 border">Un</th>
+                          <th className="px-2 py-1 border">R$</th>
+                          <th className="px-2 py-1 border">TOTAL</th>
+                          <th className="px-2 py-1 border">R$</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {maoDeObraUtilizada.map((mo, idx) => {
+                          const valores = calcularValoresMo(mo);
+                          return (
+                            <tr key={mo.codigo || `${idx}-${mo.descricao}`}>
+                              <td className="px-2 py-1 border text-center">{idx + 1}</td>
+                              <td className="px-2 py-1 border text-center">{valores.tipo}</td>
+                              <td className="px-2 py-1 border text-center">{mo.codigo}</td>
+                              <td className="px-2 py-1 border">{mo.descricao}</td>
+                              <td className="px-2 py-1 border text-center">{valores.unidade}</td>
+                              <td className="px-2 py-1 border text-center">
+                                {valores.valorUnitarioFracao.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                              </td>
+                              <td className="px-2 py-1 border text-center">
+                                {Number.isFinite(valores.quantidade) ? valores.quantidade.toFixed(2) : "-"}
+                              </td>
+                              <td className="px-2 py-1 border text-center">
+                                {valores.valorTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                        <tr>
+                          <td className="px-2 py-1 border text-center" colSpan={7} style={{ textAlign: 'right', fontWeight: 'bold' }}>R$</td>
+                          <td className="px-2 py-1 border text-center" style={{ fontWeight: 'bold' }}>{totalValorMaoDeObra.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+            <DialogFooter className="flex gap-2">
+              <Button variant="secondary">Salvar</Button>
+              <Button variant="outline" onClick={() => setModalObraMedicaoOpen(false)}>Fechar</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+        {/* Modal de obras em execução */}
         <Dialog open={execucaoModalOpen} onOpenChange={setExecucaoModalOpen}>
           <DialogContent className="max-w-2xl">
-                    {/* Modal exclusivo para Medições */}
-                    <Dialog open={modalMedicoesOpen} onOpenChange={setModalMedicoesOpen}>
-                      <DialogContent className="max-w-2xl">
-                        <DialogHeader>
-                          <DialogTitle>Medições - Consolidação MO/Material</DialogTitle>
-                          <p className="text-sm text-muted-foreground mt-1">Consolide as medições de mão de obra e materiais das obras em andamento.</p>
-                        </DialogHeader>
-                        <div className="grid gap-3">
-                          {obras.filter(o => o.status === "medicao").length === 0 ? (
-                            <div className="py-4 text-muted-foreground">Nenhuma obra disponível para medição.</div>
-                          ) : (
-                            obras.filter(o => o.status === "medicao").map((obra) => (
-                              <Card key={obra.obra} className="border shadow-sm">
-                                <CardHeader className="py-2">
-                                  <CardTitle className="text-base font-bold">{obra.obra}</CardTitle>
-                                  <CardDescription>OS: {obra.os} | Cidade: {obra.cidade}</CardDescription>
-                                </CardHeader>
-                                <CardContent>
-                                  <div>Status: <Badge variant="secondary">{obra.status}</Badge></div>
-                                  <div>Início: {obra.inicio || "-"}</div>
-                                  {/* Aqui pode adicionar botões para consolidar MO/material, visualizar detalhes, etc. */}
-                                </CardContent>
-                              </Card>
-                            ))
-                          )}
-                        </div>
-                        <DialogFooter>
-                          <Button variant="outline" onClick={() => setModalMedicoesOpen(false)}>Fechar</Button>
-                        </DialogFooter>
-                      </DialogContent>
-                    </Dialog>
             <DialogHeader>
               <DialogTitle>Obras em Execução</DialogTitle>
               <p className="text-sm text-muted-foreground mt-1">Obras com status "execução" e sem data de término.</p>
@@ -592,9 +1111,12 @@ const Obras = () => {
                   </Button>
                   <Button
                     onClick={() => {
-                      // Campos obrigatórios
+                      // Campos obrigatórios para migrar para medições
                       const obrigatorios = [
                         'dataTerminoObra',
+                        'qtdePostes',
+                        'qtdeTrafoEquipamento',
+                        'patrimonioInstalado',
                         'patrimonioRetirado',
                         'placaPtEqCadastro',
                         'kmInicial',
@@ -604,7 +1126,7 @@ const Obras = () => {
                         (campo) => !obraExecucaoSelecionada[campo] || obraExecucaoSelecionada[campo].toString().trim() === ''
                       );
                       if (faltando.length > 0) {
-                        alert('Preencha todos os campos obrigatórios para encerrar a execução: Data Término da Obra, Patrimônio Retirado, Placa PT/Eq. Cadastro, KM Inicial e KM Final.');
+                        alert('Preencha todos os campos obrigatórios para encerrar a execução:\n- Data Término da Obra\n- Qtde. Postes\n- Qtde. Trafo/Equipamento\n- Patrimônio Instalado\n- Patrimônio Retirado\n- Placa PT/Eq. Cadastro\n- KM Inicial\n- KM Final');
                         return;
                       }
                       setObras(prevObras => prevObras.map(o =>
