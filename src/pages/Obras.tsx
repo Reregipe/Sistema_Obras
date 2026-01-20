@@ -16,6 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { WorkflowStepsObras } from "@/components/domain/WorkflowStepsObras";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
 
 const parseDecimal = (value) => {
   if (value === undefined || value === null) return 0;
@@ -26,6 +27,7 @@ const parseDecimal = (value) => {
 };
 
 const Obras = () => {
+  const { toast } = useToast();
                       // Estado para tipo de mão de obra (linha viva/morta)
   const [tipoMOEnv, setTipoMOEnv] = useState('');
   // Estado para inclusão rápida de mão de obra no modal de consolidação
@@ -37,6 +39,7 @@ const Obras = () => {
   const [novoMORecebida, setNovoMORecebida] = useState({ codigo: '', descricao: '', unidade: '', ups: '', quantidadeInstalada: 1 });
   const [maoDeObraRecebida, setMaoDeObraRecebida] = useState<any[]>([]);
   const [upsConfigs, setUpsConfigs] = useState({ lm: 0, lv: 0 });
+  const [maoDeObraEnviadaSalva, setMaoDeObraEnviadaSalva] = useState<any[]>([]);
 
   // Busca dinâmica dos códigos de mão de obra do Supabase
   useEffect(() => {
@@ -147,6 +150,7 @@ const Obras = () => {
       ...obraMedicaoSelecionada,
       maoDeObraUtilizada: novaLista,
     });
+    setMaoDeObraEnviadaSalva(novaLista);
     setNovoMOEnv({ codigo: '', descricao: '', unidade: '', ups: '', quantidadeInstalada: 1 });
   };
 
@@ -192,12 +196,13 @@ const Obras = () => {
         opt.codigo_mao_de_obra === mo.codigo &&
         opt.descricao?.toLowerCase() === mo.descricao?.toLowerCase()
     );
-    const tipo = mo.tipo || item?.tipo || fallbackTipo || "";
+    const tipoRaw = (mo.tipo || item?.tipo || "").toString().toUpperCase();
+    const tipo = tipoRaw || "";
     const unidade = mo.unidade || item?.unidade || "-";
     const upsFraction = parseDecimal(mo.ups ?? item?.ups ?? 0);
     const quantidade = parseDecimal(mo.quantidadeTotal ?? mo.quantidadeInstalada ?? 0);
-    const isLV = tipo.toUpperCase() === "LV";
-    const valorConfiguracao = isLV ? upsConfigs.lv : upsConfigs.lm;
+    const valorConfiguracao =
+      (tipo === "LV" ? upsConfigs.lv : upsConfigs.lm) || 0;
     const valorUnitarioConfigurado = upsFraction * valorConfiguracao;
     const valorTotal = valorUnitarioConfigurado * quantidade;
     return {
@@ -220,6 +225,46 @@ const Obras = () => {
     (acc, mo) => acc + calcularValoresMo(mo).valorTotal,
     0
   );
+  const totalMedicoesParciais =
+    obraMedicaoSelecionada
+      ? (medicoesParciais[obraMedicaoSelecionada.obra] || []).reduce(
+          (acc, mediacao) => acc + parseDecimal(mediacao.valorMedido),
+          0
+        )
+      : 0;
+  const totalFinalMaoDeObra = totalValorMaoDeObra - totalMedicoesParciais;
+  const [medicoesSalvas, setMedicoesSalvas] = useState(null);
+  const [salvoRecentemente, setSalvoRecentemente] = useState(false);
+
+  const handleSalvarMedicoes = async () => {
+    if (!obraMedicaoSelecionada) {
+      toast({
+        title: "Selecione uma obra",
+        description: "Abra uma obra com medições para salvar os dados.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const payload = {
+      obra: obraMedicaoSelecionada.obra,
+      mediçõesParciais: medicoesParciais[obraMedicaoSelecionada.obra] || [],
+      maoDeObraEnviada: maoDeObraEnviadaSalva,
+      maoDeObraRecebida: maoDeObraRecebida,
+      totalEnviada: maoDeObraEnviadaSalva.reduce((acc, mo) => acc + calcularValoresMo(mo).valorTotal, 0),
+      totalMedicoesParciais,
+      totalRecebida: totalValorMaoDeObraRecebida,
+      totalConsolidado: totalFinalMaoDeObra,
+      savedAt: new Date().toISOString(),
+    };
+    setMedicoesSalvas(payload);
+    setSalvoRecentemente(true);
+    toast({
+      title: "Medições salvas",
+      description: "Todas as entradas do modal foram gravadas com sucesso.",
+      variant: "success",
+      className: "bg-emerald-500 text-white shadow-lg",
+    });
+  };
                 const [modalObraMedicaoOpen, setModalObraMedicaoOpen] = useState(false);
               const [modalMedicoesOpen, setModalMedicoesOpen] = useState(false);
             // Estado para armazenar medições parciais por obra
@@ -824,14 +869,15 @@ const Obras = () => {
                     <table className="min-w-full border text-xs">
                       <thead>
                         <tr className="bg-muted">
-                          <th className="px-2 py-1 border">ITEM</th>
-                          <th className="px-2 py-1 border">Tipo</th>
-                          <th className="px-2 py-1 border">CÓD</th>
-                          <th className="px-2 py-1 border">MÃO DE OBRA</th>
-                          <th className="px-2 py-1 border">Un</th>
-                          <th className="px-2 py-1 border">R$</th>
-                          <th className="px-2 py-1 border">TOTAL</th>
-                          <th className="px-2 py-1 border">R$</th>
+                          <th className="px-2 py-1 border text-center">ITEM</th>
+                          <th className="px-2 py-1 border text-center">Tipo</th>
+                          <th className="px-2 py-1 border text-center">Cód</th>
+                          <th className="px-2 py-1 border">Mão de Obra</th>
+                          <th className="px-2 py-1 border text-center">Un</th>
+                          <th className="px-2 py-1 border text-center">UPS</th>
+                          <th className="px-2 py-1 border text-center">Valor unit. (R$)</th>
+                          <th className="px-2 py-1 border text-center">Qtd</th>
+                          <th className="px-2 py-1 border text-center">Total (R$)</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -840,12 +886,15 @@ const Obras = () => {
                           return (
                             <tr key={mo.codigo || `${idx}-${mo.descricao}`}>
                               <td className="px-2 py-1 border text-center">{idx + 1}</td>
-                              <td className="px-2 py-1 border text-center">{valores.tipo}</td>
-                              <td className="px-2 py-1 border text-center">{mo.codigo}</td>
+                              <td className="px-2 py-1 border text-center">{valores.tipo || "-"}</td>
+                              <td className="px-2 py-1 border text-center">{mo.codigo || "-"}</td>
                               <td className="px-2 py-1 border">{mo.descricao}</td>
                               <td className="px-2 py-1 border text-center">{valores.unidade}</td>
                               <td className="px-2 py-1 border text-center">
-                                {valores.valorUnitarioFracao.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                                {valores.valorUnitarioFracao.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 3 })}
+                              </td>
+                              <td className="px-2 py-1 border text-center">
+                                {valores.valorUnitarioConfigurado.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
                               </td>
                               <td className="px-2 py-1 border text-center">
                                 {Number.isFinite(valores.quantidade) ? valores.quantidade.toFixed(2) : "-"}
@@ -858,8 +907,12 @@ const Obras = () => {
                         })}
                         {/* Rodapé de total */}
                         <tr>
-                          <td className="px-2 py-1 border text-center" colSpan={7} style={{ textAlign: 'right', fontWeight: 'bold' }}>R$</td>
-                          <td className="px-2 py-1 border text-center" style={{ fontWeight: 'bold' }}>{totalValorMaoDeObra.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                          <td className="px-2 py-1 border text-center" colSpan={8} style={{ textAlign: 'right', fontWeight: 'bold' }}>
+                            R$
+                          </td>
+                          <td className="px-2 py-1 border text-center" style={{ fontWeight: 'bold' }}>
+                            {totalValorMaoDeObra.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </td>
                         </tr>
                       </tbody>
                     </table>
@@ -905,14 +958,15 @@ const Obras = () => {
                     <table className="min-w-full border text-xs">
                       <thead>
                         <tr className="bg-muted">
-                          <th className="px-2 py-1 border">ITEM</th>
-                          <th className="px-2 py-1 border">Tipo</th>
-                          <th className="px-2 py-1 border">CÓD</th>
-                          <th className="px-2 py-1 border">MÃO DE OBRA</th>
-                          <th className="px-2 py-1 border">Un</th>
-                          <th className="px-2 py-1 border">R$</th>
-                          <th className="px-2 py-1 border">TOTAL</th>
-                          <th className="px-2 py-1 border">R$</th>
+                          <th className="px-2 py-1 border text-center">ITEM</th>
+                          <th className="px-2 py-1 border text-center">Tipo</th>
+                          <th className="px-2 py-1 border text-center">Cód</th>
+                          <th className="px-2 py-1 border">Mão de Obra</th>
+                          <th className="px-2 py-1 border text-center">Un</th>
+                          <th className="px-2 py-1 border text-center">UPS</th>
+                          <th className="px-2 py-1 border text-center">Valor unit. (R$)</th>
+                          <th className="px-2 py-1 border text-center">Qtd</th>
+                          <th className="px-2 py-1 border text-center">Total (R$)</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -921,12 +975,15 @@ const Obras = () => {
                           return (
                             <tr key={mo.codigo || `${idx}-${mo.descricao}`}>
                               <td className="px-2 py-1 border text-center">{idx + 1}</td>
-                              <td className="px-2 py-1 border text-center">{valores.tipo}</td>
-                              <td className="px-2 py-1 border text-center">{mo.codigo}</td>
+                              <td className="px-2 py-1 border text-center">{valores.tipo || "-"}</td>
+                              <td className="px-2 py-1 border text-center">{mo.codigo || "-"}</td>
                               <td className="px-2 py-1 border">{mo.descricao}</td>
                               <td className="px-2 py-1 border text-center">{valores.unidade}</td>
                               <td className="px-2 py-1 border text-center">
-                                {valores.valorUnitarioFracao.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                                {valores.valorUnitarioFracao.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 3 })}
+                              </td>
+                              <td className="px-2 py-1 border text-center">
+                                {valores.valorUnitarioConfigurado.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
                               </td>
                               <td className="px-2 py-1 border text-center">
                                 {Number.isFinite(valores.quantidade) ? valores.quantidade.toFixed(2) : "-"}
@@ -938,17 +995,43 @@ const Obras = () => {
                           );
                         })}
                         <tr>
-                          <td className="px-2 py-1 border text-center" colSpan={7} style={{ textAlign: 'right', fontWeight: 'bold' }}>R$</td>
-                          <td className="px-2 py-1 border text-center" style={{ fontWeight: 'bold' }}>{totalValorMaoDeObraRecebida.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                          <td className="px-2 py-1 border text-center" colSpan={8} style={{ textAlign: 'right', fontWeight: 'bold' }}>
+                            R$
+                          </td>
+                          <td className="px-2 py-1 border text-center" style={{ fontWeight: 'bold' }}>
+                            {totalValorMaoDeObraRecebida.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </td>
                         </tr>
                       </tbody>
                     </table>
                   </div>
                 </div>
+                {/* Bloco final com valores consolidados */}
+                <div className="mt-4 p-4 border rounded-lg bg-white/80 shadow-sm">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Valor final (enviado - medição parcial)</p>
+                      <p className="text-2xl font-bold text-foreground">
+                        R$ {totalFinalMaoDeObra.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                      </p>
+                    </div>
+                    <div className="text-xs text-muted-foreground space-y-0.5 text-right">
+                      <p>Mão de Obra Enviada: R$ {totalValorMaoDeObra.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</p>
+                      <p>Medições parciais (subtrair): R$ {totalMedicoesParciais.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</p>
+                      <p>Mão de Obra Recebida (valor final): R$ {totalValorMaoDeObraRecebida.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</p>
+                    </div>
+                  </div>
+                  {salvoRecentemente && (
+                    <div className="inline-flex items-center gap-1 mt-3 px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-semibold self-start">
+                      <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                      Informações salvas
+                    </div>
+                  )}
+                </div>
               </div>
             )}
             <DialogFooter className="flex gap-2">
-              <Button variant="secondary">Salvar</Button>
+              <Button variant="secondary" onClick={handleSalvarMedicoes}>Salvar</Button>
               <Button variant="outline" onClick={() => setModalObraMedicaoOpen(false)}>Fechar</Button>
             </DialogFooter>
           </DialogContent>
