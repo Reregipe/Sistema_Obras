@@ -39,6 +39,31 @@ const Obras = () => {
   const [novoMORecebida, setNovoMORecebida] = useState({ codigo: '', descricao: '', unidade: '', ups: '', quantidadeInstalada: 1 });
   const [maoDeObraRecebida, setMaoDeObraRecebida] = useState<any[]>([]);
   const [upsConfigs, setUpsConfigs] = useState({ lm: 0, lv: 0 });
+  const [medicoesParciais, setMedicoesParciais] = useState({
+    "OBRA-MEDICAO": [
+      {
+        dataMedicao: "14/01/2026",
+        valorMedido: "12345.67",
+        numeroLote: "L-001",
+        dataLote: "14/01/2026",
+        numeroNotaFiscal: "NF-9876",
+        dataNotaFiscal: "14/01/2026",
+        observacoes: "Medição parcial",
+      },
+    ],
+  });
+  const [novaMedicaoParcial, setNovaMedicaoParcial] = useState({
+    dataMedicao: "",
+    valorMedido: "",
+    numeroLote: "",
+    dataLote: "",
+    numeroNotaFiscal: "",
+    dataNotaFiscal: "",
+    observacoes: "",
+  });
+  const [modalObraMedicaoOpen, setModalObraMedicaoOpen] = useState(false);
+  const [modalMedicoesOpen, setModalMedicoesOpen] = useState(false);
+  const [modalMedicaoParcialOpen, setModalMedicaoParcialOpen] = useState(false);
   const [maoDeObraEnviadaSalva, setMaoDeObraEnviadaSalva] = useState<any[]>([]);
 
   // Busca dinâmica dos códigos de mão de obra do Supabase
@@ -265,33 +290,6 @@ const Obras = () => {
       className: "bg-emerald-500 text-white shadow-lg",
     });
   };
-                const [modalObraMedicaoOpen, setModalObraMedicaoOpen] = useState(false);
-              const [modalMedicoesOpen, setModalMedicoesOpen] = useState(false);
-            // Estado para armazenar medições parciais por obra
-            const [medicoesParciais, setMedicoesParciais] = useState({
-              'OBRA-MEDICAO': [
-                {
-                  dataMedicao: '14/01/2026',
-                  valorMedido: '12345.67',
-                  numeroLote: 'L-001',
-                  dataLote: '14/01/2026',
-                  numeroNotaFiscal: 'NF-9876',
-                  dataNotaFiscal: '14/01/2026',
-                  observacoes: 'Medição parcial'
-                }
-              ]
-            });
-            const [novaMedicaoParcial, setNovaMedicaoParcial] = useState({
-              dataMedicao: '',
-              valorMedido: '',
-              numeroLote: '',
-              dataLote: '',
-              numeroNotaFiscal: '',
-              dataNotaFiscal: '',
-              observacoes: '',
-            });
-          // Removido: duplicidade de declaração de modalMedicoesOpen
-        const [modalMedicaoParcialOpen, setModalMedicaoParcialOpen] = useState(false);
       const [obraExecucaoSelecionada, setObraExecucaoSelecionada] = useState(null);
       const [modalExecucaoDetalheOpen, setModalExecucaoDetalheOpen] = useState(false);
     const [execucaoModalOpen, setExecucaoModalOpen] = useState(false);
