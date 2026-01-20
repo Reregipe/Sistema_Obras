@@ -31,8 +31,9 @@ const schema = z.object({
   endereco: z.string().optional(),
   status: z.enum(["aberto", "despachado", "em_execucao", "concluido"]),
   data_abertura: z.string().min(1, "Data de abertura é obrigatória"),
-  observacao: z.string().optional(),
-  origem: z.string().optional(),
+  observacao: z.string().optional(),
+  origem: z.string().optional(),
+  email_msg: z.string().optional(),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -62,8 +63,9 @@ export const AcionamentoForm = ({ onSuccess, onCancel }: Props) => {
       endereco: "",
       status: "aberto",
       data_abertura: "",
-      observacao: "",
-      origem: "web",
+      observacao: "",
+      origem: "web",
+      email_msg: "",
     },
   });
 
@@ -117,8 +119,9 @@ export const AcionamentoForm = ({ onSuccess, onCancel }: Props) => {
           endereco: data.endereco || null,
           status: data.status,
           data_abertura: data.data_abertura,
-          observacao: data.observacao || null,
-          origem: data.origem || "web",
+          observacao: data.observacao || null,
+          origem: data.origem || "web",
+          email_msg: data.email_msg || null,
           etapa_atual: 1, // novos acionamentos comeam na etapa 1
         },
       ]);
@@ -315,19 +318,33 @@ export const AcionamentoForm = ({ onSuccess, onCancel }: Props) => {
           />
         </div>
 
-        <FormField
-          control={form.control}
-          name="observacao"
-          render={({ field }) => (
-            <FormItem>
+        <FormField
+          control={form.control}
+          name="observacao"
+          render={({ field }) => (
+            <FormItem>
                 <FormLabel>Observação</FormLabel>
-              <FormControl>
-                <Textarea {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+              <FormControl>
+                <Textarea {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="email_msg"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>E-mail original</FormLabel>
+              <FormControl>
+                <Textarea {...field} placeholder="Cole o conteúdo ou o cabeçalho do e-mail que originou o acionamento" />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
 
         <div className="flex gap-2 justify-end">
           {onCancel && (
