@@ -257,7 +257,8 @@ const Obras = () => {
           0
         )
       : 0;
-  const totalFinalMaoDeObra = totalValorMaoDeObra - totalMedicoesParciais;
+  const valorFinalRecebido = totalValorMaoDeObraRecebida;
+  const valorFaltante = totalValorMaoDeObraRecebida - totalMedicoesParciais;
   const [medicoesSalvas, setMedicoesSalvas] = useState(null);
   const [salvoRecentemente, setSalvoRecentemente] = useState(false);
 
@@ -278,7 +279,8 @@ const Obras = () => {
       totalEnviada: maoDeObraEnviadaSalva.reduce((acc, mo) => acc + calcularValoresMo(mo).valorTotal, 0),
       totalMedicoesParciais,
       totalRecebida: totalValorMaoDeObraRecebida,
-      totalConsolidado: totalFinalMaoDeObra,
+      totalConsolidado: valorFinalRecebido,
+      valorFaltante,
       savedAt: new Date().toISOString(),
     };
     setMedicoesSalvas(payload);
@@ -795,6 +797,22 @@ const Obras = () => {
             </DialogHeader>
             {obraMedicaoSelecionada && (
               <div className="space-y-2">
+                <div className="p-4 border rounded-lg bg-white shadow-sm">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Resumo negociado</p>
+                  <p className="text-2xl font-bold text-foreground">R$ {valorFinalRecebido.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</p>
+                  <div className="text-sm text-muted-foreground space-y-0.5 mt-2">
+                    <p>Valor recebido (negociado): R$ {totalValorMaoDeObraRecebida.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</p>
+                    <p>Medições parciais lançadas: R$ {totalMedicoesParciais.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</p>
+                    <p>Valor faltante: R$ {valorFaltante.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</p>
+                    <p>Mão de obra enviada: R$ {totalValorMaoDeObra.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</p>
+                  </div>
+                  {salvoRecentemente && (
+                    <div className="inline-flex items-center gap-1 mt-3 px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-semibold self-start">
+                      <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                      Informações salvas
+                    </div>
+                  )}
+                </div>
                   <div className="mt-8 p-2 border rounded-lg bg-muted">
                   <h4 className="text-base font-bold mb-2">Medições Parciais</h4>
                   <div className="overflow-x-auto">
@@ -1003,28 +1021,6 @@ const Obras = () => {
                       </tbody>
                     </table>
                   </div>
-                </div>
-                {/* Bloco final com valores consolidados */}
-                <div className="mt-4 p-4 border rounded-lg bg-white/80 shadow-sm">
-                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Valor final (enviado - medição parcial)</p>
-                      <p className="text-2xl font-bold text-foreground">
-                        R$ {totalFinalMaoDeObra.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                      </p>
-                    </div>
-                    <div className="text-xs text-muted-foreground space-y-0.5 text-right">
-                      <p>Mão de Obra Enviada: R$ {totalValorMaoDeObra.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</p>
-                      <p>Medições parciais (subtrair): R$ {totalMedicoesParciais.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</p>
-                      <p>Mão de Obra Recebida (valor final): R$ {totalValorMaoDeObraRecebida.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</p>
-                    </div>
-                  </div>
-                  {salvoRecentemente && (
-                    <div className="inline-flex items-center gap-1 mt-3 px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-semibold self-start">
-                      <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                      Informações salvas
-                    </div>
-                  )}
                 </div>
               </div>
             )}
