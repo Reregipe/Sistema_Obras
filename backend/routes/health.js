@@ -1,17 +1,11 @@
+import { success, fail } from '../utils/response.js';
+
 export default async function (fastify, opts) {
   fastify.get('/health', async (request, reply) => {
     try {
-      return {
-        success: true,
-        data: { status: 'ok' },
-        error: null
-      };
+      return success({ status: 'ok' });
     } catch (err) {
-      return {
-        success: false,
-        data: null,
-        error: 'Erro ao verificar saúde do serviço.'
-      };
+      return fail('Erro ao verificar saúde do serviço.');
     }
   });
 }
