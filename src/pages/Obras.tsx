@@ -1,9 +1,6 @@
 // import { maoDeObraCatalog } from "@/data/maoDeObraCatalog";
 import { useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
-import { useMemo, useState, useRef } from "react";
-import { useNavigate } from "react-router-dom";
-import { equipesCatalog } from "@/data/equipesCatalog";
+import { getCodigosMO, getSystemSettings } from "@/services/api";
 // Adicione a dependência xlsx no seu projeto: npm install xlsx
 import * as XLSX from "xlsx";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -66,7 +63,7 @@ const Obras = () => {
   const [modalMedicaoParcialOpen, setModalMedicaoParcialOpen] = useState(false);
   const [maoDeObraEnviadaSalva, setMaoDeObraEnviadaSalva] = useState<any[]>([]);
 
-  // Busca dinâmica dos códigos de mão de obra do Supabase
+  // Busca dinâmica dos códigos de mão de obra do banco local
   useEffect(() => {
     if (!tipoMOEnv && !novoMOEnv.descricao.trim()) {
       setOpcoesMO([]);
@@ -74,21 +71,8 @@ const Obras = () => {
     }
     const handler = setTimeout(async () => {
       setLoadingMO(true);
-      let query = supabase
-        .from('codigos_mao_de_obra')
-        .select('codigo_mao_de_obra, descricao, tipo, unidade, ups')
-        .eq('ativo', true)
-        .order('codigo_mao_de_obra', { ascending: true });
-      if (tipoMOEnv) {
-        query = query.eq('tipo', tipoMOEnv);
-      }
-      if (novoMOEnv.descricao.trim()) {
-        query = query.or(
-          `codigo_mao_de_obra.ilike.%${novoMOEnv.descricao.trim()}%,descricao.ilike.%${novoMOEnv.descricao.trim()}%`
-        );
-      }
-      const { data, error } = await query.limit(20);
-      if (!error && data) setOpcoesMO(data);
+      let codigos = await getCodigosMO({ ativo: true, tipo: tipoMOEnv, descricao: novoMOEnv.descricao.trim() });
+      setOpcoesMO(codigos);
       setLoadingMO(false);
     }, 350);
     return () => clearTimeout(handler);
@@ -122,12 +106,8 @@ const Obras = () => {
       });
     }
     if (!matchOption && codigoLookup) {
-      const { data: fetched } = await supabase
-        .from("codigos_mao_de_obra")
-        .select("codigo_mao_de_obra, descricao, unidade, tipo, ups")
-        .eq("codigo_mao_de_obra", codigoLookup)
-        .maybeSingle();
-      matchOption = fetched || null;
+      const fetched = await getCodigosMO({ codigo_mao_de_obra: codigoLookup });
+      matchOption = fetched?.[0] || null;
     }
     if (matchOption) {
       return {
@@ -192,11 +172,7 @@ const Obras = () => {
 
   useEffect(() => {
     const loadUpsConfigs = async () => {
-      const { data, error } = await supabase
-        .from("system_settings")
-        .select("chave, valor")
-        .in("chave", ["ups_valor_lm", "ups_valor_lv"]);
-      if (error || !data) return;
+      const data = await getSystemSettings(["ups_valor_lm", "ups_valor_lv"]);
       const next = { lm: 0, lv: 0 };
       data.forEach((entry) => {
         if (entry.chave === "ups_valor_lm") next.lm = parseDecimal(entry.valor);

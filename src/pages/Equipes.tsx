@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { TeamCard, equipesCatalog } from "@/data/equipesCatalog";
+import { useEquipes } from '../hooks/useEquipes';
 
 const STORAGE_KEY = "equipes-cards";
 

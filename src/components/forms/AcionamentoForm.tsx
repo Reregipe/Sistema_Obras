@@ -1,323 +1,612 @@
-import { useEffect, useMemo, useState } from "react";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/useAuth";
-import { Button } from "@/components/ui/button";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
-import { useToast } from "@/hooks/use-toast";
-import { Loader2 } from "lucide-react";
-
-type EquipeOption = {
-  id_equipe: string;
-  nome_equipe: string;
-  encarregado_nome?: string | null;
-  linha?: string | null;
-  ativo?: string | null;
-};
-
-const schema = z.object({
-  codigo_acionamento: z.string().min(1, "Código é obrigatório"),
-  prioridade: z.enum(["emergencia", "programado"]),
-  prioridade_nivel: z.enum(["normal", "media", "alta"]).optional(),
-  modalidade: z.enum(["LM", "LV", "LM+LV"]),
-  id_equipe: z.string().min(1, "Equipe é obrigatória"),
-  encarregado: z.string().min(1, "Encarregado é obrigatório"),
-  municipio: z.string().optional(),
-  endereco: z.string().optional(),
-  status: z.enum(["aberto", "despachado", "em_execucao", "concluido"]),
-  data_abertura: z.string().min(1, "Data de abertura é obrigatória"),
+import { useEffect, useMemo, useState } from "react";
+
+import { useForm } from "react-hook-form";
+
+import { zodResolver } from "@hookform/resolvers/zod";
+
+import * as z from "zod";
+
+import { getEquipes } from "@/services/api";
+import { useEquipes } from "@/hooks/useEquipes";
+import { createAcionamento, vincularEquipesAcionamento } from "@/services/api";
+
+import { useAuth } from "@/hooks/useAuth";
+
+import { Button } from "@/components/ui/button";
+
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+
+import { Input } from "@/components/ui/input";
+
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
+import { Textarea } from "@/components/ui/textarea";
+
+import { useToast } from "@/hooks/use-toast";
+
+import { Loader2 } from "lucide-react";
+
+
+
+type EquipeOption = {
+
+  id_equipe: string;
+
+  nome_equipe: string;
+
+  encarregado_nome?: string | null;
+
+  linha?: string | null;
+
+  ativo?: string | null;
+
+};
+
+
+
+const schema = z.object({
+
+  codigo_acionamento: z.string().min(1, "Código é obrigatório"),
+
+  prioridade: z.enum(["emergencia", "programado"]),
+
+  prioridade_nivel: z.enum(["normal", "media", "alta"]).optional(),
+
+  modalidade: z.enum(["LM", "LV", "LM+LV"]),
+
+  id_equipe: z.union([
+    z.string().min(1, "Equipe é obrigatória"),
+    z.array(z.string().min(1)).min(1, "Selecione ao menos uma equipe")
+  ]),
+
+  encarregado: z.string().min(1, "Encarregado é obrigatório"),
+
+  municipio: z.string().optional(),
+
+  endereco: z.string().optional(),
+
+  status: z.enum(["aberto", "despachado", "em_execucao", "concluido"]),
+
+  data_abertura: z.string().min(1, "Data de abertura é obrigatória"),
+
   observacao: z.string().optional(),
   origem: z.string().optional(),
   email_msg: z.string().optional(),
-});
-
-type FormData = z.infer<typeof schema>;
-
-interface Props {
-  onSuccess?: () => void;
-  onCancel?: () => void;
-}
-
-export const AcionamentoForm = ({ onSuccess, onCancel }: Props) => {
-  const { user } = useAuth();
-  const { toast } = useToast();
-  const [equipes, setEquipes] = useState<EquipeOption[]>([]);
-  const [loadingEq, setLoadingEq] = useState(false);
-  const [encarregadoAuto, setEncarregadoAuto] = useState("");
-
-  const form = useForm<FormData>({
-    resolver: zodResolver(schema),
-    defaultValues: {
-      codigo_acionamento: "",
-      prioridade: "emergencia",
-      prioridade_nivel: "normal",
-      modalidade: "LM",
-      id_equipe: "",
-      encarregado: "",
-      municipio: "",
-      endereco: "",
-      status: "aberto",
-      data_abertura: "",
+});
+
+
+
+type FormData = z.infer<typeof schema>;
+
+
+
+interface Props {
+
+  onSuccess?: () => void;
+
+  onCancel?: () => void;
+
+}
+
+
+
+export const AcionamentoForm = ({ onSuccess, onCancel }: Props) => {
+
+  const { user } = useAuth();
+
+  const { toast } = useToast();
+
+  const [equipes, setEquipes] = useState<EquipeOption[]>([]);
+  const [loadingEq, setLoadingEq] = useState(false);
+  const [encarregadoAuto, setEncarregadoAuto] = useState("");
+  const [attachedFileName, setAttachedFileName] = useState<string | null>(null);
+  const [emailAttachmentError, setEmailAttachmentError] = useState<string | null>(null);
+
+
+  const form = useForm<FormData>({
+    resolver: zodResolver(schema),
+
+    defaultValues: {
+
+      codigo_acionamento: "",
+
+      prioridade: "emergencia",
+
+      prioridade_nivel: "normal",
+
+      modalidade: "LM",
+
+      id_equipe: "",
+
+      encarregado: "",
+
+      municipio: "",
+
+      endereco: "",
+
+      status: "aberto",
+
+      data_abertura: "",
+
       observacao: "",
       origem: "web",
       email_msg: "",
-    },
-  });
-
-  const modalidade = form.watch("modalidade");
-
-  const filteredEquipes = useMemo(() => {
-    if (!modalidade || modalidade === "LM+LV") return equipes;
-    return equipes.filter((e) => !e.linha || e.linha === modalidade);
-  }, [equipes, modalidade]);
-
-  useEffect(() => {
+    },
+
+  });
+
+  const handleEmailAttachment = (file: File | null, onChange: (value: string) => void) => {
+    if (!file) {
+      setAttachedFileName(null);
+      setEmailAttachmentError(null);
+      onChange("");
+      return;
+    }
+    if (!file.name.toLowerCase().endsWith(".msg")) {
+      setEmailAttachmentError("Selecione um arquivo .msg");
+      return;
+    }
+    setEmailAttachmentError(null);
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      const base64 = result.includes("base64,") ? result.split("base64,")[1] : result;
+      onChange(base64);
+      setAttachedFileName(file.name);
+    };
+    reader.readAsDataURL(file);
+  };
+
+
+  const modalidade = form.watch("modalidade");
+
+
+
+  const filteredEquipes = useMemo(() => {
+
+    if (!modalidade || modalidade === "LM+LV") return equipes;
+
+    return equipes.filter((e) => !e.linha || e.linha === modalidade);
+
+  }, [equipes, modalidade]);
+
+
+
+  useEffect(() => {
+
     const load = async () => {
       setLoadingEq(true);
       try {
-        const { data, error } = await supabase
-          .from("equipes")
-          .select("id_equipe,nome_equipe,encarregado_nome,linha,ativo");
-        if (error) throw error;
-        const ativos = (data || []).filter((e) => e.ativo !== "N");
-        setEquipes(ativos as EquipeOption[]);
+        const eqs = await getEquipes();
+        setEquipes(eqs);
       } catch (err) {
         toast({ description: "Não foi possível carregar as equipes.", variant: "destructive" });
       } finally {
         setLoadingEq(false);
       }
     };
-    load();
-  }, [toast]);
-
-  const handleEquipe = (id: string) => {
-    form.setValue("id_equipe", id);
-    const eq = equipes.find((e) => e.id_equipe === id);
-    if (eq?.encarregado_nome) {
-      form.setValue("encarregado", eq.encarregado_nome);
-      setEncarregadoAuto(eq.encarregado_nome);
-    }
-  };
-
-  const onSubmit = async (data: FormData) => {
-    if (!user) return;
-    try {
-      const { error } = await supabase.from("acionamentos").insert([
-        {
-          codigo_acionamento: data.codigo_acionamento,
-          prioridade: data.prioridade,
-          prioridade_nivel: data.prioridade_nivel,
-          modalidade: data.modalidade,
-          id_equipe: data.id_equipe,
-          encarregado: data.encarregado,
-          municipio: data.municipio || null,
-          endereco: data.endereco || null,
-          status: data.status,
-          data_abertura: data.data_abertura,
-          observacao: data.observacao || null,
-          origem: data.origem || "web",
-          email_msg: data.email_msg || null,
-          etapa_atual: 1, // novos acionamentos comeam na etapa 1
-        },
-      ]);
-      if (error) throw error;
-      toast({ description: "Acionamento criado com sucesso." });
-      onSuccess?.();
-      form.reset();
-    } catch (err: any) {
-      toast({ description: err.message || "Erro ao criar acionamento.", variant: "destructive" });
-    }
-  };
-
-  return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <FormField
-            control={form.control}
-            name="codigo_acionamento"
-            render={({ field }) => (
-              <FormItem>
+    load();
+
+  }, [toast]);
+
+
+
+  const handleEquipe = (id: string) => {
+
+    form.setValue("id_equipe", id);
+
+    const eq = equipes.find((e) => e.id_equipe === id);
+
+    if (eq?.encarregado_nome) {
+
+      form.setValue("encarregado", eq.encarregado_nome);
+
+      setEncarregadoAuto(eq.encarregado_nome);
+
+    }
+
+  };
+
+
+
+  const onSubmit = async (data: FormData) => {
+    if (!user) return;
+    try {
+      // Cria acionamento
+      const acionamentoPayload = {
+        codigo_acionamento: data.codigo_acionamento,
+        prioridade: data.prioridade,
+        prioridade_nivel: data.prioridade_nivel,
+        modalidade: data.modalidade,
+        encarregado: data.encarregado,
+        municipio: data.municipio || null,
+        endereco: data.endereco || null,
+        status: data.status,
+        data_abertura: data.data_abertura,
+        observacao: data.observacao || null,
+        origem: data.origem || "web",
+        email_msg: data.email_msg || null,
+        etapa_atual: 1,
+      };
+      const id_equipe = data.id_equipe;
+      // Cria acionamento e vincula equipes
+      const novoAcionamento = await createAcionamento(acionamentoPayload);
+      // Se LM+LV, vincula múltiplas equipes
+      if (Array.isArray(id_equipe)) {
+        await vincularEquipesAcionamento(novoAcionamento.id_acionamento, id_equipe);
+      } else {
+        await vincularEquipesAcionamento(novoAcionamento.id_acionamento, [id_equipe]);
+      }
+      toast({ description: "Acionamento criado com sucesso." });
+      onSuccess?.();
+      form.reset();
+      setAttachedFileName(null);
+      setEmailAttachmentError(null);
+    } catch (err: any) {
+      toast({ description: err.message || "Erro ao criar acionamento.", variant: "destructive" });
+    }
+  };
+
+
+
+  return (
+
+    <Form {...form}>
+
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+          <FormField
+
+            control={form.control}
+
+            name="codigo_acionamento"
+
+            render={({ field }) => (
+
+              <FormItem>
+
                 <FormLabel>Código</FormLabel>
                 <FormControl>
                   <Input placeholder="Ex.: 105" {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="modalidade"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Modalidade</FormLabel>
-                <Select value={field.value} onValueChange={field.onChange}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {["LM", "LV", "LM+LV"].map((m) => (
-                      <SelectItem key={m} value={m}>
-                        {m}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="id_equipe"
-            render={() => (
-              <FormItem>
-                <FormLabel>Equipe</FormLabel>
-                <Select value={form.watch("id_equipe")} onValueChange={handleEquipe} disabled={loadingEq}>
-                  <SelectTrigger>
-                    <SelectValue placeholder={loadingEq ? "Carregando..." : "Selecione"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {filteredEquipes.map((eq) => (
-                      <SelectItem key={eq.id_equipe} value={eq.id_equipe}>
-                        {eq.nome_equipe}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="encarregado"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Encarregado</FormLabel>
-                <FormControl>
+            )}
+
+          />
+
+
+
+          <FormField
+
+            control={form.control}
+
+            name="modalidade"
+
+            render={({ field }) => (
+
+              <FormItem>
+
+                <FormLabel>Modalidade</FormLabel>
+
+                <Select value={field.value} onValueChange={field.onChange}>
+
+                  <SelectTrigger>
+
+                    <SelectValue placeholder="Selecione" />
+
+                  </SelectTrigger>
+
+                  <SelectContent>
+
+                    {["LM", "LV", "LM+LV"].map((m) => (
+
+                      <SelectItem key={m} value={m}>
+
+                        {m}
+
+                      </SelectItem>
+
+                    ))}
+
+                  </SelectContent>
+
+                </Select>
+
+                <FormMessage />
+
+              </FormItem>
+
+            )}
+
+          />
+
+
+
+          <FormField
+            control={form.control}
+            name="id_equipe"
+            render={() => (
+              <FormItem>
+                <FormLabel>Equipe</FormLabel>
+                {modalidade === "LM+LV" ? (
+                  <FormControl>
+                    <select
+                      multiple
+                      className="w-full border rounded p-2 min-h-[40px]"
+                      value={Array.isArray(form.watch("id_equipe")) ? form.watch("id_equipe") : []}
+                      onChange={e => {
+                        const selected = Array.from(e.target.selectedOptions).map(opt => opt.value);
+                        form.setValue("id_equipe", selected);
+                        // Opcional: atualizar encarregado automaticamente
+                        const encarregados = selected.map(id => {
+                          const eq = equipes.find(e => e.id_equipe === id);
+                          return eq?.encarregado_nome || "";
+                        });
+                        form.setValue("encarregado", encarregados.join(", "));
+                      }}
+                      disabled={loadingEq}
+                    >
+                      {filteredEquipes.map(eq => (
+                        <option key={eq.id_equipe} value={eq.id_equipe}>{eq.nome_equipe}</option>
+                      ))}
+                    </select>
+                  </FormControl>
+                ) : (
+                  <Select value={form.watch("id_equipe")} onValueChange={handleEquipe} disabled={loadingEq}>
+                    <SelectTrigger>
+                      <SelectValue placeholder={loadingEq ? "Carregando..." : "Selecione"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {filteredEquipes.map((eq) => (
+                        <SelectItem key={eq.id_equipe} value={eq.id_equipe}>
+                          {eq.nome_equipe}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+
+
+          <FormField
+
+            control={form.control}
+
+            name="encarregado"
+
+            render={({ field }) => (
+
+              <FormItem>
+
+                <FormLabel>Encarregado</FormLabel>
+
+                <FormControl>
+
                   <Input {...field} placeholder={encarregadoAuto ? `Sugestão: ${encarregadoAuto}` : ""} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="prioridade"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Prioridade</FormLabel>
-                <Select value={field.value} onValueChange={field.onChange}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione" />
-                  </SelectTrigger>
-                  <SelectContent>
+                </FormControl>
+
+                <FormMessage />
+
+              </FormItem>
+
+            )}
+
+          />
+
+
+
+          <FormField
+
+            control={form.control}
+
+            name="prioridade"
+
+            render={({ field }) => (
+
+              <FormItem>
+
+                <FormLabel>Prioridade</FormLabel>
+
+                <Select value={field.value} onValueChange={field.onChange}>
+
+                  <SelectTrigger>
+
+                    <SelectValue placeholder="Selecione" />
+
+                  </SelectTrigger>
+
+                  <SelectContent>
+
                     <SelectItem value="emergencia">Emergência</SelectItem>
-                    <SelectItem value="programado">Programado</SelectItem>
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="prioridade_nivel"
-            render={({ field }) => (
-              <FormItem>
+                    <SelectItem value="programado">Programado</SelectItem>
+
+                  </SelectContent>
+
+                </Select>
+
+                <FormMessage />
+
+              </FormItem>
+
+            )}
+
+          />
+
+
+
+          <FormField
+
+            control={form.control}
+
+            name="prioridade_nivel"
+
+            render={({ field }) => (
+
+              <FormItem>
+
                 <FormLabel>Nível</FormLabel>
-                <Select value={field.value} onValueChange={field.onChange}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="normal">Normal</SelectItem>
+                <Select value={field.value} onValueChange={field.onChange}>
+
+                  <SelectTrigger>
+
+                    <SelectValue placeholder="Selecione" />
+
+                  </SelectTrigger>
+
+                  <SelectContent>
+
+                    <SelectItem value="normal">Normal</SelectItem>
+
                     <SelectItem value="media">Média</SelectItem>
-                    <SelectItem value="alta">Alta</SelectItem>
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="status"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Status</FormLabel>
-                <Select value={field.value} onValueChange={field.onChange}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="aberto">Aberto</SelectItem>
-                    <SelectItem value="despachado">Despachado</SelectItem>
+                    <SelectItem value="alta">Alta</SelectItem>
+
+                  </SelectContent>
+
+                </Select>
+
+                <FormMessage />
+
+              </FormItem>
+
+            )}
+
+          />
+
+
+
+          <FormField
+
+            control={form.control}
+
+            name="status"
+
+            render={({ field }) => (
+
+              <FormItem>
+
+                <FormLabel>Status</FormLabel>
+
+                <Select value={field.value} onValueChange={field.onChange}>
+
+                  <SelectTrigger>
+
+                    <SelectValue placeholder="Selecione" />
+
+                  </SelectTrigger>
+
+                  <SelectContent>
+
+                    <SelectItem value="aberto">Aberto</SelectItem>
+
+                    <SelectItem value="despachado">Despachado</SelectItem>
+
                     <SelectItem value="em_execucao">Em execução</SelectItem>
                     <SelectItem value="concluido">Concluído</SelectItem>
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="municipio"
-            render={({ field }) => (
-              <FormItem>
+                  </SelectContent>
+
+                </Select>
+
+                <FormMessage />
+
+              </FormItem>
+
+            )}
+
+          />
+
+
+
+          <FormField
+
+            control={form.control}
+
+            name="municipio"
+
+            render={({ field }) => (
+
+              <FormItem>
+
                 <FormLabel>Município</FormLabel>
-                <FormControl>
-                  <Input {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="endereco"
-            render={({ field }) => (
-              <FormItem>
+                <FormControl>
+
+                  <Input {...field} />
+
+                </FormControl>
+
+                <FormMessage />
+
+              </FormItem>
+
+            )}
+
+          />
+
+
+
+          <FormField
+
+            control={form.control}
+
+            name="endereco"
+
+            render={({ field }) => (
+
+              <FormItem>
+
                 <FormLabel>Endereço</FormLabel>
-                <FormControl>
-                  <Input {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="data_abertura"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Data de abertura</FormLabel>
-                <FormControl>
-                  <Input type="date" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
-
+                <FormControl>
+
+                  <Input {...field} />
+
+                </FormControl>
+
+                <FormMessage />
+
+              </FormItem>
+
+            )}
+
+          />
+
+
+
+          <FormField
+
+            control={form.control}
+
+            name="data_abertura"
+
+            render={({ field }) => (
+
+              <FormItem>
+
+                <FormLabel>Data de abertura</FormLabel>
+
+                <FormControl>
+
+                  <Input type="date" {...field} />
+
+                </FormControl>
+
+                <FormMessage />
+
+              </FormItem>
+
+            )}
+
+          />
+
+        </div>
+
+
+
         <FormField
           control={form.control}
           name="observacao"
@@ -336,28 +625,58 @@ export const AcionamentoForm = ({ onSuccess, onCancel }: Props) => {
           control={form.control}
           name="email_msg"
           render={({ field }) => (
-            <FormItem>
-              <FormLabel>E-mail original</FormLabel>
+            <FormItem className="space-y-1">
+              <FormLabel>Anexe o e-mail (.msg)</FormLabel>
               <FormControl>
-                <Textarea {...field} placeholder="Cole o conteúdo ou o cabeçalho do e-mail que originou o acionamento" />
+                <input
+                  type="file"
+                  accept=".msg"
+                  onChange={(event) =>
+                    handleEmailAttachment(
+                      event.target.files?.[0] ?? null,
+                      field.onChange,
+                    )
+                  }
+                  className="w-full cursor-pointer text-sm text-foreground"
+                />
               </FormControl>
-              <FormMessage />
+              {attachedFileName && (
+                <p className="text-xs text-muted-foreground">Arquivo anexado: {attachedFileName}</p>
+              )}
+              {emailAttachmentError ? (
+                <p className="text-xs text-destructive">{emailAttachmentError}</p>
+              ) : null}
             </FormItem>
           )}
         />
-
-        <div className="flex gap-2 justify-end">
-          {onCancel && (
-            <Button type="button" variant="outline" onClick={onCancel}>
-              Cancelar
-            </Button>
-          )}
-          <Button type="submit" disabled={form.formState.isSubmitting}>
-            {form.formState.isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-            Salvar
-          </Button>
-        </div>
-      </form>
-    </Form>
-  );
-};
+
+        <div className="flex gap-2 justify-end">
+
+          {onCancel && (
+
+            <Button type="button" variant="outline" onClick={onCancel}>
+
+              Cancelar
+
+            </Button>
+
+          )}
+
+          <Button type="submit" disabled={form.formState.isSubmitting}>
+
+            {form.formState.isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+
+            Salvar
+
+          </Button>
+
+        </div>
+
+      </form>
+
+    </Form>
+
+  );
+
+};
+

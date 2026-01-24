@@ -11,7 +11,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { supabase } from "@/integrations/supabase/client";
+import { getCodigosMO } from "@/services/api";
+import { upsertCodigoMO } from "@/services/api";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Plus } from "lucide-react";
 
@@ -48,19 +49,15 @@ export default function CodigosMO() {
 
   const carregar = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("codigos_mao_de_obra")
-      .select("codigo_mao_de_obra, descricao, unidade, operacao, ups, tipo, ativo")
-      .order("codigo_mao_de_obra", { ascending: true });
-
-    if (error) {
+    try {
+      const data = await getCodigosMO();
+      setLista(data || []);
+    } catch (error: any) {
       toast({
         title: "Erro ao carregar",
         description: error.message,
         variant: "destructive",
       });
-    } else {
-      setLista(data || []);
     }
     setLoading(false);
   };
@@ -82,7 +79,6 @@ export default function CodigosMO() {
       if (!form.tipo.trim()) {
         throw new Error("Selecione o tipo (LM ou LV).");
       }
-
       setIsSaving(true);
       const payload = {
         codigo_mao_de_obra: form.codigo.trim().toUpperCase(),
@@ -93,35 +89,12 @@ export default function CodigosMO() {
         tipo: form.tipo.trim().toUpperCase(),
         ativo: form.ativo ? "S" : "N",
       };
-
-      const { error } = await supabase
-        .from("codigos_mao_de_obra")
-        .upsert([payload], { onConflict: "codigo_mao_de_obra,operacao,tipo" });
-
-      if (error) throw error;
-
-      toast({
-        title: "Salvo",
-        description: "Código de mão de obra inserido/atualizado.",
-      });
-
+      await upsertCodigoMO(payload);
+      toast({ title: "Salvo com sucesso" });
       setOpen(false);
-      setForm({
-        codigo: "",
-        descricao: "",
-        unidade: "",
-        operacao: "",
-        ups: "",
-        tipo: "",
-        ativo: true,
-      });
       carregar();
-    } catch (err: any) {
-      toast({
-        title: "Erro ao salvar",
-        description: err?.message || "Falha ao salvar.",
-        variant: "destructive",
-      });
+    } catch (error: any) {
+      toast({ title: "Erro ao salvar", description: error.message, variant: "destructive" });
     } finally {
       setIsSaving(false);
     }

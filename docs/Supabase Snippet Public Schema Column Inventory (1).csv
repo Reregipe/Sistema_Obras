@@ -1,0 +1,308 @@
+table_name,column_name,data_type,is_nullable
+acesso_nivel,id_nivel,integer,NO
+acesso_nivel,codigo,text,NO
+acesso_nivel,descricao,text,NO
+acesso_nivel,criado_em,timestamp with time zone,YES
+acionamento_equipes,id_acionamento_equipe,uuid,NO
+acionamento_equipes,id_acionamento,uuid,NO
+acionamento_equipes,id_equipe,uuid,NO
+acionamento_equipes,encarregado_nome,text,YES
+acionamento_equipes,criado_em,timestamp with time zone,YES
+acionamento_equipes,criado_por,uuid,YES
+acionamento_equipes,papel,text,YES
+acionamento_etapa_logs,id_log,uuid,NO
+acionamento_etapa_logs,id_acionamento,uuid,NO
+acionamento_etapa_logs,etapa_anterior,integer,YES
+acionamento_etapa_logs,etapa_nova,integer,YES
+acionamento_etapa_logs,motivo,text,YES
+acionamento_etapa_logs,criado_em,timestamp with time zone,NO
+acionamento_etapa_logs,criado_por,uuid,YES
+acionamento_eventos,id_evento,uuid,NO
+acionamento_eventos,id_acionamento,uuid,NO
+acionamento_eventos,status_novo,text,NO
+acionamento_eventos,motivo,text,YES
+acionamento_eventos,timestamp,timestamp with time zone,NO
+acionamento_eventos,usuario,uuid,NO
+acionamento_execucao,id,uuid,NO
+acionamento_execucao,id_acionamento,uuid,NO
+acionamento_execucao,km_inicial,numeric,YES
+acionamento_execucao,km_final,numeric,YES
+acionamento_execucao,km_total,numeric,YES
+acionamento_execucao,saida_base,timestamp with time zone,YES
+acionamento_execucao,inicio_servico,timestamp with time zone,YES
+acionamento_execucao,retorno_servico,timestamp with time zone,YES
+acionamento_execucao,retorno_base,timestamp with time zone,YES
+acionamento_execucao,troca_transformador,boolean,YES
+acionamento_execucao,trafo_ret_potencia,text,YES
+acionamento_execucao,trafo_ret_marca,text,YES
+acionamento_execucao,trafo_ret_ano,text,YES
+acionamento_execucao,trafo_ret_tensao_secundaria,text,YES
+acionamento_execucao,trafo_ret_tensao_primaria,text,YES
+acionamento_execucao,trafo_ret_numero_serie,text,YES
+acionamento_execucao,trafo_ret_patrimonio,text,YES
+acionamento_execucao,trafo_inst_potencia,text,YES
+acionamento_execucao,trafo_inst_marca,text,YES
+acionamento_execucao,trafo_inst_ano,text,YES
+acionamento_execucao,trafo_inst_tensao_secundaria,text,YES
+acionamento_execucao,trafo_inst_tensao_primaria,text,YES
+acionamento_execucao,trafo_inst_numero_serie,text,YES
+acionamento_execucao,trafo_inst_patrimonio,text,YES
+acionamento_execucao,tensao_an,text,YES
+acionamento_execucao,tensao_bn,text,YES
+acionamento_execucao,tensao_cn,text,YES
+acionamento_execucao,tensao_ab,text,YES
+acionamento_execucao,tensao_bc,text,YES
+acionamento_execucao,tensao_ca,text,YES
+acionamento_execucao,alimentador,text,YES
+acionamento_execucao,subestacao,text,YES
+acionamento_execucao,numero_transformador,text,YES
+acionamento_execucao,id_poste,text,YES
+acionamento_execucao,os_tablet,text,YES
+acionamento_execucao,ss_nota,text,YES
+acionamento_execucao,numero_intervencao,text,YES
+acionamento_execucao,observacoes,text,YES
+acionamento_execucao,criado_em,timestamp with time zone,YES
+acionamento_execucao,atualizado_em,timestamp with time zone,YES
+acionamentos,id_acionamento,uuid,NO
+acionamentos,origem,text,NO
+acionamentos,codigo_acionamento,text,NO
+acionamentos,numero_os,text,YES
+acionamentos,modalidade,text,NO
+acionamentos,prioridade,text,NO
+acionamentos,municipio,text,YES
+acionamentos,endereco,text,YES
+acionamentos,data_abertura,timestamp with time zone,NO
+acionamentos,data_despacho,timestamp with time zone,YES
+acionamentos,data_chegada,timestamp with time zone,YES
+acionamentos,data_conclusao,timestamp with time zone,YES
+acionamentos,id_equipe,uuid,YES
+acionamentos,id_viatura,uuid,YES
+acionamentos,status,text,NO
+acionamentos,criado_por,uuid,YES
+acionamentos,criado_em,timestamp with time zone,YES
+acionamentos,prioridade_nivel,text,YES
+acionamentos,encarregado,text,YES
+acionamentos,elemento_id,text,YES
+acionamentos,tipo_atividade,text,YES
+acionamentos,observacao,text,YES
+acionamentos,email_msg,text,YES
+acionamentos,etapa_atual,integer,YES
+acionamentos,data_execucao,timestamp with time zone,YES
+acionamentos,medicao_registrada_em,timestamp with time zone,YES
+acionamentos,os_criada_em,timestamp with time zone,YES
+acionamentos,book_enviado_em,timestamp with time zone,YES
+acionamentos,fiscal_enviado_em,timestamp with time zone,YES
+acionamentos,tci_criado_em,timestamp with time zone,YES
+acionamentos,medicao_enviada_em,timestamp with time zone,YES
+acionamentos,medicao_aprovada_em,timestamp with time zone,YES
+acionamentos,lote_gerado_em,timestamp with time zone,YES
+acionamentos,nf_emitida_em,timestamp with time zone,YES
+acionamentos,nf_numero,text,YES
+acionamentos,almox_conferido_em,timestamp with time zone,YES
+acionamentos,almox_conferido_por,uuid,YES
+acionamentos,etapa_manual,integer,YES
+acionamentos,pre_lista_validada_em,timestamp with time zone,YES
+acionamentos,materiais_consumidos_em,timestamp with time zone,YES
+acionamentos,sucatas_enviadas_em,timestamp with time zone,YES
+acionamentos,execucao_finalizada_em,timestamp with time zone,YES
+acionamentos,assinatura_lider_equipe_em,timestamp with time zone,YES
+acionamentos,assinatura_fiscal_em,timestamp with time zone,YES
+acionamentos,assinatura_cliente_em,timestamp with time zone,YES
+acionamentos,numero_obra,text,YES
+acionamentos,numero_obra_atualizado_em,timestamp with time zone,YES
+acionamentos,os_email_anexo_path,text,YES
+acionamentos,os_email_anexo_nome,text,YES
+acionamentos,book_email_anexo_path,text,YES
+acionamentos,book_email_anexo_nome,text,YES
+acionamentos,book_email_msg,text,YES
+acionamentos,book_email_msg_name,text,YES
+acionamentos,tci_numero,text,YES
+acionamentos,medicao_aprovacao_status,text,YES
+codigos_mao_de_obra,codigo_mao_de_obra,text,NO
+codigos_mao_de_obra,operacao,text,NO
+codigos_mao_de_obra,descricao,text,YES
+codigos_mao_de_obra,unidade,text,YES
+codigos_mao_de_obra,ups,numeric,YES
+codigos_mao_de_obra,ativo,boolean,YES
+codigos_mao_de_obra,tipo,text,NO
+codigos_mao_de_obra,raw_line,jsonb,YES
+codigos_mao_de_obra,created_at,timestamp with time zone,YES
+codigos_mo,codigo_mao_de_obra,text,NO
+codigos_mo,operacao,text,NO
+codigos_mo,descricao,text,YES
+codigos_mo,unidade,text,YES
+codigos_mo,ups,numeric,YES
+codigos_mo,tipo,text,YES
+codigos_mo,ativo,character,YES
+equipe_membros,id_equipe,uuid,NO
+equipe_membros,user_id,uuid,NO
+equipe_membros,papel,text,YES
+equipe_membros,criado_em,timestamp with time zone,YES
+equipes,id_equipe,uuid,NO
+equipes,nome_equipe,text,NO
+equipes,ativo,character,NO
+equipes,encarregado_nome,text,YES
+equipes,encarregado_telefone,text,YES
+equipes,linha,text,YES
+invites,id,uuid,NO
+invites,email,text,NO
+invites,token,text,NO
+invites,roles,ARRAY,NO
+invites,convidado_por,uuid,NO
+invites,criado_em,timestamp with time zone,YES
+invites,expira_em,timestamp with time zone,NO
+invites,aceito_em,timestamp with time zone,YES
+invites,status,text,NO
+lista_aplicacao_cabecalho,id_lista_aplicacao,uuid,NO
+lista_aplicacao_cabecalho,observacao,text,YES
+lista_aplicacao_cabecalho,id_acionamento,uuid,YES
+lista_aplicacao_cabecalho,criado_em,timestamp with time zone,YES
+lista_aplicacao_cabecalho,criado_por,uuid,YES
+lista_aplicacao_cabecalho,atualizado_em,timestamp with time zone,YES
+lista_aplicacao_cabecalho,atualizado_por,uuid,YES
+lista_aplicacao_itens,id_lista_aplicacao_item,uuid,NO
+lista_aplicacao_itens,id_lista_aplicacao,uuid,YES
+lista_aplicacao_itens,ordem_item,integer,YES
+lista_aplicacao_itens,codigo_material,text,NO
+lista_aplicacao_itens,descricao_item,text,NO
+lista_aplicacao_itens,unidade_medida,text,NO
+lista_aplicacao_itens,quantidade,numeric,NO
+lista_aplicacao_itens,criado_em,timestamp with time zone,YES
+lista_aplicacao_itens,atualizado_em,timestamp with time zone,YES
+lista_aplicacao_itens,criado_por,uuid,YES
+lista_aplicacao_itens,atualizado_por,uuid,YES
+lista_aplicacao_itens,removido_em,timestamp with time zone,YES
+lista_aplicacao_itens,removido_por,uuid,YES
+lista_aplicacao_itens,id_acionamento,uuid,YES
+lista_aplicacao_itens,valor_unitario_upr,numeric,YES
+lista_aplicacao_itens,valor_total,numeric,YES
+materiais,codigo_material,text,NO
+materiais,descricao,text,NO
+materiais,unidade_medida,text,NO
+materiais,ativo,character,YES
+medicao_aprovacao_logs,id_log,uuid,NO
+medicao_aprovacao_logs,id_acionamento,uuid,NO
+medicao_aprovacao_logs,status,text,NO
+medicao_aprovacao_logs,observacao,text,YES
+medicao_aprovacao_logs,criado_em,timestamp with time zone,NO
+medicao_orcamentos,id,uuid,NO
+medicao_orcamentos,id_acionamento,uuid,NO
+medicao_orcamentos,itens_lm,jsonb,NO
+medicao_orcamentos,itens_lv,jsonb,NO
+medicao_orcamentos,fora_horario,boolean,NO
+medicao_orcamentos,valor_ups_lm,numeric,YES
+medicao_orcamentos,valor_ups_lv,numeric,YES
+medicao_orcamentos,total_base_lm,numeric,NO
+medicao_orcamentos,total_base_lv,numeric,NO
+medicao_orcamentos,total_final_lm,numeric,NO
+medicao_orcamentos,total_final_lv,numeric,NO
+medicao_orcamentos,atualizado_por,uuid,YES
+medicao_orcamentos,atualizado_em,timestamp with time zone,NO
+medicao_retorno_items,id,uuid,NO
+medicao_retorno_items,id_acionamento,uuid,NO
+medicao_retorno_items,origem,text,NO
+medicao_retorno_items,modalidade,text,NO
+medicao_retorno_items,codigo,text,NO
+medicao_retorno_items,descricao,text,YES
+medicao_retorno_items,quantidade,numeric,NO
+medicao_retorno_items,ups,numeric,NO
+medicao_retorno_items,total_valor,numeric,NO
+medicao_retorno_items,regra_aplicada,text,YES
+medicao_retorno_items,lote_retorno_id,uuid,NO
+medicao_retorno_items,created_at,timestamp with time zone,NO
+notificacoes,id_notificacao,uuid,NO
+notificacoes,tipo,text,NO
+notificacoes,titulo,text,NO
+notificacoes,mensagem,text,NO
+notificacoes,etapa,text,YES
+notificacoes,referencia_id,uuid,YES
+notificacoes,referencia_tipo,text,YES
+notificacoes,lida,boolean,YES
+notificacoes,criado_em,timestamp with time zone,YES
+notificacoes,usuario_id,uuid,YES
+obras,id_obra,uuid,NO
+obras,modalidade,text,NO
+obras,numero_os,text,NO
+obras,equipe,text,YES
+obras,endereco,text,YES
+obras,alimentador,text,YES
+obras,id_poste,text,YES
+obras,codigo_acionamento,text,YES
+obras,numero_intervencao,text,YES
+obras,nota_ss,text,YES
+obras,os_tablet,text,YES
+obras,encarregado,text,YES
+obras,tecnico_eng,text,YES
+obras,eletricistas_nr,text,YES
+obras,saida_base,timestamp with time zone,YES
+obras,retorno_base,timestamp with time zone,YES
+obras,inicio_servico,timestamp with time zone,YES
+obras,retorno_servico,timestamp with time zone,YES
+obras,km_inicial,numeric,YES
+obras,km_final,numeric,YES
+obras,subestacao,text,YES
+obras,numero_transformador,text,YES
+obras,observacao,text,YES
+obras,os_numero,text,NO
+obras,os_data_abertura,timestamp with time zone,NO
+obras,os_data_envio_energisa,timestamp with time zone,NO
+obras,os_prazo_abertura_energisa,integer,YES
+obras,os_data_aberta_pela_energisa,timestamp with time zone,YES
+obras,os_status,text,NO
+obras,tci_numero,text,YES
+obras,tci_data_emissao,timestamp with time zone,YES
+obras,tci_status,text,YES
+obras,gestor_aprovacao_status,text,YES
+obras,gestor_aprovacao_data,timestamp with time zone,YES
+obras,gestor_observacao,text,YES
+obras,criado_em,timestamp with time zone,YES
+pre_lista_itens,id,uuid,NO
+pre_lista_itens,id_acionamento,uuid,NO
+pre_lista_itens,codigo_material,text,NO
+pre_lista_itens,quantidade_prevista,numeric,NO
+pre_lista_itens,criado_em,timestamp with time zone,YES
+profiles,id,uuid,NO
+profiles,nome,text,NO
+profiles,cpf,text,YES
+profiles,email,text,NO
+profiles,telefone,text,YES
+profiles,avatar_url,text,YES
+profiles,criado_em,timestamp with time zone,YES
+profiles,atualizado_em,timestamp with time zone,YES
+sucata_itens,id,uuid,NO
+sucata_itens,id_acionamento,uuid,NO
+sucata_itens,codigo_material,text,NO
+sucata_itens,quantidade_retirada,numeric,NO
+sucata_itens,criado_em,timestamp with time zone,YES
+sucata_itens,classificacao,text,YES
+system_settings,id,uuid,NO
+system_settings,chave,text,NO
+system_settings,valor,text,NO
+system_settings,descricao,text,YES
+system_settings,tipo,text,NO
+system_settings,atualizado_em,timestamp with time zone,YES
+system_settings,atualizado_por,uuid,YES
+user_roles,user_id,uuid,NO
+user_roles,role,USER-DEFINED,NO
+user_roles,created_at,timestamp with time zone,YES
+user_roles,concedido_por,uuid,YES
+user_roles_history,id,uuid,NO
+user_roles_history,user_id,uuid,NO
+user_roles_history,role,text,NO
+user_roles_history,acao,text,NO
+user_roles_history,concedido_por,uuid,YES
+user_roles_history,criado_em,timestamp with time zone,YES
+user_roles_history,motivo,text,YES
+usuario_acesso,id_usuario,uuid,NO
+usuario_acesso,id_nivel,integer,NO
+usuario_acesso,concedido_por,uuid,YES
+usuario_acesso,concedido_em,timestamp with time zone,NO
+usuarios,id_usuario,uuid,NO
+usuarios,nome,text,NO
+usuarios,cpf,character,NO
+usuarios,email_empresa,text,NO
+usuarios,telefone,text,YES
+usuarios,ativo,character,NO
+usuarios,criado_em,timestamp with time zone,YES
+usuarios,observacao,text,YES
+usuarios,pode_alterar_acionamento,boolean,YES

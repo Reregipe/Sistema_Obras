@@ -1,0 +1,6 @@
+id_nivel,codigo,descricao,criado_em
+1,ADMIN,Administrador do Sistema,2025-11-27 14:54:29.356783+00
+2,ADM,Administrativo - OS/medição,2025-11-27 14:54:29.356783+00
+3,OPER,Operacional - Campo,2025-11-27 14:54:29.356783+00
+4,GESTOR,Gestor - Aprovações,2025-11-27 14:54:29.356783+00
+5,FIN,Financeiro - Faturamento,2025-11-27 14:54:29.356783+00
