@@ -1,5 +1,5 @@
 // import { maoDeObraCatalog } from "@/data/maoDeObraCatalog";
-import { useEffect } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { getCodigosMO, getSystemSettings } from "@/services/api";
 // Adicione a dependência xlsx no seu projeto: npm install xlsx
 import * as XLSX from "xlsx";
@@ -10,7 +10,9 @@ import { Separator } from "@/components/ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Plus, Download, ArrowRight } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { WorkflowStepsObras } from "@/components/domain/WorkflowStepsObras";
+// import { WorkflowStepsObras } from "@/components/domain/WorkflowStepsObras";
+import { useNavigate } from "react-router-dom";
+import { equipesCatalog } from "@/data/equipesCatalog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
@@ -264,7 +266,7 @@ const Obras = () => {
     toast({
       title: "Medições salvas",
       description: "Todas as entradas do modal foram gravadas com sucesso.",
-      variant: "success",
+      variant: "default",
       className: "bg-emerald-500 text-white shadow-lg",
     });
   };
