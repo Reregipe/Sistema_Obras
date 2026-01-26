@@ -63,7 +63,7 @@ export default function CodigosMO() {
     const term = busca.toLowerCase();
     return lista.filter(
       (item) =>
-        item.codigo_mao_de_obra.toLowerCase().includes(term) ||
+        String(item.codigo_mao_de_obra).toLowerCase().includes(term) ||
         (item.descricao || "").toLowerCase().includes(term)
     );
   }, [busca, lista]);

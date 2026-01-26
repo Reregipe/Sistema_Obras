@@ -1,12 +1,18 @@
+import { equipesCatalog } from "@/data/equipesCatalog";
+import { codigosMOCatalog } from "@/data/codigosMOCatalog";
 // Buscar códigos de mão de obra
 export async function fetchCodigosMO(): Promise<DataSourceResult<any[]>> {
   const source = import.meta.env.VITE_DATA_SOURCE || "local";
   try {
     if (source === "local") {
+      // Retorna sempre o mock local
+      return { data: codigosMOCatalog, error: null };
+    } else if (source === "api") {
+      // Consome API local e extrai apenas o array
       const res = await fetch("http://localhost:3000/codigosMO");
       if (!res.ok) {
         return {
-          data: null,
+          data: [],
           error: {
             message: `HTTP ${res.status}`,
             code: res.status,
@@ -15,19 +21,22 @@ export async function fetchCodigosMO(): Promise<DataSourceResult<any[]>> {
         };
       }
       const json = await res.json();
-      return { data: json.data ?? [], error: null };
-    } else if (source === "supabase") {
-      // Implemente chamada real ao Supabase
-      return {
-        data: [],
-        error: {
-          message: "Supabase não implementado neste exemplo.",
-          code: "not_implemented",
-        },
-      };
+      const arr = Array.isArray(json?.data) ? json.data : [];
+      if (arr.length > 0) {
+        return { data: arr, error: null };
+      } else {
+        return {
+          data: [],
+          error: {
+            message: 'Resposta da API não contém array de códigos.',
+            code: 'invalid_api_response',
+            details: json,
+          },
+        };
+      }
     } else {
       return {
-        data: null,
+        data: [],
         error: {
           message: `Fonte de dados desconhecida: ${source}`,
           code: "unknown_source",
@@ -36,7 +45,7 @@ export async function fetchCodigosMO(): Promise<DataSourceResult<any[]>> {
     }
   } catch (err: any) {
     return {
-      data: null,
+      data: [],
       error: {
         message: err?.message ?? "Erro desconhecido",
         details: err,
@@ -111,10 +120,14 @@ export async function fetchEquipes(): Promise<DataSourceResult<any[]>> {
   const source = import.meta.env.VITE_DATA_SOURCE || "local";
   try {
     if (source === "local") {
+      // Retorna sempre o mock local
+      return { data: equipesCatalog, error: null };
+    } else if (source === "api") {
+      // Consome API local e extrai apenas o array
       const res = await fetch("http://localhost:3000/equipes");
       if (!res.ok) {
         return {
-          data: null,
+          data: [],
           error: {
             message: `HTTP ${res.status}`,
             code: res.status,
@@ -123,22 +136,22 @@ export async function fetchEquipes(): Promise<DataSourceResult<any[]>> {
         };
       }
       const json = await res.json();
-      return { data: json.data ?? [], error: null };
-    } else if (source === "supabase") {
-      // Exemplo: Supabase
-      // Implemente aqui a chamada real ao Supabase
-      // Retorne no formato { data, error }
-      // Exemplo mock:
-      return {
-        data: [],
-        error: {
-          message: "Supabase não implementado neste exemplo.",
-          code: "not_implemented",
-        },
-      };
+      const arr = Array.isArray(json?.data?.data) ? json.data.data : [];
+      if (arr.length > 0) {
+        return { data: arr, error: null };
+      } else {
+        return {
+          data: [],
+          error: {
+            message: 'Resposta da API não contém array de equipes.',
+            code: 'invalid_api_response',
+            details: json,
+          },
+        };
+      }
     } else {
       return {
-        data: null,
+        data: [],
         error: {
           message: `Fonte de dados desconhecida: ${source}`,
           code: "unknown_source",
@@ -147,7 +160,7 @@ export async function fetchEquipes(): Promise<DataSourceResult<any[]>> {
     }
   } catch (err: any) {
     return {
-      data: null,
+      data: [],
       error: {
         message: err?.message ?? "Erro desconhecido",
         details: err,
