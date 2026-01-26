@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+// Supabase removido
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -25,34 +25,12 @@ export const ActiveUsers = ({ detailed = false }: { detailed?: boolean }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchActiveUsers();
-  }, []);
-
-  const fetchActiveUsers = async () => {
-    try {
-      const { data: profiles } = await supabase
-        .from("profiles")
-        .select("id, nome, email")
-        .order("nome");
-
-      const { data: rolesData } = await supabase
-        .from("user_roles")
-        .select("user_id, role");
-
-      const usersWithRoles = profiles
-        ?.map((profile) => ({
-          ...profile,
-          roles: rolesData?.filter((r) => r.user_id === profile.id).map((r) => r.role) || [],
-        }))
-        .filter((user) => user.roles.length > 0) || [];
-
-      setUsers(usersWithRoles);
-    } catch (error) {
-      console.error("Error fetching active users:", error);
-    } finally {
+    // Dados mocados/local: ajuste conforme integração futura
+    setTimeout(() => {
+      setUsers([]); // Lista vazia por padrão
       setLoading(false);
-    }
-  };
+    }, 500);
+  }, []);
 
   const getInitials = (name: string) => {
     return name

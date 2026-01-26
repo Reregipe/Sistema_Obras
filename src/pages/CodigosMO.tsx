@@ -11,8 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { getCodigosMO } from "@/services/api";
-import { upsertCodigoMO } from "@/services/api";
+import { fetchCodigosMO } from "@/services/dataSource";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Plus } from "lucide-react";
 
@@ -44,23 +43,21 @@ export default function CodigosMO() {
   });
 
   useEffect(() => {
-    carregar();
-  }, []);
-
-  const carregar = async () => {
     setLoading(true);
-    try {
-      const data = await getCodigosMO();
-      setLista(data || []);
-    } catch (error: any) {
-      toast({
-        title: "Erro ao carregar",
-        description: error.message,
-        variant: "destructive",
-      });
-    }
-    setLoading(false);
-  };
+    fetchCodigosMO().then(({ data, error }) => {
+      if (error) {
+        toast({
+          title: "Erro ao carregar",
+          description: error.message,
+          variant: "destructive",
+        });
+        setLista([]);
+      } else {
+        setLista(data ?? []);
+      }
+      setLoading(false);
+    });
+  }, []);
 
   const filtrados = useMemo(() => {
     const term = busca.toLowerCase();
@@ -89,10 +86,9 @@ export default function CodigosMO() {
         tipo: form.tipo.trim().toUpperCase(),
         ativo: form.ativo ? "S" : "N",
       };
-      await upsertCodigoMO(payload);
-      toast({ title: "Salvo com sucesso" });
+      // Função de salvar não implementada na API local/dataSource
+      toast({ title: "Função de salvar não implementada na API local/dataSource" });
       setOpen(false);
-      carregar();
     } catch (error: any) {
       toast({ title: "Erro ao salvar", description: error.message, variant: "destructive" });
     } finally {

@@ -8,7 +8,7 @@ import {
 } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { supabase } from "@/integrations/supabase/client";
+// Supabase removido
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 
@@ -29,53 +29,16 @@ export const NotificationCenter = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    loadNotifications();
-    
-    // Subscribe to real-time notifications
-    const channel = supabase
-      .channel('notificacoes-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'notificacoes'
-        },
-        (payload) => {
-          console.log('Nova notificação:', payload);
-          setNotifications(prev => [payload.new as Notification, ...prev]);
-          setUnreadCount(prev => prev + 1);
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    // Dados mocados/local: ajuste conforme integração futura
+    setTimeout(() => {
+      setNotifications([]);
+      setUnreadCount(0);
+    }, 500);
   }, []);
 
-  const loadNotifications = async () => {
-    const { data, error } = await supabase
-      .from('notificacoes')
-      .select('*')
-      .order('criado_em', { ascending: false })
-      .limit(20);
-
-    if (error) {
-      console.error('Erro ao carregar notificações:', error);
-      return;
-    }
-
-    setNotifications(data || []);
-    setUnreadCount(data?.filter(n => !n.lida).length || 0);
-  };
+  // loadNotifications removido (dados mocados)
 
   const markAsRead = async (id: string) => {
-    await supabase
-      .from('notificacoes')
-      .update({ lida: true })
-      .eq('id_notificacao', id);
-
     setNotifications(prev =>
       prev.map(n => n.id_notificacao === id ? { ...n, lida: true } : n)
     );
@@ -83,15 +46,6 @@ export const NotificationCenter = () => {
   };
 
   const markAllAsRead = async () => {
-    const unreadIds = notifications.filter(n => !n.lida).map(n => n.id_notificacao);
-    
-    if (unreadIds.length === 0) return;
-
-    await supabase
-      .from('notificacoes')
-      .update({ lida: true })
-      .in('id_notificacao', unreadIds);
-
     setNotifications(prev => prev.map(n => ({ ...n, lida: true })));
     setUnreadCount(0);
   };

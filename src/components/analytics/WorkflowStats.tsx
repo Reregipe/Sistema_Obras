@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+// Supabase removido
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
 import { Workflow } from "lucide-react";
@@ -16,53 +16,14 @@ export const WorkflowStats = ({ detailed = false }: { detailed?: boolean }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchWorkflowStats();
-  }, []);
-
-  const fetchWorkflowStats = async () => {
-    try {
-      // Buscar status dos acionamentos
-      const { data: acionamentos } = await supabase
-        .from("acionamentos")
-        .select("status");
-
-      const acionamentosCount: Record<string, number> = {};
-      acionamentos?.forEach((a) => {
-        acionamentosCount[a.status] = (acionamentosCount[a.status] || 0) + 1;
-      });
-
-      const acionamentosChartData: StatusCount[] = Object.entries(acionamentosCount).map(
-        ([status, count], index) => ({
-          name: status.charAt(0).toUpperCase() + status.slice(1),
-          value: count,
-          color: `hsl(${index * 60}, 70%, 50%)`,
-        })
-      );
-
-      // Buscar status das obras
-      const { data: obras } = await supabase.from("obras").select("os_status");
-
-      const obrasCount: Record<string, number> = {};
-      obras?.forEach((o) => {
-        obrasCount[o.os_status] = (obrasCount[o.os_status] || 0) + 1;
-      });
-
-      const obrasChartData: StatusCount[] = Object.entries(obrasCount).map(
-        ([status, count], index) => ({
-          name: status.charAt(0).toUpperCase() + status.slice(1),
-          value: count,
-          color: `hsl(${index * 50 + 180}, 70%, 50%)`,
-        })
-      );
-
-      setAcionamentosData(acionamentosChartData);
-      setObrasData(obrasChartData);
-    } catch (error) {
-      console.error("Error fetching workflow stats:", error);
-    } finally {
+    // Dados mocados/local: ajuste conforme integração futura
+    setLoading(true);
+    setTimeout(() => {
+      setAcionamentosData([]);
+      setObrasData([]);
       setLoading(false);
-    }
-  };
+    }, 500);
+  }, []);
 
   if (loading) {
     return (

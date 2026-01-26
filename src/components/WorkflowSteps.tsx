@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { AcionamentoForm } from "@/components/forms/AcionamentoForm";
 import { WorkflowSteps } from "@/components/domain/WorkflowSteps";
 import { Plus, Download, Filter, Loader2 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+// Supabase removido
 import { useToast } from "@/hooks/use-toast";
 
 type Acionamento = {

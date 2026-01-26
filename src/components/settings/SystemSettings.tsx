@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+// Supabase removido
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,42 +38,11 @@ export const SystemSettings = () => {
 
   const fetchSettings = async () => {
     setLoading(true);
-    try {
-      const { data, error } = await supabase.from("system_settings").select("*").order("chave");
-      if (error) throw error;
-
-      const list = data || [];
-      const missing = requiredKeys
-        .filter((key) => !list.find((s) => s.chave === key))
-        .map((key) => ({
-          id: crypto.randomUUID(),
-          chave: key,
-          valor: "",
-          descricao:
-            key === "ups_valor_lm"
-              ? "Valor padrao da UPS - Linha Morta"
-              : "Valor padrao da UPS - Linha Viva",
-          tipo: "number",
-        }));
-
-      const merged = [...list, ...missing];
-      setSettings(merged);
-
-      const initialValues: Record<string, string> = {};
-      merged.forEach((setting) => {
-        initialValues[setting.chave] = setting.valor;
-      });
-      setEditedValues(initialValues);
-    } catch (error) {
-      console.error("Error fetching settings:", error);
-      toast({
-        title: "Erro ao carregar configuracoes",
-        description: "Nao foi possivel carregar as configuracoes do sistema.",
-        variant: "destructive",
-      });
-    } finally {
+    setTimeout(() => {
+      setSettings([]); // Lista vazia por padrão
+      setEditedValues({});
       setLoading(false);
-    }
+    }, 500);
   };
 
   useEffect(() => {
@@ -89,46 +58,13 @@ export const SystemSettings = () => {
 
   const handleSave = async () => {
     setSaving(true);
-    try {
-      const changes = settings
-        .filter((setting) => editedValues[setting.chave] !== setting.valor)
-        .map((setting) => ({
-          chave: setting.chave,
-          valor: editedValues[setting.chave] ?? "",
-          tipo: setting.tipo || "text",
-          descricao: setting.descricao,
-          atualizado_em: new Date().toISOString(),
-        }));
-
-      if (changes.length === 0) {
-        toast({
-          title: "Nenhuma alteracao",
-          description: "Nao ha configuracoes para salvar.",
-        });
-        return;
-      }
-
-      const { error } = await supabase.from("system_settings").upsert(changes, {
-        onConflict: "chave",
-      });
-      if (error) throw error;
-
+    setTimeout(() => {
       toast({
         title: "Configuracoes salvas",
-        description: "As configuracoes do sistema foram atualizadas com sucesso.",
+        description: "As configuracoes do sistema foram atualizadas (mock).",
       });
-
-      fetchSettings();
-    } catch (error: any) {
-      console.error("Error saving settings:", error);
-      toast({
-        title: "Erro ao salvar",
-        description: error?.message || "Nao foi possivel salvar as configuracoes.",
-        variant: "destructive",
-      });
-    } finally {
       setSaving(false);
-    }
+    }, 500);
   };
 
   const renderInput = (setting: SystemSetting) => {

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { fetchMateriais } from '@/services/dataSource';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -22,7 +22,20 @@ export const MateriaisTable = () => {
   const { toast } = useToast();
 
   useEffect(() => {
-    loadMateriais();
+    setLoading(true);
+    fetchMateriais().then(({ data, error }) => {
+      if (error) {
+        toast({
+          variant: 'destructive',
+          title: 'Erro ao carregar materiais',
+          description: error.message,
+        });
+        setMateriais([]);
+      } else {
+        setMateriais(data ?? []);
+      }
+      setLoading(false);
+    });
   }, []);
 
   useEffect(() => {
@@ -38,24 +51,7 @@ export const MateriaisTable = () => {
     }
   }, [search, materiais]);
 
-  const loadMateriais = async () => {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from('materiais')
-      .select('*')
-      .order('codigo_material');
-
-    if (error) {
-      toast({
-        variant: 'destructive',
-        title: 'Erro ao carregar materiais',
-        description: error.message,
-      });
-    } else {
-      setMateriais(data || []);
-    }
-    setLoading(false);
-  };
+  // Remover função de delete pois não está implementada na API local/dataSource
 
   const handleDelete = async (codigo: string) => {
     if (!confirm('Tem certeza que deseja excluir este material?')) return;
@@ -131,13 +127,13 @@ export const MateriaisTable = () => {
                       <Button variant="ghost" size="icon">
                         <Pencil className="h-4 w-4" />
                       </Button>
-                      <Button
+                      {/* <Button
                         variant="ghost"
                         size="icon"
                         onClick={() => handleDelete(material.codigo_material)}
                       >
                         <Trash2 className="h-4 w-4" />
-                      </Button>
+                      </Button> */}
                     </div>
                   </TableCell>
                 </TableRow>

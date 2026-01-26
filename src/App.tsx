@@ -4,11 +4,11 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Layout } from "./components/Layout";
-import { useRealtimeRoleChanges } from "@/hooks/useRealtimeRoleChanges";
+// import removido: useRealtimeRoleChanges
 
 export const MainLayout = ({ children }: { children: React.ReactNode }) => {
   // Hook para escutar mudanças em tempo real de permissões
-  useRealtimeRoleChanges();
+  // useRealtimeRoleChanges removido
   
   return <Layout>{children}</Layout>;
 };

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
+// Supabase removido
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -49,38 +49,10 @@ export const InvitesManagement = () => {
 
   const fetchInvites = async () => {
     setLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from("invites")
-        .select(`
-          *,
-          profiles!invites_convidado_por_fkey(nome)
-        `)
-        .order("criado_em", { ascending: false });
-
-      if (error) throw error;
-
-      const formattedData = data?.map((invite: any) => ({
-        id: invite.id,
-        email: invite.email,
-        roles: invite.roles || [],
-        status: invite.status,
-        criado_em: invite.criado_em,
-        expira_em: invite.expira_em,
-        admin_nome: invite.profiles?.nome || "Admin",
-      })) || [];
-
-      setInvites(formattedData);
-    } catch (error) {
-      console.error("Error fetching invites:", error);
-      toast({
-        title: "Erro ao carregar convites",
-        description: "Não foi possível carregar a lista de convites.",
-        variant: "destructive",
-      });
-    } finally {
+    setTimeout(() => {
+      setInvites([]); // Lista vazia por padrão
       setLoading(false);
-    }
+    }, 500);
   };
 
   useEffect(() => {
@@ -88,28 +60,12 @@ export const InvitesManagement = () => {
   }, []);
 
   const handleCancelInvite = async (inviteId: string) => {
-    try {
-      const { error } = await supabase
-        .from("invites")
-        .update({ status: "cancelled" })
-        .eq("id", inviteId);
-
-      if (error) throw error;
-
-      toast({
-        title: "Convite cancelado",
-        description: "O convite foi cancelado com sucesso.",
-      });
-
-      fetchInvites();
-    } catch (error) {
-      console.error("Error cancelling invite:", error);
-      toast({
-        title: "Erro ao cancelar",
-        description: "Não foi possível cancelar o convite.",
-        variant: "destructive",
-      });
-    }
+    // Simula cancelamento local
+    setInvites((prev) => prev.map((i) => i.id === inviteId ? { ...i, status: "cancelled" } : i));
+    toast({
+      title: "Convite cancelado",
+      description: "O convite foi cancelado (mock).",
+    });
   };
 
   if (loading) {

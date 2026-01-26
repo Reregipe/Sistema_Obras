@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AlertCircle, TrendingUp, TrendingDown, Activity, RefreshCw } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+// Supabase removido
 import { useNotifications } from "@/hooks/useNotifications";
 import { toast } from "sonner";
 
@@ -29,76 +29,25 @@ export const MonitoringDashboard = () => {
   const { runMonitoring } = useNotifications();
 
   useEffect(() => {
-    loadMetrics();
-    
-    // Atualizar métricas a cada 5 minutos
-    const interval = setInterval(loadMetrics, 5 * 60 * 1000);
-    
+    // Dados mocados/local: ajuste conforme integração futura
+    setLoading(true);
+    setTimeout(() => {
+      setMetrics({
+        acionamentosAbertos: 0,
+        acionamentosUrgentes: 0,
+        obrasEnviadas: 0,
+        obrasAtrasadas: 0,
+        medicoesAguardandoGestor: 0,
+        tcisPendentes: 0,
+      });
+      setLoading(false);
+    }, 500);
+    // Atualizar métricas a cada 5 minutos (mock)
+    const interval = setInterval(() => {}, 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, []);
 
-  const loadMetrics = async () => {
-    setLoading(true);
-    
-    try {
-      // Acionamentos abertos
-      const { count: acionamentosAbertos } = await supabase
-        .from('acionamentos')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'aberto');
-
-      // Acionamentos urgentes sem equipe
-      const { count: acionamentosUrgentes } = await supabase
-        .from('acionamentos')
-        .select('*', { count: 'exact', head: true })
-        .eq('prioridade', 'emergencia')
-        .eq('status', 'aberto')
-        .is('id_equipe', null);
-
-      // Obras enviadas aguardando Energisa
-      const { count: obrasEnviadas } = await supabase
-        .from('obras')
-        .select('*', { count: 'exact', head: true })
-        .eq('os_status', 'enviada');
-
-      // Obras atrasadas (mais de 7 dias)
-      const prazoLimite = new Date();
-      prazoLimite.setDate(prazoLimite.getDate() - 7);
-      
-      const { count: obrasAtrasadas } = await supabase
-        .from('obras')
-        .select('*', { count: 'exact', head: true })
-        .eq('os_status', 'enviada')
-        .lt('os_data_envio_energisa', prazoLimite.toISOString())
-        .is('os_data_aberta_pela_energisa', null);
-
-      // Medições aguardando gestor
-      const { count: medicoesAguardandoGestor } = await supabase
-        .from('obras')
-        .select('*', { count: 'exact', head: true })
-        .eq('gestor_aprovacao_status', 'aguardando');
-
-      // TCIs pendentes
-      const { count: tcisPendentes } = await supabase
-        .from('obras')
-        .select('*', { count: 'exact', head: true })
-        .eq('tci_status', 'pendente');
-
-      setMetrics({
-        acionamentosAbertos: acionamentosAbertos || 0,
-        acionamentosUrgentes: acionamentosUrgentes || 0,
-        obrasEnviadas: obrasEnviadas || 0,
-        obrasAtrasadas: obrasAtrasadas || 0,
-        medicoesAguardandoGestor: medicoesAguardandoGestor || 0,
-        tcisPendentes: tcisPendentes || 0,
-      });
-    } catch (error) {
-      console.error('Erro ao carregar métricas:', error);
-      toast.error('Erro ao carregar métricas de monitoramento');
-    } finally {
-      setLoading(false);
-    }
-  };
+  // loadMetrics removido (dados mocados)
 
   const runMonitoringCheck = async () => {
     toast.info('Executando verificação de monitoramento...');

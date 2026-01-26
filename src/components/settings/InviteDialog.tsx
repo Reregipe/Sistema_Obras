@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+// Supabase removido
 import {
   Dialog,
   DialogContent,
@@ -79,75 +79,17 @@ export const InviteDialog = ({
     }
 
     setSending(true);
-    try {
-      // Check if user already exists
-      const { data: existingProfile } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("email", email)
-        .maybeSingle();
-
-      if (existingProfile) {
-        toast({
-          title: "Usuário já existe",
-          description: "Este email já está cadastrado no sistema.",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      // Create invite token
-      const token = crypto.randomUUID();
-      const expiresIn = new Date();
-      expiresIn.setDate(expiresIn.getDate() + 7); // 7 days
-
-      const { error: inviteError } = await supabase.from("invites").insert({
-        email: email.trim().toLowerCase(),
-        token,
-        roles: Array.from(selectedRoles),
-        convidado_por: user?.id,
-        expira_em: expiresIn.toISOString(),
+    setTimeout(() => {
+      toast({
+        title: "Convite enviado",
+        description: `Um convite foi enviado para ${email} (mock).`,
       });
-
-      if (inviteError) throw inviteError;
-
-      // Send invitation email
-      const { error: emailError } = await supabase.functions.invoke("send-invite-email", {
-        body: {
-          email: email.trim().toLowerCase(),
-          token,
-          roles: Array.from(selectedRoles),
-        },
-      });
-
-      if (emailError) {
-        console.error("Error sending email:", emailError);
-        toast({
-          title: "Convite criado",
-          description:
-            "O convite foi criado, mas houve um erro ao enviar o email. Compartilhe o link manualmente.",
-        });
-      } else {
-        toast({
-          title: "Convite enviado",
-          description: `Um convite foi enviado para ${email} com sucesso.`,
-        });
-      }
-
       setEmail("");
       setSelectedRoles(new Set());
       onSuccess();
       onOpenChange(false);
-    } catch (error) {
-      console.error("Error sending invite:", error);
-      toast({
-        title: "Erro ao enviar convite",
-        description: "Não foi possível enviar o convite.",
-        variant: "destructive",
-      });
-    } finally {
       setSending(false);
-    }
+    }, 500);
   };
 
   return (
