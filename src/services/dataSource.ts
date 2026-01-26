@@ -59,10 +59,14 @@ export async function fetchMateriais(): Promise<DataSourceResult<any[]>> {
   const source = import.meta.env.VITE_DATA_SOURCE || "local";
   try {
     if (source === "local") {
+      // Retorna sempre o mock local (se existir)
+      return { data: materiaisCatalog, error: null };
+    } else if (source === "api") {
+      // Consome API local e extrai apenas o array
       const res = await fetch("http://localhost:3000/materiais");
       if (!res.ok) {
         return {
-          data: null,
+          data: [],
           error: {
             message: `HTTP ${res.status}`,
             code: res.status,
@@ -71,19 +75,22 @@ export async function fetchMateriais(): Promise<DataSourceResult<any[]>> {
         };
       }
       const json = await res.json();
-      return { data: json.data ?? [], error: null };
-    } else if (source === "supabase") {
-      // Implemente chamada real ao Supabase
-      return {
-        data: [],
-        error: {
-          message: "Supabase não implementado neste exemplo.",
-          code: "not_implemented",
-        },
-      };
+      const arr = Array.isArray(json?.data) ? json.data : [];
+      if (arr.length > 0) {
+        return { data: arr, error: null };
+      } else {
+        return {
+          data: [],
+          error: {
+            message: 'Resposta da API não contém array de materiais.',
+            code: 'invalid_api_response',
+            details: json,
+          },
+        };
+      }
     } else {
       return {
-        data: null,
+        data: [],
         error: {
           message: `Fonte de dados desconhecida: ${source}`,
           code: "unknown_source",
@@ -92,7 +99,7 @@ export async function fetchMateriais(): Promise<DataSourceResult<any[]>> {
     }
   } catch (err: any) {
     return {
-      data: null,
+      data: [],
       error: {
         message: err?.message ?? "Erro desconhecido",
         details: err,

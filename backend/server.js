@@ -6,6 +6,7 @@ import equipes from "./routes/equipes.js";
 import acionamentos from "./routes/acionamentos.js";
 import acionamentoEquipes from "./routes/acionamento_equipes.js";
 import codigosMO from "./routes/codigos_mo.js";
+import materiais from "./routes/materiais.js";
 
 const fastify = Fastify({ logger: true });
 
@@ -30,7 +31,9 @@ fastify.register(equipes);
 fastify.register(acionamentos);
 fastify.register(acionamentoEquipes);
 
+
 fastify.register(codigosMO);
+fastify.register(materiais);
 
 const start = async () => {
   try {
