@@ -107,7 +107,16 @@ const Equipes = () => {
         setError(error);
         setTeams([]);
       } else {
-        setTeams(data ?? []);
+        // Mapeia id_equipe para code, encarregado_nome para encarregado, etc.
+        const mapped = (data ?? []).map((item: any) => ({
+          code: item.code || item.nome_equipe || item.id_equipe || "",
+          encarregado: item.encarregado || item.encarregado_nome || "",
+          members: item.members || item.membros || [],
+          phone: item.phone || item.encarregado_telefone || "",
+          linha: item.linha,
+          ativa: item.ativa ?? (item.ativo === "S" || item.ativo === true),
+        }));
+        setTeams(mapped);
         setError(null);
       }
       setLoading(false);

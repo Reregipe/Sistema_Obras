@@ -136,7 +136,7 @@ export async function fetchEquipes(): Promise<DataSourceResult<any[]>> {
         };
       }
       const json = await res.json();
-      const arr = Array.isArray(json?.data?.data) ? json.data.data : [];
+      const arr = Array.isArray(json?.data) ? json.data : [];
       if (arr.length > 0) {
         return { data: arr, error: null };
       } else {
