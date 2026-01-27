@@ -1,3 +1,14 @@
+// Atualiza o status (ativo/inativo) de um material
+export async function updateMaterialStatus(codigo_material: string, ativo: string): Promise<any> {
+  const response = await fetch(`${BASE_URL}/materiais/${codigo_material}/status`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ativo }),
+  });
+  const json = await response.json();
+  if (json.success) return json.data;
+  throw new Error(json.error || 'Erro ao atualizar status do material');
+}
 // Camada de acesso à API para o frontend React
 // Utiliza fetch e centraliza tratamento de erro
 
