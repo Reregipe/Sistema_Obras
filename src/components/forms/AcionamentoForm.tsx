@@ -815,15 +815,21 @@ export const AcionamentoForm = ({ onSuccess, onCancel }: Props) => {
                     onChange={handleEmailAttachmentChange}
                     className="hidden"
                   />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="w-full justify-center gap-2"
-                    onClick={triggerEmailAttachmentInput}
-                  >
-                    <UploadCloud className="h-4 w-4" />
-                    Anexar e-mail (.msg)
-                  </Button>
+                  <div className="group flex flex-col items-center gap-2 rounded-2xl border border-dashed border-border/90 bg-muted/50 p-4 text-center transition hover:border-primary hover:text-primary focus-within:border-primary focus-within:text-primary">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full justify-center gap-2 text-sm"
+                      onClick={triggerEmailAttachmentInput}
+                    >
+                      <UploadCloud className="h-4 w-4" />
+                      Anexar e-mail (.msg)
+                    </Button>
+                    <p className="text-xs text-muted-foreground">
+                      Clique ou arraste o arquivo .msg para incluir o e-mail original
+                    </p>
+                    <p className="text-[11px] text-muted-foreground/70">Somente arquivos .msg são aceitos</p>
+                  </div>
                   <div className="flex items-center justify-between text-xs text-muted-foreground">
                     <span>
                       {emailAttachmentName
