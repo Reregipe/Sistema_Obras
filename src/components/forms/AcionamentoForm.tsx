@@ -154,6 +154,7 @@ export const AcionamentoForm = ({ onSuccess, onCancel }: Props) => {
 
   const modalidade = form.watch("modalidade");
 
+  const prevModalidade = useRef(modalidade);
   const equipeOptionsByLinha = useMemo<Record<EquipeLinha, EquipeOption[]>>(() => {
     const grouped: Record<EquipeLinha, EquipeOption[]> = { LM: [], LV: [] };
     equipes.forEach((eq) => {
@@ -231,6 +232,15 @@ export const AcionamentoForm = ({ onSuccess, onCancel }: Props) => {
     if (modalidade !== "LM+LV") return;
     form.setValue("id_equipe", getPrimarySelectedId());
   }, [modalidade, selectedEquipes, form]);
+
+  useEffect(() => {
+    if (prevModalidade.current === modalidade) return;
+    if (modalidade !== "LM+LV") {
+      resetEquipeSelection();
+      form.setValue("encarregado", "");
+    }
+    prevModalidade.current = modalidade;
+  }, [modalidade, form]);
 
   useEffect(() => {
     const load = async () => {
