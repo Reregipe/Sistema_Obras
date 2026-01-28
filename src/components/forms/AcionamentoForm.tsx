@@ -1,16 +1,16 @@
-import { useEffect, useMemo, useState } from "react";
+import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2 } from "lucide-react";
+import { Loader2, UploadCloud } from "lucide-react";
 
 type EquipeOption = {
   id_equipe: string;
@@ -46,9 +46,15 @@ interface Props {
 export const AcionamentoForm = ({ onSuccess, onCancel }: Props) => {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [equipes, setEquipes] = useState<EquipeOption[]>([]);
-  const [loadingEq, setLoadingEq] = useState(false);
-  const [encarregadoAuto, setEncarregadoAuto] = useState("");
+  const [equipes, setEquipes] = useState<EquipeOption[]>([]);
+  const [loadingEq, setLoadingEq] = useState(false);
+  const [encarregadoAuto, setEncarregadoAuto] = useState("");
+  const [emailAttachmentName, setEmailAttachmentName] = useState<string | null>(null);
+  const [emailAttachmentError, setEmailAttachmentError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const triggerEmailAttachmentInput = () => {
+    fileInputRef.current?.click();
+  };
 
   const form = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -104,7 +110,56 @@ export const AcionamentoForm = ({ onSuccess, onCancel }: Props) => {
     }
   };
 
-  const onSubmit = async (data: FormData) => {
+  const clearEmailAttachment = () => {
+    setEmailAttachmentName(null);
+    setEmailAttachmentError(null);
+    form.setValue("email_msg", "");
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  const handleEmailAttachmentChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      clearEmailAttachment();
+      return;
+    }
+
+    if (!file.name.toLowerCase().endsWith(".msg")) {
+      setEmailAttachmentError("Envie apenas arquivos no formato .msg.");
+      form.setValue("email_msg", "");
+      setEmailAttachmentName(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+      return;
+    }
+
+    setEmailAttachmentError(null);
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        form.setValue("email_msg", reader.result);
+        setEmailAttachmentName(file.name);
+      } else {
+        setEmailAttachmentError("Não foi possível ler o arquivo .msg.");
+        form.setValue("email_msg", "");
+        setEmailAttachmentName(null);
+      }
+    };
+    reader.onerror = () => {
+      setEmailAttachmentError("Não foi possível ler o arquivo .msg.");
+      form.setValue("email_msg", "");
+      setEmailAttachmentName(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const onSubmit = async (data: FormData) => {
     if (!user) return;
     try {
       const { error } = await supabase.from("acionamentos").insert([
@@ -128,7 +183,8 @@ export const AcionamentoForm = ({ onSuccess, onCancel }: Props) => {
       if (error) throw error;
       toast({ description: "Acionamento criado com sucesso." });
       onSuccess?.();
-      form.reset();
+      form.reset();
+      clearEmailAttachment();
     } catch (err: any) {
       toast({ description: err.message || "Erro ao criar acionamento.", variant: "destructive" });
     }
@@ -335,20 +391,62 @@ export const AcionamentoForm = ({ onSuccess, onCancel }: Props) => {
         <FormField
           control={form.control}
           name="email_msg"
-          render={({ field }) => (
+          render={() => (
             <FormItem>
-              <FormLabel>E-mail original</FormLabel>
+              <FormLabel>Anexo de e-mail (.msg)</FormLabel>
               <FormControl>
-                <Textarea {...field} placeholder="Cole o conteúdo ou o cabeçalho do e-mail que originou o acionamento" />
+                <div className="space-y-2">
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    accept=".msg"
+                    onChange={handleEmailAttachmentChange}
+                    className="hidden"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full justify-center gap-2"
+                    onClick={triggerEmailAttachmentInput}
+                  >
+                    <UploadCloud className="h-4 w-4" />
+                    Anexar e-mail (.msg)
+                  </Button>
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>
+                      {emailAttachmentName
+                        ? `Arquivo: ${emailAttachmentName}`
+                        : "Clique em anexar para carregar o e-mail original"}
+                    </span>
+                    {emailAttachmentName && (
+                      <button
+                        type="button"
+                        className="text-xs text-primary-foreground underline-offset-2 hover:underline"
+                        onClick={clearEmailAttachment}
+                      >
+                        Remover
+                      </button>
+                    )}
+                  </div>
+                  {emailAttachmentError && (
+                    <p className="text-xs text-destructive">{emailAttachmentError}</p>
+                  )}
+                </div>
               </FormControl>
-              <FormMessage />
             </FormItem>
           )}
         />
 
         <div className="flex gap-2 justify-end">
           {onCancel && (
-            <Button type="button" variant="outline" onClick={onCancel}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                clearEmailAttachment();
+                onCancel();
+              }}
+            >
               Cancelar
             </Button>
           )}
