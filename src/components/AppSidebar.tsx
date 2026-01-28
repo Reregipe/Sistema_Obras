@@ -8,6 +8,7 @@ import {
   Users,
   Settings,
   BarChart3,
+  type LucideIcon,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
@@ -24,16 +25,23 @@ import {
 } from "@/components/ui/sidebar";
 import { useIsMobile } from "@/hooks/use-mobile";
 
-const mainItems = [
-  { title: "Dashboard", url: "/", icon: Home },
+type SidebarNavItem = {
+  title: string;
+  url: string;
+  icon: LucideIcon;
+  hidden?: boolean;
+};
+
+const mainItems: SidebarNavItem[] = [
+  { title: "Dashboard", url: "/", icon: Home, hidden: true },
   { title: "Acionamentos", url: "/acionamentos", icon: AlertCircle },
   { title: "Obras", url: "/obras", icon: Wrench },
-  { title: "Medições", url: "/medicoes", icon: TrendingUp },
-  { title: "Relatórios", url: "/relatorios", icon: BarChart3 },
+  { title: "Medições", url: "/medicoes", icon: TrendingUp, hidden: true },
+  { title: "Relatórios", url: "/relatorios", icon: BarChart3, hidden: true },
   { title: "Analytics", url: "/analytics", icon: TrendingUp },
 ];
 
-const cadastrosItems = [
+const cadastrosItems: SidebarNavItem[] = [
   { title: "Materiais", url: "/materiais", icon: Package },
   { title: "Equipes", url: "/equipes", icon: Users },
     { title: "Códigos MO", url: "/codigos-mo", icon: FileText },
@@ -54,7 +62,7 @@ export function AppSidebar() {
           <SidebarGroupLabel>Menu Principal</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {mainItems.map((item) => {
+              {mainItems.filter((item) => !item.hidden).map((item) => {
                 const Icon = item.icon;
                 return (
                   <SidebarMenuItem key={item.title}>
