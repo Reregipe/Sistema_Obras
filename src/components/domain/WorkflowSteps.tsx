@@ -8165,67 +8165,6 @@ export const WorkflowSteps = () => {
 
 
 
-        <div className="mt-6 p-4 bg-muted rounded-lg">
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-
-            <div className="flex items-center gap-3">
-
-              <div className="p-2 bg-destructive/10 rounded-lg">
-
-                <AlertCircle className="w-5 h-5 text-destructive" />
-
-              </div>
-
-              <div>
-
-                <div className="text-2xl font-bold text-destructive">3</div>
-
-                <div className="text-xs text-muted-foreground">Itens Urgentes</div>
-
-              </div>
-
-            </div>
-
-            <div className="flex items-center gap-3">
-
-              <div className="p-2 bg-warning/10 rounded-lg">
-
-                <Clock className="w-5 h-5 text-warning" />
-
-              </div>
-
-              <div>
-
-                <div className="text-2xl font-bold text-warning">5</div>
-
-                <div className="text-xs text-muted-foreground">Itens Atrasados</div>
-
-              </div>
-
-            </div>
-
-            <div className="flex items-center gap-3">
-
-              <div className="p-2 bg-primary/10 rounded-lg">
-
-                <CheckCircle2 className="w-5 h-5 text-primary" />
-
-              </div>
-
-              <div>
-
-                <div className="text-2xl font-bold text-primary">60</div>
-
-                <div className="text-xs text-muted-foreground">Total em Andamento</div>
-
-              </div>
-
-            </div>
-
-          </div>
-
-        </div>
 
 
       </CardContent>
