@@ -26,6 +26,13 @@ const parseDecimal = (value) => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
+const workflowStages = ["planejamento", "execucao", "medicao", "tci", "aprovacao", "faturamento"];
+const getNextStage = (currentStatus: string) => {
+  const index = workflowStages.indexOf(currentStatus);
+  if (index === -1 || index === workflowStages.length - 1) return currentStatus;
+  return workflowStages[index + 1];
+};
+
 const Obras = () => {
   const { toast } = useToast();
                       // Estado para tipo de mão de obra (linha viva/morta)
@@ -61,10 +68,14 @@ const Obras = () => {
     dataNotaFiscal: "",
     observacoes: "",
   });
+  const [maoDeObraEnviadaSalva, setMaoDeObraEnviadaSalva] = useState<any[]>([]);
+  const [negociacaoStatus, setNegociacaoStatus] = useState<"negociacao" | "finalizado">("negociacao");
   const [modalObraMedicaoOpen, setModalObraMedicaoOpen] = useState(false);
   const [modalMedicoesOpen, setModalMedicoesOpen] = useState(false);
   const [modalMedicaoParcialOpen, setModalMedicaoParcialOpen] = useState(false);
-  const [maoDeObraEnviadaSalva, setMaoDeObraEnviadaSalva] = useState<any[]>([]);
+  const [modalTciOpen, setModalTciOpen] = useState(false);
+  const [obraTciSelecionada, setObraTciSelecionada] = useState<any>(null);
+  const [tciObservacoes, setTciObservacoes] = useState("");
 
   // Busca dinâmica dos códigos de mão de obra do Supabase
   useEffect(() => {
@@ -171,11 +182,22 @@ const Obras = () => {
       quantidadeTotal: novoMOEnv.quantidadeInstalada,
     };
     const novaLista = [...(obraMedicaoSelecionada.maoDeObraUtilizada || []), novoItem];
-    setObraMedicaoSelecionada({
+    const updatedObra = {
       ...obraMedicaoSelecionada,
       maoDeObraUtilizada: novaLista,
-    });
+    };
+    const avancadoStatus =
+      negociacaoStatus === "finalizado"
+        ? getNextStage(updatedObra.status || "medicao")
+        : updatedObra.status;
+    const finalObra = { ...updatedObra, status: avancadoStatus };
+    setObraMedicaoSelecionada(finalObra);
     setMaoDeObraEnviadaSalva(novaLista);
+    setObras((prev) =>
+      prev.map((obra) =>
+        obra.obra === finalObra.obra ? { ...obra, maoDeObraUtilizada: novaLista, status: finalObra.status } : obra
+      )
+    );
     setNovoMOEnv({ codigo: '', descricao: '', unidade: '', ups: '', quantidadeInstalada: 1 });
   };
 
@@ -188,6 +210,37 @@ const Obras = () => {
     };
     setMaoDeObraRecebida((prev) => [...prev, novoItem]);
     setNovoMORecebida({ codigo: '', descricao: '', unidade: '', ups: '', quantidadeInstalada: 1 });
+  };
+
+  const handleRemoverMaoDeObraEnviada = (index: number) => {
+    if (!obraMedicaoSelecionada) return;
+    const novaLista = maoDeObraUtilizada.filter((_, idx) => idx !== index);
+    const updatedObra = { ...obraMedicaoSelecionada, maoDeObraUtilizada: novaLista };
+    setObraMedicaoSelecionada(updatedObra);
+    setMaoDeObraEnviadaSalva(novaLista);
+    setObras((prev) =>
+      prev.map((obra) => (obra.obra === updatedObra.obra ? { ...obra, maoDeObraUtilizada: novaLista } : obra))
+    );
+  };
+
+  const handleRemoverMaoDeObraRecebida = (index: number) => {
+    setMaoDeObraRecebida((prev) => prev.filter((_, idx) => idx !== index));
+  };
+
+  const handleSalvarTratativa = () => {
+    if (!obraTciSelecionada) return;
+    const atualizado = { ...obraTciSelecionada, observacoesTci: tciObservacoes };
+    setObras((prev) => prev.map((obra) => (obra.obra === atualizado.obra ? atualizado : obra)));
+    toast({
+      title: "Tratativa registrada",
+      description: `Observações salvas para ${atualizado.obra}.`,
+      variant: "success",
+    });
+  };
+
+  const handleSelectObraTci = (obra: any) => {
+    setObraTciSelecionada(obra);
+    setTciObservacoes(obra.observacoesTci || "");
   };
 
   useEffect(() => {
@@ -271,9 +324,18 @@ const Obras = () => {
       });
       return;
     }
+    const atualizado = {
+      ...obraMedicaoSelecionada,
+      negociacaoStatus,
+    };
+    const avancadoStatus =
+      negociacaoStatus === "finalizado"
+        ? getNextStage(obraMedicaoSelecionada.status || "medicao")
+        : obraMedicaoSelecionada.status;
+    const obraAtualizadaComStatus = { ...atualizado, status: avancadoStatus };
     const payload = {
-      obra: obraMedicaoSelecionada.obra,
-      mediçõesParciais: medicoesParciais[obraMedicaoSelecionada.obra] || [],
+      obra: obraAtualizadaComStatus.obra,
+      mediçõesParciais: medicoesParciais[obraAtualizadaComStatus.obra] || [],
       maoDeObraEnviada: maoDeObraEnviadaSalva,
       maoDeObraRecebida: maoDeObraRecebida,
       totalEnviada: maoDeObraEnviadaSalva.reduce((acc, mo) => acc + calcularValoresMo(mo).valorTotal, 0),
@@ -281,8 +343,17 @@ const Obras = () => {
       totalRecebida: totalValorMaoDeObraRecebida,
       totalConsolidado: valorFinalRecebido,
       valorFaltante,
+      negociacaoStatus,
       savedAt: new Date().toISOString(),
     };
+    setObraMedicaoSelecionada(obraAtualizadaComStatus);
+    setObras((prev) =>
+      prev.map((obra) =>
+        obra.obra === obraAtualizadaComStatus.obra
+          ? { ...obra, maoDeObraUtilizada: obraAtualizadaComStatus.maoDeObraUtilizada, status: obraAtualizadaComStatus.status }
+          : obra
+      )
+    );
     setMedicoesSalvas(payload);
     setSalvoRecentemente(true);
     toast({
@@ -376,6 +447,25 @@ const Obras = () => {
       dataTerminoObra: ""
     },
   ]);
+ 
+  useEffect(() => {
+    if (!modalObraMedicaoOpen) return;
+    setNegociacaoStatus(obraMedicaoSelecionada?.negociacaoStatus || "negociacao");
+  }, [modalObraMedicaoOpen, obraMedicaoSelecionada]);
+
+  const obrasEmTci = useMemo(() => obras.filter((obra) => obra.status === "tci"), [obras]);
+
+  useEffect(() => {
+    if (!modalTciOpen) return;
+    if (obrasEmTci.length === 0) {
+      setObraTciSelecionada(null);
+      setTciObservacoes("");
+      return;
+    }
+    const first = obrasEmTci[0];
+    setObraTciSelecionada(first);
+    setTciObservacoes(first.observacoesTci || "");
+  }, [modalTciOpen, obrasEmTci]);
 
   // Filtra obras sem marco inicial (data de início vazia, null, undefined ou só espaços)
   const obrasSemMarcoInicial = useMemo(
@@ -449,16 +539,6 @@ const Obras = () => {
       valorPrevisto: ""
     });
   };
-
-  const kpis = useMemo(
-    () => [
-      { label: "Planejamento", value: "4" },
-      { label: "Execução", value: "7" },
-      { label: "TCI pendente", value: "2" },
-      { label: "Prontas p/ NF", value: "3" },
-    ],
-    [],
-  );
 
   const etapas = useMemo(
     () => [
@@ -714,17 +794,6 @@ const Obras = () => {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-6">
-        {kpis.map((item) => (
-          <Card key={item.label}>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm text-muted-foreground">{item.label}</CardTitle>
-            </CardHeader>
-            <CardContent className="text-3xl font-bold">{item.value}</CardContent>
-          </Card>
-        ))}
-      </div>
-
       <Card className="mb-6">
         <CardHeader className="pb-3">
           <CardTitle>Régua de etapas (Obras longo prazo)</CardTitle>
@@ -736,7 +805,7 @@ const Obras = () => {
             if (etapa.title === "Planejamento") clickHandler = () => setPlanejamentoModalOpen(true);
             if (etapa.title === "Execução") clickHandler = () => setExecucaoModalOpen(true);
             if (etapa.title === "Medições") clickHandler = () => setModalMedicoesOpen(true);
-            if (etapa.title === "TCI / Tratativas") clickHandler = () => {/* TODO: handler TCI */};
+            if (etapa.title === "TCI / Tratativas") clickHandler = () => setModalTciOpen(true);
             if (etapa.title === "Aprovação") clickHandler = () => {/* TODO: handler Aprovação */};
             if (etapa.title === "Faturamento") clickHandler = () => {/* TODO: handler Faturamento */};
             return (
@@ -791,7 +860,7 @@ const Obras = () => {
         </Dialog>
         {/* Modal de detalhes/consolidação da obra selecionada no modal de medições */}
         <Dialog open={modalObraMedicaoOpen} onOpenChange={setModalObraMedicaoOpen}>
-          <DialogContent className="max-w-5xl">
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Consolidação de Medições - {obraMedicaoSelecionada?.obra}</DialogTitle>
             </DialogHeader>
@@ -805,6 +874,34 @@ const Obras = () => {
                     <p>Medições parciais lançadas: R$ {totalMedicoesParciais.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</p>
                     <p>Valor faltante: R$ {valorFaltante.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</p>
                     <p>Mão de obra enviada: R$ {totalValorMaoDeObra.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</p>
+                  </div>
+                  <div className="mt-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Status da negociação</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {[
+                        { label: "Valor será finalizado", value: "finalizado" },
+                        { label: "Ainda em negociação", value: "negociacao" },
+                      ].map((option) => (
+                        <label
+                          key={option.value}
+                          className={`flex items-center gap-2 px-3 py-2 text-sm border rounded-full cursor-pointer transition ${
+                            negociacaoStatus === option.value
+                              ? "border-primary bg-primary/10 text-primary"
+                              : "border-border text-muted-foreground"
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="negociacaoStatus"
+                            value={option.value}
+                            checked={negociacaoStatus === option.value}
+                            onChange={() => setNegociacaoStatus(option.value as "negociacao" | "finalizado")}
+                            className="hidden"
+                          />
+                          <span>{option.label}</span>
+                        </label>
+                      ))}
+                    </div>
                   </div>
                   {salvoRecentemente && (
                     <div className="inline-flex items-center gap-1 mt-3 px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-semibold self-start">
@@ -884,56 +981,67 @@ const Obras = () => {
                   <div className="overflow-x-auto">
                     <table className="min-w-full border text-xs">
                       <thead>
-                        <tr className="bg-muted">
-                          <th className="px-2 py-1 border text-center">ITEM</th>
-                          <th className="px-2 py-1 border text-center">Tipo</th>
-                          <th className="px-2 py-1 border text-center">Cód</th>
-                          <th className="px-2 py-1 border">Mão de Obra</th>
-                          <th className="px-2 py-1 border text-center">Un</th>
-                          <th className="px-2 py-1 border text-center">UPS</th>
-                          <th className="px-2 py-1 border text-center">Valor unit. (R$)</th>
-                          <th className="px-2 py-1 border text-center">Qtd</th>
-                          <th className="px-2 py-1 border text-center">Total (R$)</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {maoDeObraUtilizada.map((mo, idx) => {
-                          const valores = calcularValoresMo(mo);
-                          return (
-                            <tr key={mo.codigo || `${idx}-${mo.descricao}`}>
-                              <td className="px-2 py-1 border text-center">{idx + 1}</td>
-                              <td className="px-2 py-1 border text-center">{valores.tipo || "-"}</td>
-                              <td className="px-2 py-1 border text-center">{mo.codigo || "-"}</td>
-                              <td className="px-2 py-1 border">{mo.descricao}</td>
-                              <td className="px-2 py-1 border text-center">{valores.unidade}</td>
-                              <td className="px-2 py-1 border text-center">
-                                {valores.valorUnitarioFracao.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 3 })}
-                              </td>
-                              <td className="px-2 py-1 border text-center">
-                                {valores.valorUnitarioConfigurado.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                              </td>
-                              <td className="px-2 py-1 border text-center">
-                                {Number.isFinite(valores.quantidade) ? valores.quantidade.toFixed(2) : "-"}
-                              </td>
-                              <td className="px-2 py-1 border text-center">
-                                {valores.valorTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                              </td>
-                            </tr>
-                          );
-                        })}
+                          <tr className="bg-muted">
+                            <th className="px-2 py-1 border text-center">ITEM</th>
+                            <th className="px-2 py-1 border text-center">Tipo</th>
+                            <th className="px-2 py-1 border text-center">Cód</th>
+                            <th className="px-2 py-1 border">Mão de Obra</th>
+                            <th className="px-2 py-1 border text-center">Un</th>
+                            <th className="px-2 py-1 border text-center">UPS</th>
+                            <th className="px-2 py-1 border text-center">Valor unit. (R$)</th>
+                            <th className="px-2 py-1 border text-center">Qtd</th>
+                            <th className="px-2 py-1 border text-center">Total (R$)</th>
+                            <th className="px-2 py-1 border text-center">Ações</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {maoDeObraUtilizada.map((mo, idx) => {
+                            const valores = calcularValoresMo(mo);
+                            return (
+                              <tr key={mo.codigo || `${idx}-${mo.descricao}`}>
+                                <td className="px-2 py-1 border text-center">{idx + 1}</td>
+                                <td className="px-2 py-1 border text-center">{valores.tipo || "-"}</td>
+                                <td className="px-2 py-1 border text-center">{mo.codigo || "-"}</td>
+                                <td className="px-2 py-1 border">{mo.descricao}</td>
+                                <td className="px-2 py-1 border text-center">{valores.unidade}</td>
+                                <td className="px-2 py-1 border text-center">
+                                  {valores.valorUnitarioFracao.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 3 })}
+                                </td>
+                                <td className="px-2 py-1 border text-center">
+                                  {valores.valorUnitarioConfigurado.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                                </td>
+                                <td className="px-2 py-1 border text-center">
+                                  {Number.isFinite(valores.quantidade) ? valores.quantidade.toFixed(2) : "-"}
+                                </td>
+                                <td className="px-2 py-1 border text-center">
+                                  {valores.valorTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                                </td>
+                                <td className="px-2 py-1 border text-center">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleRemoverMaoDeObraEnviada(idx)}
+                                  >
+                                    Remover
+                                  </Button>
+                                </td>
+                              </tr>
+                            );
+                          })}
                         {/* Rodapé de total */}
-                        <tr>
-                          <td className="px-2 py-1 border text-center" colSpan={8} style={{ textAlign: 'right', fontWeight: 'bold' }}>
-                            R$
-                          </td>
-                          <td className="px-2 py-1 border text-center" style={{ fontWeight: 'bold' }}>
-                            {totalValorMaoDeObra.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
+                          <tr>
+                            <td className="px-2 py-1 border text-center" colSpan={9} style={{ textAlign: 'right', fontWeight: 'bold' }}>
+                              R$
+                            </td>
+                            <td className="px-2 py-1 border text-center" style={{ fontWeight: 'bold' }}>
+                              {totalValorMaoDeObra.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            </td>
+                            <td className="px-2 py-1 border text-center" />
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
-                </div>
                 {/* Bloco duplicado independente */}
                 <div className="mt-8 p-4 border rounded-lg bg-muted">
                   <h4 className="text-base font-bold mb-2">Mão de Obra Recebida</h4>
@@ -973,51 +1081,62 @@ const Obras = () => {
                   <div className="overflow-x-auto">
                     <table className="min-w-full border text-xs">
                       <thead>
-                        <tr className="bg-muted">
-                          <th className="px-2 py-1 border text-center">ITEM</th>
-                          <th className="px-2 py-1 border text-center">Tipo</th>
-                          <th className="px-2 py-1 border text-center">Cód</th>
-                          <th className="px-2 py-1 border">Mão de Obra</th>
-                          <th className="px-2 py-1 border text-center">Un</th>
-                          <th className="px-2 py-1 border text-center">UPS</th>
-                          <th className="px-2 py-1 border text-center">Valor unit. (R$)</th>
-                          <th className="px-2 py-1 border text-center">Qtd</th>
-                          <th className="px-2 py-1 border text-center">Total (R$)</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {maoDeObraRecebida.map((mo, idx) => {
-                          const valores = calcularValoresMo(mo);
-                          return (
-                            <tr key={mo.codigo || `${idx}-${mo.descricao}`}>
-                              <td className="px-2 py-1 border text-center">{idx + 1}</td>
-                              <td className="px-2 py-1 border text-center">{valores.tipo || "-"}</td>
-                              <td className="px-2 py-1 border text-center">{mo.codigo || "-"}</td>
-                              <td className="px-2 py-1 border">{mo.descricao}</td>
-                              <td className="px-2 py-1 border text-center">{valores.unidade}</td>
-                              <td className="px-2 py-1 border text-center">
-                                {valores.valorUnitarioFracao.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 3 })}
-                              </td>
-                              <td className="px-2 py-1 border text-center">
-                                {valores.valorUnitarioConfigurado.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                              </td>
-                              <td className="px-2 py-1 border text-center">
-                                {Number.isFinite(valores.quantidade) ? valores.quantidade.toFixed(2) : "-"}
-                              </td>
-                              <td className="px-2 py-1 border text-center">
-                                {valores.valorTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                        <tr>
-                          <td className="px-2 py-1 border text-center" colSpan={8} style={{ textAlign: 'right', fontWeight: 'bold' }}>
-                            R$
-                          </td>
-                          <td className="px-2 py-1 border text-center" style={{ fontWeight: 'bold' }}>
-                            {totalValorMaoDeObraRecebida.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                          </td>
-                        </tr>
+                          <tr className="bg-muted">
+                            <th className="px-2 py-1 border text-center">ITEM</th>
+                            <th className="px-2 py-1 border text-center">Tipo</th>
+                            <th className="px-2 py-1 border text-center">Cód</th>
+                            <th className="px-2 py-1 border">Mão de Obra</th>
+                            <th className="px-2 py-1 border text-center">Un</th>
+                            <th className="px-2 py-1 border text-center">UPS</th>
+                            <th className="px-2 py-1 border text-center">Valor unit. (R$)</th>
+                            <th className="px-2 py-1 border text-center">Qtd</th>
+                            <th className="px-2 py-1 border text-center">Total (R$)</th>
+                            <th className="px-2 py-1 border text-center">Ações</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {maoDeObraRecebida.map((mo, idx) => {
+                            const valores = calcularValoresMo(mo);
+                            return (
+                              <tr key={mo.codigo || `${idx}-${mo.descricao}`}>
+                                <td className="px-2 py-1 border text-center">{idx + 1}</td>
+                                <td className="px-2 py-1 border text-center">{valores.tipo || "-"}</td>
+                                <td className="px-2 py-1 border text-center">{mo.codigo || "-"}</td>
+                                <td className="px-2 py-1 border">{mo.descricao}</td>
+                                <td className="px-2 py-1 border text-center">{valores.unidade}</td>
+                                <td className="px-2 py-1 border text-center">
+                                  {valores.valorUnitarioFracao.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 3 })}
+                                </td>
+                                <td className="px-2 py-1 border text-center">
+                                  {valores.valorUnitarioConfigurado.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                                </td>
+                                <td className="px-2 py-1 border text-center">
+                                  {Number.isFinite(valores.quantidade) ? valores.quantidade.toFixed(2) : "-"}
+                                </td>
+                                <td className="px-2 py-1 border text-center">
+                                  {valores.valorTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                                </td>
+                                <td className="px-2 py-1 border text-center">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleRemoverMaoDeObraRecebida(idx)}
+                                  >
+                                    Remover
+                                  </Button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                          <tr>
+                            <td className="px-2 py-1 border text-center" colSpan={9} style={{ textAlign: 'right', fontWeight: 'bold' }}>
+                              R$
+                            </td>
+                            <td className="px-2 py-1 border text-center" style={{ fontWeight: 'bold' }}>
+                              {totalValorMaoDeObraRecebida.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            </td>
+                            <td className="px-2 py-1 border text-center" />
+                          </tr>
                       </tbody>
                     </table>
                   </div>
@@ -1028,6 +1147,64 @@ const Obras = () => {
               <Button variant="secondary" onClick={handleSalvarMedicoes}>Salvar</Button>
               <Button variant="outline" onClick={() => setModalObraMedicaoOpen(false)}>Fechar</Button>
             </DialogFooter>
+          </DialogContent>
+        </Dialog>
+        {/* Modal TCI / Tratativas */}
+        <Dialog open={modalTciOpen} onOpenChange={setModalTciOpen}>
+          <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>TCI / Tratativas</DialogTitle>
+              <p className="text-sm text-muted-foreground mt-1">Registre ajustes, pendências e tratativas das obras que passaram pela consolidação.</p>
+            </DialogHeader>
+            <div className="space-y-4">
+              {obrasEmTci.length === 0 ? (
+                <div className="py-6 text-center text-sm text-muted-foreground">Nenhuma obra em TCI no momento.</div>
+              ) : (
+                <div className="grid gap-3">
+                  {obrasEmTci.map((obra) => (
+                    <Card
+                      key={obra.obra}
+                      className={`border shadow-sm cursor-pointer transition-colors ${
+                        obraTciSelecionada?.obra === obra.obra ? "border-primary bg-primary/5" : "hover:border-primary"
+                      }`}
+                      onClick={() => handleSelectObraTci(obra)}
+                    >
+                      <CardHeader className="py-2">
+                        <CardTitle className="text-base font-bold">{obra.obra}</CardTitle>
+                        <CardDescription>OS: {obra.os} · {obra.cidade}</CardDescription>
+                      </CardHeader>
+                      <CardContent className="text-sm flex flex-wrap gap-4">
+                        <Badge variant="secondary">{obra.status}</Badge>
+                        <span className="text-muted-foreground">Gestor: {obra.gestor || "—"}</span>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+              {obraTciSelecionada && (
+                <div className="rounded-lg border p-4 bg-white shadow-sm space-y-3">
+                  <div>
+                    <h3 className="text-lg font-semibold">{obraTciSelecionada.obra}</h3>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {obraTciSelecionada.os} · {obraTciSelecionada.cidade}
+                    </p>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Observações</label>
+                    <textarea
+                      value={tciObservacoes}
+                      onChange={(e) => setTciObservacoes(e.target.value)}
+                      className="w-full border rounded-md px-3 py-2 min-h-[120px] text-sm focus:outline-none focus:ring"
+                      placeholder="Descreva pendências, documentos solicitados ou tratativas realizadas..."
+                    />
+                  </div>
+                  <div className="flex gap-2 justify-end">
+                    <Button variant="outline" onClick={() => setModalTciOpen(false)}>Fechar</Button>
+                    <Button onClick={handleSalvarTratativa}>Salvar tratativa</Button>
+                  </div>
+                </div>
+              )}
+            </div>
           </DialogContent>
         </Dialog>
         {/* Modal de obras em execução */}
@@ -1247,57 +1424,6 @@ const Obras = () => {
         </Dialog>
       </Card>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Lista de obras</CardTitle>
-              <CardDescription>Obras de longo prazo com OS interna e status de TCI/Aprovação.</CardDescription>
-            </div>
-            <Button variant="ghost" size="sm" className="gap-2">
-              <ArrowRight className="h-4 w-4" />
-              Filtros avançados (breve)
-            </Button>
-          </div>
-        </CardHeader>
-        <Separator />
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Obra (Energisa)</TableHead>
-                <TableHead>OS (interna)</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>TCI</TableHead>
-                <TableHead>Gestor</TableHead>
-                <TableHead>Cidade</TableHead>
-                <TableHead>Início</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {obras.map((item) => (
-                <TableRow
-                  key={item.obra}
-                  className="cursor-pointer hover:bg-muted"
-                  onClick={() => navigate(`/obras/${item.obra}`)}
-                >
-                  <TableCell className="font-semibold">{item.obra}</TableCell>
-                  <TableCell>{item.os}</TableCell>
-                  <TableCell>
-                    <Badge variant="secondary">{item.status}</Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={item.tci === "validado" ? "default" : "outline"}>{item.tci}</Badge>
-                  </TableCell>
-                  <TableCell>{item.gestor}</TableCell>
-                  <TableCell>{item.cidade}</TableCell>
-                  <TableCell>{item.inicio}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
     </div>
   );
 };
