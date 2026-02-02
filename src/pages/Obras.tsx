@@ -81,6 +81,7 @@ const Obras = () => {
     string,
     { tipo: string; data: string; observacoes: string; anexo?: string | null }[]
   >>({});
+  const [tciTab, setTciTab] = useState<"registro" | "detalhes">("registro");
   const [registroTipo, setRegistroTipo] = useState<
     "DITAIS" | "APR" | "ESCANEAR PROJETO AS BUILTS" | "BOOK" | "TCI APRESENTADO" | "TCI APROVADO"
   >("DITAIS");
@@ -1230,56 +1231,56 @@ const Obras = () => {
             </DialogHeader>
             {obraTciSelecionada && (
               <div className="space-y-4">
-              <div className="rounded-2xl border border-muted/60 bg-white p-4 shadow-sm">
-                <div className="flex gap-2 rounded-full border border-muted/70 bg-muted/70 p-1">
-                  {["Registro", "Detalhes"].map((tab) => (
-                    <button
-                      key={tab}
-                      className={`flex-1 rounded-full px-3 py-2 text-sm font-semibold transition ${
-                        tab === "Registro"
-                          ? "bg-foreground text-white shadow-sm"
-                          : "text-muted-foreground"
-                      }`}
-                    >
-                      {tab}
-                    </button>
-                  ))}
-                </div>
-              </div>
-                <div className="rounded-2xl border bg-white p-4 space-y-3">
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <div className="space-y-1">
-                      <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                        Tipo de registro
-                      </label>
-                      <select
-                        value={registroTipo}
-                        onChange={(e) => setRegistroTipo(e.target.value as typeof registroTipo)}
-                        className="w-full border rounded px-3 py-2 text-sm"
+                <div className="rounded-2xl border border-muted/60 bg-white p-4 shadow-sm">
+                  <div className="flex gap-2 rounded-full border border-muted/70 bg-muted/70 p-1">
+                    {["registro", "detalhes"].map((tab) => (
+                      <button
+                        key={tab}
+                        className={`flex-1 rounded-full px-3 py-2 text-sm font-semibold transition ${
+                          tab === tciTab ? "bg-foreground text-white shadow-sm" : "text-muted-foreground"
+                        }`}
+                        onClick={() => setTciTab(tab as "registro" | "detalhes")}
                       >
-                        <option value="DITAIS">DITAIS</option>
-                        <option value="APR">APR</option>
-                        <option value="ESCANEAR PROJETO AS BUILTS">ESCANEAR PROJETO AS BUILTS</option>
-                        <option value="BOOK">BOOK</option>
-                        <option value="TCI APRESENTADO">TCI APRESENTADO</option>
-                        <option value="TCI APROVADO">TCI APROVADO</option>
-                      </select>
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                        Data/hora do envio
-                      </label>
-                      <Input
-                        type="datetime-local"
-                        value={registroData}
-                        onChange={(e) => setRegistroData(e.target.value)}
-                        className="w-full"
-                      />
-                    </div>
+                        {tab === "registro" ? "Registro" : "Detalhes"}
+                      </button>
+                    ))}
                   </div>
-                  <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Observações
-                  </label>
+                </div>
+                {tciTab === "registro" ? (
+                  <div className="rounded-2xl border bg-white p-4 space-y-3">
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div className="space-y-1">
+                        <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                          Tipo de registro
+                        </label>
+                        <select
+                          value={registroTipo}
+                          onChange={(e) => setRegistroTipo(e.target.value as typeof registroTipo)}
+                          className="w-full border rounded px-3 py-2 text-sm"
+                        >
+                          <option value="DITAIS">DITAIS</option>
+                          <option value="APR">APR</option>
+                          <option value="ESCANEAR PROJETO AS BUILTS">ESCANEAR PROJETO AS BUILTS</option>
+                          <option value="BOOK">BOOK</option>
+                          <option value="TCI APRESENTADO">TCI APRESENTADO</option>
+                          <option value="TCI APROVADO">TCI APROVADO</option>
+                        </select>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                          Data/hora do envio
+                        </label>
+                        <Input
+                          type="datetime-local"
+                          value={registroData}
+                          onChange={(e) => setRegistroData(e.target.value)}
+                          className="w-full"
+                        />
+                      </div>
+                    </div>
+                    <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Observações
+                    </label>
                     <textarea
                       value={tciObservacoes}
                       onChange={(e) => setTciObservacoes(e.target.value)}
@@ -1308,16 +1309,16 @@ const Obras = () => {
                         {tciAnexoName && <span className="text-xs text-muted-foreground">{tciAnexoName}</span>}
                       </div>
                     </div>
-                  <div className="flex justify-end gap-2">
-                    <Button variant="outline" onClick={() => setModalTciDetalheOpen(false)}>Fechar</Button>
-                    <Button onClick={handleSalvarTratativa}>Salvar tratativa</Button>
+                    <div className="flex justify-end gap-2">
+                      <Button variant="outline" onClick={() => setModalTciDetalheOpen(false)}>Fechar</Button>
+                      <Button onClick={handleSalvarTratativa}>Salvar tratativa</Button>
+                    </div>
                   </div>
-                </div>
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Registros salvos</p>
-                  {registrosTratativas[obraTciSelecionada.obra]?.length ? (
-                    <div className="space-y-2">
-                      {registrosTratativas[obraTciSelecionada.obra].map((registro, idx) => (
+                ) : (
+                  <div className="rounded-2xl border bg-white p-4 space-y-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Registros salvos</p>
+                    {registrosTratativas[obraTciSelecionada.obra]?.length ? (
+                      registrosTratativas[obraTciSelecionada.obra].map((registro, idx) => (
                         <div key={`${registro.data}-${idx}`} className="rounded-lg border border-muted/60 bg-muted/40 p-3 text-sm">
                           <div className="flex items-center justify-between text-xs text-muted-foreground">
                             <span>{registro.tipo}</span>
@@ -1328,14 +1329,17 @@ const Obras = () => {
                             <p className="text-xs text-muted-foreground mt-1">Anexo: {registro.anexo}</p>
                           )}
                         </div>
-                      ))}
+                      ))
+                    ) : (
+                      <div className="rounded-lg border border-dashed border-muted/60 bg-muted/20 p-3 text-xs text-muted-foreground">
+                        Nenhum registro ainda. As tratativas salvas aparecerão aqui.
+                      </div>
+                    )}
+                    <div className="flex justify-end gap-2">
+                      <Button variant="outline" onClick={() => setModalTciDetalheOpen(false)}>Fechar</Button>
                     </div>
-                  ) : (
-                    <div className="rounded-lg border border-dashed border-muted/60 bg-muted/20 p-3 text-xs text-muted-foreground">
-                      Nenhum registro ainda. As tratativas salvas aparecerão aqui.
-                    </div>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
             )}
           </DialogContent>
