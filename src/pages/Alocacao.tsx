@@ -5,13 +5,9 @@ import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
+import { equipesCatalog } from "@/data/equipesCatalog";
 
-const DEFAULT_EQUIPES = [
-  "Equipe LV 01",
-  "Equipe LM 02",
-  "Equipe Análise",
-  "Equipe Campo Extra",
-];
+const DEFAULT_EQUIPES = equipesCatalog.map((team) => team.code);
 
 const obras = [
   "OBRA-PLANEJAMENTO",
