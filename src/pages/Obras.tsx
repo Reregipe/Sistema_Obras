@@ -77,6 +77,7 @@ const Obras = () => {
   const [obraTciSelecionada, setObraTciSelecionada] = useState<any>(null);
   const [tciObservacoes, setTciObservacoes] = useState("");
   const [modalTciDetalheOpen, setModalTciDetalheOpen] = useState(false);
+  const [modalAprovacaoOpen, setModalAprovacaoOpen] = useState(false);
   const [registrosTratativas, setRegistrosTratativas] = useState<Record<
     string,
     { tipo: string; data: string; observacoes: string; anexo?: string | null }[]
@@ -489,6 +490,7 @@ const Obras = () => {
   }, [modalObraMedicaoOpen, obraMedicaoSelecionada]);
 
   const obrasEmTci = useMemo(() => obras.filter((obra) => obra.status === "tci"), [obras]);
+  const obrasEmAprovacao = useMemo(() => obras.filter((obra) => obra.status === "aprovacao"), [obras]);
 
   useEffect(() => {
     if (!modalTciOpen) return;
@@ -840,8 +842,8 @@ const Obras = () => {
             if (etapa.title === "Planejamento") clickHandler = () => setPlanejamentoModalOpen(true);
             if (etapa.title === "Execução") clickHandler = () => setExecucaoModalOpen(true);
             if (etapa.title === "Medições") clickHandler = () => setModalMedicoesOpen(true);
-            if (etapa.title === "TCI / Tratativas") clickHandler = () => setModalTciOpen(true);
-            if (etapa.title === "Aprovação") clickHandler = () => {/* TODO: handler Aprovação */};
+      if (etapa.title === "TCI / Tratativas") clickHandler = () => setModalTciOpen(true);
+      if (etapa.title === "Aprovação") clickHandler = () => setModalAprovacaoOpen(true);
             if (etapa.title === "Faturamento") clickHandler = () => {/* TODO: handler Faturamento */};
             return (
               <div
@@ -1347,6 +1349,36 @@ const Obras = () => {
                 )}
               </div>
             )}
+          </DialogContent>
+        </Dialog>
+        <Dialog open={modalAprovacaoOpen} onOpenChange={setModalAprovacaoOpen}>
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Aprovação</DialogTitle>
+              <p className="text-sm text-muted-foreground mt-1">Finalize o fluxo e acompanhe as obras liberadas para faturamento.</p>
+            </DialogHeader>
+            <div className="space-y-4 pb-4">
+              {obrasEmAprovacao.length === 0 ? (
+                <div className="py-6 text-center text-sm text-muted-foreground">Nenhuma obra aguardando aprovação.</div>
+              ) : (
+                obrasEmAprovacao.map((obra) => (
+                  <Card key={obra.obra} className="rounded-2xl border border-primary/70 bg-white px-5 py-4 shadow-sm">
+                    <div className="text-xs uppercase tracking-wide text-muted-foreground mb-1">Obra em foco</div>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-lg font-semibold text-foreground">{obra.obra}</div>
+                        <div className="text-sm text-muted-foreground">OS: {obra.os} · {obra.cidade}</div>
+                      </div>
+                      <Badge variant="secondary">{obra.status}</Badge>
+                    </div>
+                    <div className="mt-3 flex items-center gap-3 text-sm">
+                      <span className="rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-xs uppercase tracking-wide text-primary">tci</span>
+                      <span className="text-muted-foreground">Gestor: {obra.gestor || "pendente"}</span>
+                    </div>
+                  </Card>
+                ))
+              )}
+            </div>
           </DialogContent>
         </Dialog>
         {/* Modal de obras em execução */}
