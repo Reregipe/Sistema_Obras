@@ -77,6 +77,10 @@ const Obras = () => {
   const [obraTciSelecionada, setObraTciSelecionada] = useState<any>(null);
   const [tciObservacoes, setTciObservacoes] = useState("");
   const [modalTciDetalheOpen, setModalTciDetalheOpen] = useState(false);
+  const [registrosTratativas, setRegistrosTratativas] = useState<Record<
+    string,
+    { tipo: string; data: string; observacoes: string; anexo?: string | null }[]
+  >>({});
   const [registroTipo, setRegistroTipo] = useState<
     "DITAIS" | "APR" | "ESCANEAR PROJETO AS BUILTS" | "BOOK" | "TCI APRESENTADO" | "TCI APROVADO"
   >("DITAIS");
@@ -239,6 +243,21 @@ const Obras = () => {
     if (!obraTciSelecionada) return;
     const atualizado = { ...obraTciSelecionada, observacoesTci: tciObservacoes };
     setObras((prev) => prev.map((obra) => (obra.obra === atualizado.obra ? atualizado : obra)));
+    setRegistrosTratativas((prev) => {
+      const listaAtual = prev[atualizado.obra] || [];
+      return {
+        ...prev,
+        [atualizado.obra]: [
+          {
+            tipo: registroTipo,
+            data: registroData || new Date().toISOString(),
+            observacoes: tciObservacoes,
+            anexo: tciAnexoName,
+          },
+          ...listaAtual,
+        ],
+      };
+    });
     toast({
       title: "Tratativa registrada",
       description: `Observações salvas para ${atualizado.obra}.`,
@@ -1293,6 +1312,29 @@ const Obras = () => {
                     <Button variant="outline" onClick={() => setModalTciDetalheOpen(false)}>Fechar</Button>
                     <Button onClick={handleSalvarTratativa}>Salvar tratativa</Button>
                   </div>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Registros salvos</p>
+                  {registrosTratativas[obraTciSelecionada.obra]?.length ? (
+                    <div className="space-y-2">
+                      {registrosTratativas[obraTciSelecionada.obra].map((registro, idx) => (
+                        <div key={`${registro.data}-${idx}`} className="rounded-lg border border-muted/60 bg-muted/40 p-3 text-sm">
+                          <div className="flex items-center justify-between text-xs text-muted-foreground">
+                            <span>{registro.tipo}</span>
+                            <span>{registro.data ? new Date(registro.data).toLocaleString("pt-BR") : "--"}</span>
+                          </div>
+                          <p className="mt-1 text-foreground">{registro.observacoes || "Sem observações"}</p>
+                          {registro.anexo && (
+                            <p className="text-xs text-muted-foreground mt-1">Anexo: {registro.anexo}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="rounded-lg border border-dashed border-muted/60 bg-muted/20 p-3 text-xs text-muted-foreground">
+                      Nenhum registro ainda. As tratativas salvas aparecerão aqui.
+                    </div>
+                  )}
                 </div>
               </div>
             )}
