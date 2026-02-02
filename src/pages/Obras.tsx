@@ -741,7 +741,7 @@ const Obras = () => {
           </p>
         </div>
         <div className="flex gap-2">
-          {        {/* Modal Planejamento permanece acessível apenas pela régua de etapas */}
+          {/* Modal Planejamento permanece acessível apenas pela régua de etapas */}
         <Dialog open={planejamentoModalOpen} onOpenChange={setPlanejamentoModalOpen}>
           <DialogContent className="max-w-2xl rounded-2xl border border-muted/60 bg-white shadow-lg">
             <DialogHeader>
