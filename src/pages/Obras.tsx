@@ -571,7 +571,7 @@ const Obras = () => {
     {
       obra: "OBRA-FATURAMENTO",
       os: "OS-FA-1006",
-      status: "faturar",
+      status: "faturamento",
       tci: "validado",
       gestor: "aprovado",
       cidade: "Cuiaba",
