@@ -1,11 +1,12 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
+import { supabase } from "@/integrations/supabase/client";
 
-const equipes = [
+const DEFAULT_EQUIPES = [
   "Equipe LV 01",
   "Equipe LM 02",
   "Equipe Análise",
@@ -26,8 +27,8 @@ type Localizacao = {
   status: "confirmado" | "em ajuste" | "aguardando";
 };
 
-const buildInitialState = () =>
-  equipes.reduce<Record<string, Localizacao>>((acc, equipe, index) => {
+const buildInitialState = (lista: string[]) =>
+  lista.reduce<Record<string, Localizacao>>((acc, equipe, index) => {
     acc[equipe] = {
       obra: obras[index % obras.length],
       anotacao: "",
@@ -38,7 +39,8 @@ const buildInitialState = () =>
 
 const Alocacao = () => {
   const [dataBase, setDataBase] = useState(new Date().toISOString().split("T")[0]);
-  const [registros, setRegistros] = useState<Record<string, Localizacao>>(() => buildInitialState());
+  const [registros, setRegistros] = useState<Record<string, Localizacao>>(() => buildInitialState(DEFAULT_EQUIPES));
+  const [listaEquipes, setListaEquipes] = useState<string[]>(DEFAULT_EQUIPES);
 
   const resumo = useMemo(
     () => Object.values(registros).reduce(
@@ -62,9 +64,30 @@ const Alocacao = () => {
   };
 
   const handleSalvar = () => {
-    // apenas marca tempo no momento
     console.info("Apontamento salvo", registros);
   };
+
+  useEffect(() => {
+    const load = async () => {
+      const { data, error } = await supabase.from("equipes").select("nome").eq("ativa", true);
+      if (error || !data) return;
+      const nomes = data.map((item: any) => item.nome);
+      if (nomes.length === 0) return;
+      setListaEquipes(nomes);
+      setRegistros((prev) => {
+        const novo = { ...prev };
+        nomes.forEach((nome, index) => {
+          novo[nome] = prev[nome] || {
+            obra: obras[index % obras.length],
+            anotacao: "",
+            status: "aguardando",
+          };
+        });
+        return novo;
+      });
+    };
+    load();
+  }, []);
 
   return (
     <div className="space-y-6">
