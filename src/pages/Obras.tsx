@@ -243,6 +243,11 @@ const Obras = () => {
   const handleSalvarTratativa = () => {
     if (!obraTciSelecionada) return;
     const atualizado = { ...obraTciSelecionada, observacoesTci: tciObservacoes };
+    if (registroTipo === "TCI APROVADO") {
+      const proximo = getNextStage(atualizado.status || "tci");
+      atualizado.status = proximo;
+      setObraTciSelecionada((prev) => (prev ? { ...prev, status: proximo } : prev));
+    }
     setObras((prev) => prev.map((obra) => (obra.obra === atualizado.obra ? atualizado : obra)));
     setRegistrosTratativas((prev) => {
       const listaAtual = prev[atualizado.obra] || [];
