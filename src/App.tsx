@@ -29,6 +29,8 @@ import Equipes from "./pages/Equipes";
 import CodigosMO from "./pages/CodigosMO";
 import Relatorios from "./pages/Relatorios";
 import Configuracoes from "./pages/Configuracoes";
+import Analytics from "./pages/Analytics";
+import Producao from "./pages/Producao";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -123,6 +125,13 @@ const App = () => (
             <ProtectedRoute>
               <MainLayout>
                 <Relatorios />
+              </MainLayout>
+            </ProtectedRoute>
+          } />
+          <Route path="/producao" element={
+            <ProtectedRoute>
+              <MainLayout>
+                <Producao />
               </MainLayout>
             </ProtectedRoute>
           } />

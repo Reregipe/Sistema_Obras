@@ -36,6 +36,7 @@ const mainItems: SidebarNavItem[] = [
   { title: "Dashboard", url: "/", icon: Home, hidden: true },
   { title: "Acionamentos", url: "/acionamentos", icon: AlertCircle },
   { title: "Obras", url: "/obras", icon: Wrench },
+  { title: "Produção", url: "/producao", icon: TrendingUp },
   { title: "Medições", url: "/medicoes", icon: TrendingUp, hidden: true },
   { title: "Relatórios", url: "/relatorios", icon: BarChart3, hidden: true },
   { title: "Analytics", url: "/analytics", icon: TrendingUp },
