@@ -28,7 +28,6 @@ import Equipes from "./pages/Equipes";
 import CodigosMO from "./pages/CodigosMO";
 import Relatorios from "./pages/Relatorios";
 import Configuracoes from "./pages/Configuracoes";
-import Producao from "./pages/Producao";
 import Alocacao from "./pages/Alocacao";
 import Analytics from "./pages/Analytics";
 import NotFound from "./pages/NotFound";
@@ -125,13 +124,6 @@ const App = () => (
             <ProtectedRoute>
               <MainLayout>
                 <Relatorios />
-              </MainLayout>
-            </ProtectedRoute>
-          } />
-          <Route path="/producao" element={
-            <ProtectedRoute>
-              <MainLayout>
-                <Producao />
               </MainLayout>
             </ProtectedRoute>
           } />
