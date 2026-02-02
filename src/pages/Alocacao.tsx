@@ -34,6 +34,8 @@ const Alocacao = () => {
   const [registros, setRegistros] = useState<Record<string, Localizacao>>(() => buildInitialState(DEFAULT_EQUIPES));
   const [listaEquipes, setListaEquipes] = useState<string[]>(DEFAULT_EQUIPES);
   const [obrasDisponiveis, setObrasDisponiveis] = useState<string[]>(DEFAULT_OBRAS);
+  const [carregandoEquipes, setCarregandoEquipes] = useState(false);
+  const [carregandoObras, setCarregandoObras] = useState(false);
 
   const resumo = useMemo(
     () => Object.values(registros).reduce(
@@ -62,35 +64,47 @@ const Alocacao = () => {
 
   useEffect(() => {
     const loadEquipes = async () => {
-      const { data, error } = await supabase.from("equipes").select("nome").eq("ativa", true);
-      if (!error && data && data.length > 0) {
-        const nomes = data.map((item: any) => item.nome);
-        setListaEquipes(nomes);
-        setRegistros((prev) => {
-          const novo = { ...prev };
-          nomes.forEach((nome, index) => {
-            novo[nome] = prev[nome] || {
-              obra: "",
-              anotacao: "",
-              status: "",
-            };
+      setCarregandoEquipes(true);
+      try {
+        const { data, error } = await supabase.from("equipes").select("nome").eq("ativa", true);
+        if (!error && data && data.length > 0) {
+          const nomes = data.map((item: any) => item.nome);
+          setListaEquipes(nomes);
+          setRegistros((prev) => {
+            const novo = { ...prev };
+            nomes.forEach((nome) => {
+              novo[nome] = prev[nome] || {
+                obra: "",
+                anotacao: "",
+                status: "",
+              };
+            });
+            return novo;
           });
-          return novo;
-        });
+        }
+      } finally {
+        setCarregandoEquipes(false);
       }
     };
     const loadObrasDisponiveis = async () => {
-      const { data, error } = await supabase
-        .from("obras")
-        .select("obra")
-        .in("status", ["planejamento", "execucao"]);
-      if (!error && data && data.length > 0) {
-        setObrasDisponiveis(data.map((item: any) => item.obra));
+      setCarregandoObras(true);
+      try {
+        const { data, error } = await supabase
+          .from("obras")
+          .select("obra")
+          .in("status", ["planejamento", "execucao"]);
+        if (!error && data && data.length > 0) {
+          setObrasDisponiveis(data.map((item: any) => item.obra));
+        }
+      } finally {
+        setCarregandoObras(false);
       }
     };
     loadEquipes();
-    loadobrasDisponiveis();
+    loadObrasDisponiveis();
   }, []);
+
+  const carregando = carregandoEquipes || carregandoObras;
 
   return (
     <div className="space-y-6">
