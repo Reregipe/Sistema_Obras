@@ -354,6 +354,16 @@ const Obras = () => {
     setModalFaturamentoOpen(false);
   };
 
+  useEffect(() => {
+    if (!obraFaturamentoSelecionada) return;
+    setNotaFiscal(obraFaturamentoSelecionada.notaFiscal || "");
+    setDataFaturamento(obraFaturamentoSelecionada.dataFaturamento || "");
+    setNumeroLoteFaturamento(obraFaturamentoSelecionada.numeroLoteFaturamento || "");
+    setDataLoteGeracao(obraFaturamentoSelecionada.dataLoteGeracao || "");
+    setFaturamentoComentarios(obraFaturamentoSelecionada.comentariosFaturamento || "");
+    setFaturamentoAnexoName(obraFaturamentoSelecionada.anexoFaturamento || null);
+  }, [obraFaturamentoSelecionada]);
+
   const handleSalvarFaturamento = () => {
     if (!obraFaturamentoSelecionada) return;
     if (!notaFiscal || !dataFaturamento || !numeroLoteFaturamento || !dataLoteGeracao) {
