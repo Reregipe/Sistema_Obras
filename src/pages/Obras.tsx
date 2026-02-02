@@ -397,6 +397,7 @@ const Obras = () => {
       ...obraFaturamentoSelecionada,
       numeroLoteFaturamento,
       dataLoteGeracao,
+      loteBloqueado: true,
     };
     setObras((prev) => prev.map((obra) => (obra.obra === atualizado.obra ? atualizado : obra)));
     setObraFaturamentoSelecionada(atualizado);
@@ -1653,6 +1654,7 @@ const Obras = () => {
                       value={numeroLoteFaturamento}
                       onChange={(e) => setNumeroLoteFaturamento(e.target.value)}
                       placeholder="Informe o número do lote"
+                      disabled={obraFaturamentoSelecionada?.loteBloqueado}
                     />
                   </div>
                   <div className="space-y-1">
@@ -1661,6 +1663,7 @@ const Obras = () => {
                       type="date"
                       value={dataLoteGeracao}
                       onChange={(e) => setDataLoteGeracao(e.target.value)}
+                      disabled={obraFaturamentoSelecionada?.loteBloqueado}
                     />
                   </div>
                 </div>
@@ -1697,7 +1700,7 @@ const Obras = () => {
                 </div>
                 <div className="flex justify-end gap-2">
                   <Button variant="outline" onClick={() => setModalFaturamentoDetalheOpen(false)}>Fechar</Button>
-                  <Button variant="ghost" onClick={handleSalvarLote}>Salvar lote</Button>
+                  <Button variant="ghost" onClick={handleSalvarLote} disabled={obraFaturamentoSelecionada?.loteBloqueado}>Salvar lote</Button>
                   <Button onClick={handleSalvarFaturamento}>Salvar faturamento</Button>
                 </div>
               </div>
