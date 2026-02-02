@@ -1433,20 +1433,6 @@ const Obras = () => {
                     <p>{aprovacaoMensagem}</p>
                   </div>
                 )}
-                <div className="rounded-2xl border border-primary/60 bg-white px-5 py-4 shadow-sm space-y-2">
-                  <div className="text-xs uppercase tracking-wide text-muted-foreground">Obra em foco</div>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-lg font-semibold text-foreground">{obraAprovacaoSelecionada.obra}</div>
-                      <div className="text-sm text-muted-foreground">OS: {obraAprovacaoSelecionada.os} · {obraAprovacaoSelecionada.cidade}</div>
-                    </div>
-                    <Badge variant="secondary">{obraAprovacaoSelecionada.status}</Badge>
-                  </div>
-                  <div className="text-sm text-muted-foreground flex items-center gap-4">
-                    <span className="rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-xs uppercase tracking-wide text-primary">tci</span>
-                    <span>Gestor: {obraAprovacaoSelecionada.gestor || "pendente"}</span>
-                  </div>
-                </div>
                 <div className="space-y-2">
                   <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Comentários</label>
                   <textarea
