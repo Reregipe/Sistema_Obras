@@ -90,6 +90,8 @@ const Obras = () => {
   const [obraFaturamentoSelecionada, setObraFaturamentoSelecionada] = useState<any>(null);
   const [notaFiscal, setNotaFiscal] = useState("");
   const [dataFaturamento, setDataFaturamento] = useState("");
+  const [numeroLoteFaturamento, setNumeroLoteFaturamento] = useState("");
+  const [dataLoteGeracao, setDataLoteGeracao] = useState("");
   const [faturamentoAnexoName, setFaturamentoAnexoName] = useState<string | null>(null);
   const [faturamentoComentarios, setFaturamentoComentarios] = useState("");
   const faturamentoAttachmentInputRef = useRef<HTMLInputElement | null>(null);
@@ -109,6 +111,8 @@ const Obras = () => {
       setDataFaturamento("");
       setFaturamentoAnexoName(null);
       setFaturamentoComentarios("");
+      setNumeroLoteFaturamento("");
+      setDataLoteGeracao("");
     }
   }, [modalFaturamentoDetalheOpen]);
 
@@ -352,10 +356,10 @@ const Obras = () => {
 
   const handleSalvarFaturamento = () => {
     if (!obraFaturamentoSelecionada) return;
-    if (!notaFiscal || !dataFaturamento) {
+    if (!notaFiscal || !dataFaturamento || !numeroLoteFaturamento || !dataLoteGeracao) {
       toast({
         title: "Dados obrigatórios",
-        description: "Informe nota fiscal e data antes de registrar o faturamento.",
+        description: "Informe NF, data, lote e data de geração antes de registrar o faturamento.",
         variant: "destructive",
       });
       return;
@@ -364,6 +368,8 @@ const Obras = () => {
       ...obraFaturamentoSelecionada,
       notaFiscal,
       dataFaturamento,
+      numeroLoteFaturamento,
+      dataLoteGeracao,
       anexoFaturamento: faturamentoAnexoName || undefined,
       comentariosFaturamento: faturamentoComentarios || undefined,
     };
@@ -1615,6 +1621,22 @@ const Obras = () => {
                       type="date"
                       value={dataFaturamento}
                       onChange={(e) => setDataFaturamento(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Número do lote</label>
+                    <Input
+                      value={numeroLoteFaturamento}
+                      onChange={(e) => setNumeroLoteFaturamento(e.target.value)}
+                      placeholder="Informe o número do lote"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Data de geração do lote</label>
+                    <Input
+                      type="date"
+                      value={dataLoteGeracao}
+                      onChange={(e) => setDataLoteGeracao(e.target.value)}
                     />
                   </div>
                 </div>
