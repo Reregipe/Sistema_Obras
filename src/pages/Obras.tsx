@@ -81,12 +81,20 @@ const Obras = () => {
   const [modalAprovacaoDetalheOpen, setModalAprovacaoDetalheOpen] = useState(false);
   const [obraAprovacaoSelecionada, setObraAprovacaoSelecionada] = useState<any>(null);
   const [aprovacaoComentarios, setAprovacaoComentarios] = useState("");
+  const [aprovacaoData, setAprovacaoData] = useState("");
+  const [aprovacaoAnexoName, setAprovacaoAnexoName] = useState<string | null>(null);
+  const aprovacaoAttachmentInputRef = useRef<HTMLInputElement | null>(null);
   const [aprovacaoMensagem, setAprovacaoMensagem] = useState<string | null>(null);
   useEffect(() => {
     if (!modalAprovacaoDetalheOpen) {
       setAprovacaoMensagem(null);
+      setAprovacaoComentarios("");
+      setAprovacaoData("");
+      setAprovacaoAnexoName(null);
     }
   }, [modalAprovacaoDetalheOpen]);
+
+  const triggerAprovacaoAttachmentUpload = () => aprovacaoAttachmentInputRef.current?.click();
   const [registrosTratativas, setRegistrosTratativas] = useState<Record<
     string,
     { tipo: string; data: string; observacoes: string; anexo?: string | null }[]
@@ -302,9 +310,14 @@ const Obras = () => {
       status: proximoStatus,
       aprovacaoComentarios: aprovacaoComentarios || undefined,
     };
-    setObras((prev) => prev.map((obra) => (obra.obra === atualizado.obra ? atualizado : obra)));
+    const atualizadoComData = {
+      ...atualizado,
+      dataAprovacao: aprovacaoData || undefined,
+    };
+    setObras((prev) => prev.map((obra) => (obra.obra === atualizadoComData.obra ? atualizadoComData : obra)));
     setObraAprovacaoSelecionada(atualizado);
-    setAprovacaoMensagem(`Obra ${atualizado.obra} movida para ${proximoStatus}.`);
+    const anexoInfo = aprovacaoAnexoName ? ` (anexo: ${aprovacaoAnexoName})` : "";
+    setAprovacaoMensagem(`Obra ${atualizado.obra} movida para ${proximoStatus}.${anexoInfo}`);
     setModalAprovacaoDetalheOpen(false);
   };
 
@@ -1433,6 +1446,39 @@ const Obras = () => {
                     <p>{aprovacaoMensagem}</p>
                   </div>
                 )}
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Data da aprovação</label>
+                    <Input
+                      type="date"
+                      value={aprovacaoData}
+                      onChange={(e) => setAprovacaoData(e.target.value)}
+                      className="w-full"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Anexar e-mail</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="file"
+                        accept=".msg,.eml,.pdf"
+                        ref={aprovacaoAttachmentInputRef}
+                        className="sr-only"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          setAprovacaoAnexoName(file?.name ?? null);
+                          if (e.target) e.target.value = "";
+                        }}
+                      />
+                      <Button variant="outline" size="sm" onClick={triggerAprovacaoAttachmentUpload}>
+                        Selecionar arquivo
+                      </Button>
+                      {aprovacaoAnexoName && (
+                        <span className="text-xs text-muted-foreground">{aprovacaoAnexoName}</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
                 <div className="space-y-2">
                   <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Comentários</label>
                   <textarea
