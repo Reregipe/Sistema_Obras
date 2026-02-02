@@ -26,7 +26,7 @@ const parseDecimal = (value) => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
-const workflowStages = ["planejamento", "execucao", "medicao", "tci", "aprovacao", "faturamento"];
+const workflowStages = ["planejamento", "execucao", "medicao", "tci", "aprovacao", "faturamento", "finalizado"];
 const getNextStage = (currentStatus: string) => {
   const index = workflowStages.indexOf(currentStatus);
   if (index === -1 || index === workflowStages.length - 1) return currentStatus;
@@ -374,8 +374,10 @@ const Obras = () => {
       });
       return;
     }
+    const proximoStatus = getNextStage(obraFaturamentoSelecionada.status || "faturamento");
     const atualizado = {
       ...obraFaturamentoSelecionada,
+      status: proximoStatus,
       notaFiscal,
       dataFaturamento,
       numeroLoteFaturamento,
