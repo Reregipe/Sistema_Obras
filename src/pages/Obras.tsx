@@ -383,6 +383,30 @@ const Obras = () => {
     setModalFaturamentoDetalheOpen(false);
   };
 
+  const handleSalvarLote = () => {
+    if (!obraFaturamentoSelecionada) return;
+    if (!numeroLoteFaturamento || !dataLoteGeracao) {
+      toast({
+        title: "Dados de lote",
+        description: "Informe número e data do lote antes de salvar.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const atualizado = {
+      ...obraFaturamentoSelecionada,
+      numeroLoteFaturamento,
+      dataLoteGeracao,
+    };
+    setObras((prev) => prev.map((obra) => (obra.obra === atualizado.obra ? atualizado : obra)));
+    setObraFaturamentoSelecionada(atualizado);
+    toast({
+      title: "Lote registrado",
+      description: `Lote ${numeroLoteFaturamento} salvo para ${atualizado.obra}.`,
+      variant: "success",
+    });
+  };
+
   useEffect(() => {
     const loadUpsConfigs = async () => {
       const { data, error } = await supabase
@@ -1673,6 +1697,7 @@ const Obras = () => {
                 </div>
                 <div className="flex justify-end gap-2">
                   <Button variant="outline" onClick={() => setModalFaturamentoDetalheOpen(false)}>Fechar</Button>
+                  <Button variant="ghost" onClick={handleSalvarLote}>Salvar lote</Button>
                   <Button onClick={handleSalvarFaturamento}>Salvar faturamento</Button>
                 </div>
               </div>
