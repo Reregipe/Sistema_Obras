@@ -76,6 +76,14 @@ const Obras = () => {
   const [modalTciOpen, setModalTciOpen] = useState(false);
   const [obraTciSelecionada, setObraTciSelecionada] = useState<any>(null);
   const [tciObservacoes, setTciObservacoes] = useState("");
+  const [modalTciDetalheOpen, setModalTciDetalheOpen] = useState(false);
+  const [registroTipo, setRegistroTipo] = useState<
+    "DITAIS" | "APR" | "ESCANEAR PROJETO AS BUILTS" | "BOOK" | "TCI APRESENTADO" | "TCI APROVADO"
+  >("DITAIS");
+  const [registroData, setRegistroData] = useState("");
+  const [tciAnexoName, setTciAnexoName] = useState<string | null>(null);
+  const tciAttachmentInputRef = useRef<HTMLInputElement | null>(null);
+  const triggerTciAttachmentUpload = () => tciAttachmentInputRef.current?.click();
 
   // Busca dinâmica dos códigos de mão de obra do Supabase
   useEffect(() => {
@@ -241,6 +249,8 @@ const Obras = () => {
   const handleSelectObraTci = (obra: any) => {
     setObraTciSelecionada(obra);
     setTciObservacoes(obra.observacoesTci || "");
+    setModalTciOpen(false);
+    setModalTciDetalheOpen(true);
   };
 
   useEffect(() => {
@@ -1165,7 +1175,7 @@ const Obras = () => {
                     <Card
                       key={obra.obra}
                       className={`border shadow-sm cursor-pointer transition-colors ${
-                        obraTciSelecionada?.obra === obra.obra ? "border-primary bg-primary/5" : "hover:border-primary"
+                        obraTciSelecionada?.obra === obra.obra ? "border-primary bg-white" : "hover:border-primary"
                       }`}
                       onClick={() => handleSelectObraTci(obra)}
                     >
@@ -1181,30 +1191,111 @@ const Obras = () => {
                   ))}
                 </div>
               )}
-              {obraTciSelecionada && (
-                <div className="rounded-lg border p-4 bg-white shadow-sm space-y-3">
-                  <div>
-                    <h3 className="text-lg font-semibold">{obraTciSelecionada.obra}</h3>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {obraTciSelecionada.os} · {obraTciSelecionada.cidade}
-                    </p>
+            </div>
+          </DialogContent>
+        </Dialog>
+        <Dialog open={modalTciDetalheOpen} onOpenChange={(open) => {
+          if (!open) {
+            setModalTciDetalheOpen(false);
+            setObraTciSelecionada(null);
+          } else {
+            setModalTciDetalheOpen(true);
+          }
+        }}>
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Tratativa · {obraTciSelecionada?.obra}</DialogTitle>
+              <p className="text-sm text-muted-foreground mt-1">
+                Registre ajustes, pendências e tratativas dos livros.
+              </p>
+            </DialogHeader>
+            {obraTciSelecionada && (
+              <div className="space-y-4">
+              <div className="rounded-2xl border border-muted/60 bg-white p-4 shadow-sm">
+                <div className="flex gap-2 rounded-full border border-muted/70 bg-muted/70 p-1">
+                  {["Registro", "Detalhes"].map((tab) => (
+                    <button
+                      key={tab}
+                      className={`flex-1 rounded-full px-3 py-2 text-sm font-semibold transition ${
+                        tab === "Registro"
+                          ? "bg-foreground text-white shadow-sm"
+                          : "text-muted-foreground"
+                      }`}
+                    >
+                      {tab}
+                    </button>
+                  ))}
+                </div>
+              </div>
+                <div className="rounded-2xl border bg-white p-4 space-y-3">
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Tipo de registro
+                      </label>
+                      <select
+                        value={registroTipo}
+                        onChange={(e) => setRegistroTipo(e.target.value as typeof registroTipo)}
+                        className="w-full border rounded px-3 py-2 text-sm"
+                      >
+                        <option value="DITAIS">DITAIS</option>
+                        <option value="APR">APR</option>
+                        <option value="ESCANEAR PROJETO AS BUILTS">ESCANEAR PROJETO AS BUILTS</option>
+                        <option value="BOOK">BOOK</option>
+                        <option value="TCI APRESENTADO">TCI APRESENTADO</option>
+                        <option value="TCI APROVADO">TCI APROVADO</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Data/hora do envio
+                      </label>
+                      <Input
+                        type="datetime-local"
+                        value={registroData}
+                        onChange={(e) => setRegistroData(e.target.value)}
+                        className="w-full"
+                      />
+                    </div>
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Observações</label>
+                  <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Observações
+                  </label>
                     <textarea
                       value={tciObservacoes}
                       onChange={(e) => setTciObservacoes(e.target.value)}
-                      className="w-full border rounded-md px-3 py-2 min-h-[120px] text-sm focus:outline-none focus:ring"
+                      className="w-full border rounded-xl px-3 py-2 min-h-[140px] text-sm focus:outline-none focus:ring"
                       placeholder="Descreva pendências, documentos solicitados ou tratativas realizadas..."
                     />
-                  </div>
-                  <div className="flex gap-2 justify-end">
-                    <Button variant="outline" onClick={() => setModalTciOpen(false)}>Fechar</Button>
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Anexar e-mail (.msg)
+                      </p>
+                      <div className="flex flex-wrap gap-2 items-center">
+                        <input
+                          type="file"
+                          accept=".msg"
+                          ref={tciAttachmentInputRef}
+                          className="sr-only"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            setTciAnexoName(file?.name ?? null);
+                            if (e.target) e.target.value = "";
+                          }}
+                        />
+                        <Button variant="outline" size="sm" onClick={triggerTciAttachmentUpload}>
+                          Selecionar arquivo
+                        </Button>
+                        {tciAnexoName && <span className="text-xs text-muted-foreground">{tciAnexoName}</span>}
+                      </div>
+                    </div>
+                  <div className="flex justify-end gap-2">
+                    <Button variant="outline" onClick={() => setModalTciDetalheOpen(false)}>Fechar</Button>
                     <Button onClick={handleSalvarTratativa}>Salvar tratativa</Button>
                   </div>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
           </DialogContent>
         </Dialog>
         {/* Modal de obras em execução */}
