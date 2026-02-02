@@ -741,152 +741,146 @@ const Obras = () => {
           </p>
         </div>
         <div className="flex gap-2">
-          {/* Modal Planejamento permanece acessível apenas pela régua de etapas */}
-          <Dialog open={planejamentoModalOpen} onOpenChange={setPlanejamentoModalOpen}>
-            <DialogContent className="max-w-2xl">
-              <DialogHeader>
-                <DialogTitle>Planejamento</DialogTitle>
-                <p className="text-sm text-muted-foreground mt-1">Obras sem marco inicial</p>
-              </DialogHeader>
-                    {obrasSemMarcoInicial.length === 0 ? (
-                      <div className="py-4 text-muted-foreground">Todas as obras sem marco inicial.</div>
-                    ) : (
-                      <>
-                        <div className="grid gap-3 md:grid-cols-2">
-                          {obrasSemMarcoInicial.map((item) => (
-                            <Card
-                              key={item.obra}
-                              className="border shadow-sm cursor-pointer"
-                              onClick={() => {
-                                setObraSelecionada(item);
-                                setDetalheObraModalOpen(true);
-                              }}
-                            >
-                              <CardHeader className="py-4 flex items-center justify-center">
-                                <CardTitle className="text-lg font-bold text-center">{item.obra || "Sem número"}</CardTitle>
-                              </CardHeader>
-                            </Card>
-                          ))}
-                        </div>
-
-                        {/* Modal de detalhes da obra selecionada */}
-                        <Dialog open={detalheObraModalOpen} onOpenChange={setDetalheObraModalOpen}>
-                          <DialogContent className="max-w-lg">
-                            <DialogHeader>
-                              <DialogTitle>Detalhes da obra: {obraSelecionada?.obra}</DialogTitle>
-                            </DialogHeader>
-                            {obraSelecionada && (
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                <div className="flex flex-col gap-1">
-                                  <label className="text-sm font-medium">Início Físico da Obra</label>
-                                  <input
-                                    type="date"
-                                    className="border rounded px-2 py-1 focus:outline-none focus:ring w-full"
-                                    value={obraSelecionada.inicioFisicoObra || ''}
-                                    onChange={e => setObraSelecionada({ ...obraSelecionada, inicioFisicoObra: e.target.value })}
-                                  />
-                                </div>
-                                <div className="flex flex-col gap-1">
-                                  <label className="text-sm font-medium">Tipo de Equipe</label>
-                                  <select
-                                    value={obraSelecionada.tipoEquipe || ''}
-                                    onChange={e => setObraSelecionada({ ...obraSelecionada, tipoEquipe: e.target.value })}
-                                    className="border rounded px-2 py-1 focus:outline-none focus:ring w-full"
-                                  >
-                                    <option value="">Selecione</option>
-                                    <option value="LM">LM</option>
-                                    <option value="LV">LV</option>
-                                    <option value="LM+LV">LM+LV</option>
-                                  </select>
-                                </div>
-                                <div className="flex flex-col gap-1">
-                                  <label className="text-sm font-medium">Equipes</label>
-                                  <Select
-                                    value={obraSelecionada?.equipes?.[0] || ""}
-                                    onValueChange={value => {
-                                      // Alterna seleção: se já está, remove; se não, adiciona
-                                      let novasEquipes = Array.isArray(obraSelecionada?.equipes) ? [...obraSelecionada.equipes] : [];
-                                      if (novasEquipes.includes(value)) {
-                                        novasEquipes = novasEquipes.filter(eq => eq !== value);
-                                      } else {
-                                        novasEquipes.push(value);
-                                      }
-                                      setObraSelecionada({ ...obraSelecionada, equipes: novasEquipes });
-                                    }}
-                                  >
-                                    <SelectTrigger>
-                                      <SelectValue placeholder="Selecione uma ou mais equipes" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {equipesCatalog
-                                        .filter(eq => {
-                                          if (!obraSelecionada?.tipoEquipe) return true;
-                                          if (obraSelecionada.tipoEquipe === 'LM+LV') return true;
-                                          if (obraSelecionada.tipoEquipe === 'LM') return eq.linha !== 'viva';
-                                          if (obraSelecionada.tipoEquipe === 'LV') return eq.linha === 'viva';
-                                          return true;
-                                        })
-                                        .map(eq => (
-                                          <SelectItem key={eq.code} value={eq.code}>
-                                            {eq.code} - {eq.encarregado}
-                                            {obraSelecionada?.equipes?.includes(eq.code) ? " (selecionada)" : ""}
-                                          </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                  </Select>
-                                  <span className="text-xs text-muted-foreground mt-1">Clique novamente para remover uma equipe já selecionada.</span>
-                                  <div className="flex flex-wrap gap-1 mt-2">
-                                    {obraSelecionada?.equipes?.map(code => {
-                                      const eq = equipesCatalog.find(e => e.code === code);
-                                      return eq ? (
-                                        <span key={code} className="px-2 py-1 bg-accent rounded text-xs">
-                                          {eq.code} - {eq.encarregado}
-                                        </span>
-                                      ) : null;
-                                    })}
-                                  </div>
-                                </div>
-                                <div className="flex flex-col gap-1">
-                                  <label className="text-sm font-medium">Previsão de Término</label>
-                                  <input
-                                    type="date"
-                                    className="border rounded px-2 py-1 focus:outline-none focus:ring w-full"
-                                    value={obraSelecionada.dataPrevisaoTermino || ''}
-                                    onChange={e => setObraSelecionada({ ...obraSelecionada, dataPrevisaoTermino: e.target.value })}
-                                  />
-                                </div>
-                              <DialogFooter>
-                                <Button variant="outline" onClick={() => setDetalheObraModalOpen(false)}>Cancelar</Button>
-                                <Button
-                                  onClick={() => {
-                                    if (!obraSelecionada) return;
-                                    setObras(prevObras => prevObras.map(o => {
-                                      if (o.obra === obraSelecionada.obra) {
-                                        // Só move para execução se estava em planejamento e agora tem início físico
-                                        const vaiParaExecucao = o.status === "planejamento" && obraSelecionada.inicioFisicoObra;
-                                        return {
-                                          ...o,
-                                          ...obraSelecionada,
-                                          status: vaiParaExecucao ? "execucao" : o.status,
-                                          inicio: obraSelecionada.inicioFisicoObra || o.inicio,
-                                        };
-                                      }
-                                      return o;
-                                    }));
-                                    setDetalheObraModalOpen(false);
-                                  }}
-                                >Salvar</Button>
-                              </DialogFooter>
-                              </div>
-                            )}
-                          </DialogContent>
-                        </Dialog>
-                      </>
-                    )}
-                            {/* Mini-formulário para obra selecionada */}
-
-            </DialogContent>
-          </Dialog>
+          {        {/* Modal Planejamento permanece acess�vel apenas pela r�gua de etapas */}
+        <Dialog open={planejamentoModalOpen} onOpenChange={setPlanejamentoModalOpen}>
+          <DialogContent className="max-w-2xl rounded-2xl border border-muted/60 bg-white shadow-lg">
+            <DialogHeader>
+              <DialogTitle>Planejamento</DialogTitle>
+              <p className="text-sm text-muted-foreground mt-1">Obras sem marco inicial</p>
+            </DialogHeader>
+            <div className="space-y-4 px-4 pb-4">
+              {obrasSemMarcoInicial.length === 0 ? (
+                <div className="py-4 text-muted-foreground">Todas as obras sem marco inicial.</div>
+              ) : (
+                <div className="grid gap-4 md:grid-cols-2">
+                  {obrasSemMarcoInicial.map((item) => (
+                    <Card
+                      key={item.obra}
+                      className="border shadow-sm cursor-pointer rounded-2xl hover:border-primary transition-colors"
+                      onClick={() => {
+                        setObraSelecionada(item);
+                        setDetalheObraModalOpen(true);
+                      }}
+                    >
+                      <CardHeader className="py-4 text-center">
+                        <CardTitle className="text-lg font-bold">{item.obra || "Sem n�mero"}</CardTitle>
+                      </CardHeader>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+        <Dialog open={detalheObraModalOpen} onOpenChange={setDetalheObraModalOpen}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Detalhes da obra: {obraSelecionada?.obra}</DialogTitle>
+            </DialogHeader>
+            {obraSelecionada && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-sm font-medium">In�cio F�sico da Obra</label>
+                  <input
+                    type="date"
+                    className="border rounded px-2 py-1 focus:outline-none focus:ring w-full"
+                    value={obraSelecionada.inicioFisicoObra || ''}
+                    onChange={e => setObraSelecionada({ ...obraSelecionada, inicioFisicoObra: e.target.value })}
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-sm font-medium">Tipo de Equipe</label>
+                  <select
+                    value={obraSelecionada.tipoEquipe || ''}
+                    onChange={e => setObraSelecionada({ ...obraSelecionada, tipoEquipe: e.target.value })}
+                    className="border rounded px-2 py-1 focus:outline-none focus:ring w-full"
+                  >
+                    <option value="">Selecione</option>
+                    <option value="LM">LM</option>
+                    <option value="LV">LV</option>
+                    <option value="LM+LV">LM+LV</option>
+                  </select>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-sm font-medium">Equipes</label>
+                  <Select
+                    value={obraSelecionada?.equipes?.[0] || ""}
+                    onValueChange={value => {
+                      let novasEquipes = Array.isArray(obraSelecionada?.equipes) ? [...obraSelecionada.equipes] : [];
+                      if (novasEquipes.includes(value)) {
+                        novasEquipes = novasEquipes.filter(eq => eq !== value);
+                      } else {
+                        novasEquipes.push(value);
+                      }
+                      setObraSelecionada({ ...obraSelecionada, equipes: novasEquipes });
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione uma ou mais equipes" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {equipesCatalog
+                        .filter(eq => {
+                          if (!obraSelecionada?.tipoEquipe) return true;
+                          if (obraSelecionada.tipoEquipe === 'LM+LV') return true;
+                          if (obraSelecionada.tipoEquipe === 'LM') return eq.linha !== 'viva';
+                          if (obraSelecionada.tipoEquipe === 'LV') return eq.linha === 'viva';
+                          return true;
+                        })
+                        .map(eq => (
+                          <SelectItem key={eq.code} value={eq.code}>
+                            {eq.code} - {eq.encarregado}
+                            {obraSelecionada?.equipes?.includes(eq.code) ? " (selecionada)" : ""}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                  <span className="text-xs text-muted-foreground mt-1">Clique novamente para remover uma equipe j� selecionada.</span>
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {obraSelecionada?.equipes?.map(code => {
+                      const eq = equipesCatalog.find(e => e.code === code);
+                      return eq ? (
+                        <span key={code} className="px-2 py-1 bg-accent rounded text-xs">
+                          {eq.code} - {eq.encarregado}
+                        </span>
+                      ) : null;
+                    })}
+                  </div>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-sm font-medium">Previs�o de T�rmino</label>
+                  <input
+                    type="date"
+                    className="border rounded px-2 py-1 focus:outline-none focus:ring w-full"
+                    value={obraSelecionada.dataPrevisaoTermino || ''}
+                    onChange={e => setObraSelecionada({ ...obraSelecionada, dataPrevisaoTermino: e.target.value })}
+                  />
+                </div>
+              </div>
+              <DialogFooter className="flex gap-2">
+                <Button variant="outline" onClick={() => setDetalheObraModalOpen(false)}>Cancelar</Button>
+                <Button
+                  onClick={() => {
+                    if (!obraSelecionada) return;
+                    setObras(prevObras => prevObras.map(o => {
+                      if (o.obra === obraSelecionada.obra) {
+                        const vaiParaExecucao = o.status === "planejamento" && obraSelecionada.inicioFisicoObra;
+                        return {
+                          ...o,
+                          ...obraSelecionada,
+                          status: vaiParaExecucao ? "execucao" : o.status,
+                          inicio: obraSelecionada.inicioFisicoObra || o.inicio,
+                        };
+                      }
+                      return o;
+                    }));
+                    setDetalheObraModalOpen(false);
+                  }}
+                >Salvar</Button>
+              </DialogFooter>
+            )}
+          </DialogContent>
+        </Dialog>
           <Button variant="outline" className="gap-2" onClick={() => fileInputRef.current?.click()}>
             <Download className="h-4 w-4" />
             Importar Excel
