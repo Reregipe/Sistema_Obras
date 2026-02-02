@@ -78,6 +78,15 @@ const Obras = () => {
   const [tciObservacoes, setTciObservacoes] = useState("");
   const [modalTciDetalheOpen, setModalTciDetalheOpen] = useState(false);
   const [modalAprovacaoOpen, setModalAprovacaoOpen] = useState(false);
+  const [modalAprovacaoDetalheOpen, setModalAprovacaoDetalheOpen] = useState(false);
+  const [obraAprovacaoSelecionada, setObraAprovacaoSelecionada] = useState<any>(null);
+  const [aprovacaoComentarios, setAprovacaoComentarios] = useState("");
+  const [aprovacaoMensagem, setAprovacaoMensagem] = useState<string | null>(null);
+  useEffect(() => {
+    if (!modalAprovacaoDetalheOpen) {
+      setAprovacaoMensagem(null);
+    }
+  }, [modalAprovacaoDetalheOpen]);
   const [registrosTratativas, setRegistrosTratativas] = useState<Record<
     string,
     { tipo: string; data: string; observacoes: string; anexo?: string | null }[]
@@ -275,8 +284,28 @@ const Obras = () => {
   const handleSelectObraTci = (obra: any) => {
     setObraTciSelecionada(obra);
     setTciObservacoes(obra.observacoesTci || "");
-    setModalTciOpen(false);
     setModalTciDetalheOpen(true);
+    setModalTciOpen(false);
+  };
+
+  const handleSelectObraAprovacao = (obra: any) => {
+    setObraAprovacaoSelecionada(obra);
+    setAprovacaoComentarios(obra.aprovacaoComentarios || "");
+    setModalAprovacaoDetalheOpen(true);
+  };
+
+  const handleSalvarAprovacao = () => {
+    if (!obraAprovacaoSelecionada) return;
+    const proximoStatus = getNextStage(obraAprovacaoSelecionada.status || "aprovacao");
+    const atualizado = {
+      ...obraAprovacaoSelecionada,
+      status: proximoStatus,
+      aprovacaoComentarios: aprovacaoComentarios || undefined,
+    };
+    setObras((prev) => prev.map((obra) => (obra.obra === atualizado.obra ? atualizado : obra)));
+    setObraAprovacaoSelecionada(atualizado);
+    setAprovacaoMensagem(`Obra ${atualizado.obra} movida para ${proximoStatus}.`);
+    setModalAprovacaoDetalheOpen(false);
   };
 
   useEffect(() => {
@@ -1362,7 +1391,11 @@ const Obras = () => {
                 <div className="py-6 text-center text-sm text-muted-foreground">Nenhuma obra aguardando aprovação.</div>
               ) : (
                 obrasEmAprovacao.map((obra) => (
-                  <Card key={obra.obra} className="rounded-2xl border border-primary/70 bg-white px-5 py-4 shadow-sm">
+                  <Card
+                    key={obra.obra}
+                    className="rounded-2xl border border-primary/70 bg-white px-5 py-4 shadow-sm cursor-pointer"
+                    onClick={() => handleSelectObraAprovacao(obra)}
+                  >
                     <div className="text-xs uppercase tracking-wide text-muted-foreground mb-1">Obra em foco</div>
                     <div className="flex items-center justify-between">
                       <div>
@@ -1379,6 +1412,56 @@ const Obras = () => {
                 ))
               )}
             </div>
+          </DialogContent>
+        </Dialog>
+        <Dialog open={modalAprovacaoDetalheOpen} onOpenChange={(open) => {
+          if (!open) {
+            setModalAprovacaoDetalheOpen(false);
+            setObraAprovacaoSelecionada(null);
+          }
+        }}>
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Aprovação · {obraAprovacaoSelecionada?.obra}</DialogTitle>
+              <p className="text-sm text-muted-foreground mt-1">Registre pendências do gestor ou finalize o envio para faturamento.</p>
+            </DialogHeader>
+            {obraAprovacaoSelecionada && (
+              <div className="space-y-4">
+                {aprovacaoMensagem && (
+                  <div className="rounded-2xl bg-foreground/5 px-5 py-3 text-sm text-foreground shadow-sm">
+                    <p className="text-xs tracking-wide text-muted-foreground uppercase">Resultado</p>
+                    <p>{aprovacaoMensagem}</p>
+                  </div>
+                )}
+                <div className="rounded-2xl border border-primary/60 bg-white px-5 py-4 shadow-sm space-y-2">
+                  <div className="text-xs uppercase tracking-wide text-muted-foreground">Obra em foco</div>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-lg font-semibold text-foreground">{obraAprovacaoSelecionada.obra}</div>
+                      <div className="text-sm text-muted-foreground">OS: {obraAprovacaoSelecionada.os} · {obraAprovacaoSelecionada.cidade}</div>
+                    </div>
+                    <Badge variant="secondary">{obraAprovacaoSelecionada.status}</Badge>
+                  </div>
+                  <div className="text-sm text-muted-foreground flex items-center gap-4">
+                    <span className="rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-xs uppercase tracking-wide text-primary">tci</span>
+                    <span>Gestor: {obraAprovacaoSelecionada.gestor || "pendente"}</span>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Comentários</label>
+                  <textarea
+                    className="w-full border rounded-xl px-3 py-2 min-h-[140px] text-sm"
+                    value={aprovacaoComentarios}
+                    onChange={(e) => setAprovacaoComentarios(e.target.value)}
+                    placeholder="Relate ajustes, pendências ou justificativas."
+                  />
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" onClick={() => setModalAprovacaoDetalheOpen(false)}>Fechar</Button>
+                  <Button onClick={handleSalvarAprovacao}>Salvar aprovação</Button>
+                </div>
+              </div>
+            )}
           </DialogContent>
         </Dialog>
         {/* Modal de obras em execução */}
