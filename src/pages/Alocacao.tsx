@@ -20,15 +20,15 @@ const obras = [
 type Localizacao = {
   obra: string;
   anotacao: string;
-  status: "confirmado" | "em ajuste" | "aguardando";
+  status: "confirmado" | "em ajuste" | "aguardando" | "";
 };
 
 const buildInitialState = (lista: string[]) =>
-  lista.reduce<Record<string, Localizacao>>((acc, equipe, index) => {
+  lista.reduce<Record<string, Localizacao>>((acc, equipe) => {
     acc[equipe] = {
-      obra: obras[index % obras.length],
+      obra: "",
       anotacao: "",
-      status: index % 3 === 0 ? "confirmado" : index % 3 === 1 ? "em ajuste" : "aguardando",
+      status: "",
     };
     return acc;
   }, {} as Record<string, Localizacao>);
@@ -113,10 +113,11 @@ const Alocacao = () => {
               <div className="space-y-1 text-sm font-medium text-muted-foreground">
                 <label>Obra em foco</label>
                 <select
-                  value={registros[equipe]?.obra ?? obras[0]}
+                  value={registros[equipe]?.obra ?? ""}
                   onChange={(event) => handleChange(equipe, "obra", event.target.value)}
                   className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
                 >
+                  <option value="">Selecione</option>
                   {obras.map((obra) => (
                     <option key={obra} value={obra}>
                       {obra}
@@ -127,10 +128,11 @@ const Alocacao = () => {
               <div className="space-y-1 text-sm font-medium text-muted-foreground">
                 <label>Status do apontamento</label>
                 <select
-                  value={registros[equipe].status}
+                  value={registros[equipe]?.status ?? ""}
                   onChange={(event) => handleChange(equipe, "status", event.target.value)}
                   className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
                 >
+                  <option value="">Selecione</option>
                   <option value="confirmado">Confirmado</option>
                   <option value="em ajuste">Em ajuste</option>
                   <option value="aguardando">Aguardando</option>
