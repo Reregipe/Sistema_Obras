@@ -304,20 +304,25 @@ const Obras = () => {
 
   const handleSalvarAprovacao = () => {
     if (!obraAprovacaoSelecionada) return;
+    if (!aprovacaoData || !aprovacaoAnexoName) {
+      toast({
+        title: "Dados incompletos",
+        description: "Informe a data e anexe o email para finalizar a aprovação.",
+        variant: "destructive",
+      });
+      return;
+    }
     const proximoStatus = getNextStage(obraAprovacaoSelecionada.status || "aprovacao");
     const atualizado = {
       ...obraAprovacaoSelecionada,
       status: proximoStatus,
       aprovacaoComentarios: aprovacaoComentarios || undefined,
+      dataAprovacao: aprovacaoData,
+      anexoAprovacao: aprovacaoAnexoName,
     };
-    const atualizadoComData = {
-      ...atualizado,
-      dataAprovacao: aprovacaoData || undefined,
-    };
-    setObras((prev) => prev.map((obra) => (obra.obra === atualizadoComData.obra ? atualizadoComData : obra)));
+    setObras((prev) => prev.map((obra) => (obra.obra === atualizado.obra ? atualizado : obra)));
     setObraAprovacaoSelecionada(atualizado);
-    const anexoInfo = aprovacaoAnexoName ? ` (anexo: ${aprovacaoAnexoName})` : "";
-    setAprovacaoMensagem(`Obra ${atualizado.obra} movida para ${proximoStatus}.${anexoInfo}`);
+    setAprovacaoMensagem(`Obra ${atualizado.obra} movida para ${proximoStatus}.`);
     setModalAprovacaoDetalheOpen(false);
   };
 
