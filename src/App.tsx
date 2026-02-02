@@ -16,7 +16,6 @@ import { ProtectedRoute } from "./components/ProtectedRoute";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import AcceptInvite from "./pages/AcceptInvite";
-import Analytics from "./pages/Analytics";
 import Acionamentos from "./pages/Acionamentos";
 import AcionamentoDetalhe from "./pages/AcionamentoDetalhe";
 import AcionamentoMateriais from "./pages/AcionamentoMateriais";
@@ -29,7 +28,6 @@ import Equipes from "./pages/Equipes";
 import CodigosMO from "./pages/CodigosMO";
 import Relatorios from "./pages/Relatorios";
 import Configuracoes from "./pages/Configuracoes";
-import Analytics from "./pages/Analytics";
 import Producao from "./pages/Producao";
 import NotFound from "./pages/NotFound";
 
