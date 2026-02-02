@@ -108,7 +108,7 @@ const Alocacao = () => {
       </div>
       <Separator />
       <div className="grid gap-4 md:grid-cols-2">
-        {equipes.map((equipe) => (
+        {listaEquipes.map((equipe) => (
           <Card key={equipe} className="border shadow-sm">
             <CardHeader>
               <CardTitle className="text-lg">{equipe}</CardTitle>
@@ -117,7 +117,7 @@ const Alocacao = () => {
               <div className="space-y-1 text-sm font-medium text-muted-foreground">
                 <label>Obra em foco</label>
                 <select
-                  value={registros[equipe].obra}
+                  value={registros[equipe]?.obra ?? obras[0]}
                   onChange={(event) => handleChange(equipe, "obra", event.target.value)}
                   className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
                 >
