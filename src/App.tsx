@@ -29,6 +29,7 @@ import CodigosMO from "./pages/CodigosMO";
 import Relatorios from "./pages/Relatorios";
 import Configuracoes from "./pages/Configuracoes";
 import Producao from "./pages/Producao";
+import Alocacao from "./pages/Alocacao";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -137,6 +138,13 @@ const App = () => (
             <ProtectedRoute>
               <MainLayout>
                 <Configuracoes />
+              </MainLayout>
+            </ProtectedRoute>
+          } />
+          <Route path="/alocacao" element={
+            <ProtectedRoute>
+              <MainLayout>
+                <Alocacao />
               </MainLayout>
             </ProtectedRoute>
           } />
