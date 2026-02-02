@@ -8,13 +8,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { equipesCatalog } from "@/data/equipesCatalog";
 
 const DEFAULT_EQUIPES = equipesCatalog.map((team) => team.code);
-
-const obras = [
+const DEFAULT_OBRAS = [
   "OBRA-PLANEJAMENTO",
   "OBRA-EXECUCAO",
-  "OBRA-MEDICAO",
-  "OBRA-TCI",
-  "OBRA-APROVACAO",
 ];
 
 type Localizacao = {
@@ -37,6 +33,7 @@ const Alocacao = () => {
   const [dataBase, setDataBase] = useState(new Date().toISOString().split("T")[0]);
   const [registros, setRegistros] = useState<Record<string, Localizacao>>(() => buildInitialState(DEFAULT_EQUIPES));
   const [listaEquipes, setListaEquipes] = useState<string[]>(DEFAULT_EQUIPES);
+  const [obrasDisponiveis, setObrasDisponiveis] = useState<string[]>(DEFAULT_OBRAS);
 
   const resumo = useMemo(
     () => Object.values(registros).reduce(
@@ -64,25 +61,35 @@ const Alocacao = () => {
   };
 
   useEffect(() => {
-    const load = async () => {
+    const loadEquipes = async () => {
       const { data, error } = await supabase.from("equipes").select("nome").eq("ativa", true);
-      if (error || !data) return;
-      const nomes = data.map((item: any) => item.nome);
-      if (nomes.length === 0) return;
-      setListaEquipes(nomes);
-      setRegistros((prev) => {
-        const novo = { ...prev };
-        nomes.forEach((nome, index) => {
-          novo[nome] = prev[nome] || {
-            obra: obras[index % obras.length],
-            anotacao: "",
-            status: "aguardando",
-          };
+      if (!error && data && data.length > 0) {
+        const nomes = data.map((item: any) => item.nome);
+        setListaEquipes(nomes);
+        setRegistros((prev) => {
+          const novo = { ...prev };
+          nomes.forEach((nome, index) => {
+            novo[nome] = prev[nome] || {
+              obra: "",
+              anotacao: "",
+              status: "",
+            };
+          });
+          return novo;
         });
-        return novo;
-      });
+      }
     };
-    load();
+    const loadObrasDisponiveis = async () => {
+      const { data, error } = await supabase
+        .from("obras")
+        .select("obra")
+        .in("status", ["planejamento", "execucao"]);
+      if (!error && data && data.length > 0) {
+        setObrasDisponiveis(data.map((item: any) => item.obra));
+      }
+    };
+    loadEquipes();
+    loadobrasDisponiveis();
   }, []);
 
   return (
@@ -118,7 +125,7 @@ const Alocacao = () => {
                   className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
                 >
                   <option value="">Selecione</option>
-                  {obras.map((obra) => (
+                  {obrasDisponiveis.map((obra) => (
                     <option key={obra} value={obra}>
                       {obra}
                     </option>
