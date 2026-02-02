@@ -85,6 +85,15 @@ const Obras = () => {
   const [aprovacaoAnexoName, setAprovacaoAnexoName] = useState<string | null>(null);
   const aprovacaoAttachmentInputRef = useRef<HTMLInputElement | null>(null);
   const [aprovacaoMensagem, setAprovacaoMensagem] = useState<string | null>(null);
+  const [modalFaturamentoOpen, setModalFaturamentoOpen] = useState(false);
+  const [modalFaturamentoDetalheOpen, setModalFaturamentoDetalheOpen] = useState(false);
+  const [obraFaturamentoSelecionada, setObraFaturamentoSelecionada] = useState<any>(null);
+  const [notaFiscal, setNotaFiscal] = useState("");
+  const [dataFaturamento, setDataFaturamento] = useState("");
+  const [faturamentoAnexoName, setFaturamentoAnexoName] = useState<string | null>(null);
+  const [faturamentoComentarios, setFaturamentoComentarios] = useState("");
+  const faturamentoAttachmentInputRef = useRef<HTMLInputElement | null>(null);
+  const triggerFaturamentoAttachmentUpload = () => faturamentoAttachmentInputRef.current?.click();
   useEffect(() => {
     if (!modalAprovacaoDetalheOpen) {
       setAprovacaoMensagem(null);
@@ -93,6 +102,15 @@ const Obras = () => {
       setAprovacaoAnexoName(null);
     }
   }, [modalAprovacaoDetalheOpen]);
+
+  useEffect(() => {
+    if (!modalFaturamentoDetalheOpen) {
+      setNotaFiscal("");
+      setDataFaturamento("");
+      setFaturamentoAnexoName(null);
+      setFaturamentoComentarios("");
+    }
+  }, [modalFaturamentoDetalheOpen]);
 
   const triggerAprovacaoAttachmentUpload = () => aprovacaoAttachmentInputRef.current?.click();
   const [registrosTratativas, setRegistrosTratativas] = useState<Record<
@@ -326,6 +344,39 @@ const Obras = () => {
     setModalAprovacaoDetalheOpen(false);
   };
 
+  const handleSelectObraFaturamento = (obra: any) => {
+    setObraFaturamentoSelecionada(obra);
+    setModalFaturamentoDetalheOpen(true);
+    setModalFaturamentoOpen(false);
+  };
+
+  const handleSalvarFaturamento = () => {
+    if (!obraFaturamentoSelecionada) return;
+    if (!notaFiscal || !dataFaturamento) {
+      toast({
+        title: "Dados obrigatórios",
+        description: "Informe nota fiscal e data antes de registrar o faturamento.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const atualizado = {
+      ...obraFaturamentoSelecionada,
+      notaFiscal,
+      dataFaturamento,
+      anexoFaturamento: faturamentoAnexoName || undefined,
+      comentariosFaturamento: faturamentoComentarios || undefined,
+    };
+    setObras((prev) => prev.map((obra) => (obra.obra === atualizado.obra ? atualizado : obra)));
+    setObraFaturamentoSelecionada(atualizado);
+    toast({
+      title: "Faturamento registrado",
+      description: `NF ${notaFiscal} registrada para ${atualizado.obra}.`,
+      variant: "success",
+    });
+    setModalFaturamentoDetalheOpen(false);
+  };
+
   useEffect(() => {
     const loadUpsConfigs = async () => {
       const { data, error } = await supabase
@@ -538,6 +589,7 @@ const Obras = () => {
 
   const obrasEmTci = useMemo(() => obras.filter((obra) => obra.status === "tci"), [obras]);
   const obrasEmAprovacao = useMemo(() => obras.filter((obra) => obra.status === "aprovacao"), [obras]);
+  const obrasEmFaturamento = useMemo(() => obras.filter((obra) => obra.status === "faturamento"), [obras]);
 
   useEffect(() => {
     if (!modalTciOpen) return;
@@ -889,9 +941,9 @@ const Obras = () => {
             if (etapa.title === "Planejamento") clickHandler = () => setPlanejamentoModalOpen(true);
             if (etapa.title === "Execução") clickHandler = () => setExecucaoModalOpen(true);
             if (etapa.title === "Medições") clickHandler = () => setModalMedicoesOpen(true);
-      if (etapa.title === "TCI / Tratativas") clickHandler = () => setModalTciOpen(true);
-      if (etapa.title === "Aprovação") clickHandler = () => setModalAprovacaoOpen(true);
-            if (etapa.title === "Faturamento") clickHandler = () => {/* TODO: handler Faturamento */};
+            if (etapa.title === "TCI / Tratativas") clickHandler = () => setModalTciOpen(true);
+            if (etapa.title === "Aprovação") clickHandler = () => setModalAprovacaoOpen(true);
+            if (etapa.title === "Faturamento") clickHandler = () => setModalFaturamentoOpen(true);
             return (
               <div
                 key={etapa.title}
@@ -1496,6 +1548,110 @@ const Obras = () => {
                 <div className="flex justify-end gap-2">
                   <Button variant="outline" onClick={() => setModalAprovacaoDetalheOpen(false)}>Fechar</Button>
                   <Button onClick={handleSalvarAprovacao}>Salvar aprovação</Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+        <Dialog open={modalFaturamentoOpen} onOpenChange={setModalFaturamentoOpen}>
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Faturamento</DialogTitle>
+              <p className="text-sm text-muted-foreground mt-1">Visualize obras prontas para emitir nota fiscal.</p>
+            </DialogHeader>
+            <div className="space-y-4 pb-4">
+              {obrasEmFaturamento.length === 0 ? (
+                <div className="py-6 text-center text-sm text-muted-foreground">Nenhuma obra pronta para faturamento.</div>
+              ) : (
+                obrasEmFaturamento.map((obra) => (
+                  <Card
+                    key={obra.obra}
+                    className="rounded-2xl border border-primary/70 bg-white px-5 py-4 shadow-sm cursor-pointer"
+                    onClick={() => handleSelectObraFaturamento(obra)}
+                  >
+                    <div className="text-xs uppercase tracking-wide text-muted-foreground mb-1">Obra pronta</div>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-lg font-semibold text-foreground">{obra.obra}</div>
+                        <div className="text-sm text-muted-foreground">OS: {obra.os} · {obra.cidade}</div>
+                      </div>
+                      <Badge variant="secondary">{obra.status}</Badge>
+                    </div>
+                    <div className="mt-2 flex items-center gap-3 text-sm">
+                      <span className="rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-xs uppercase tracking-wide text-primary">lote</span>
+                      <span className="text-muted-foreground">Lote/NF pendente</span>
+                    </div>
+                  </Card>
+                ))
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+        <Dialog open={modalFaturamentoDetalheOpen} onOpenChange={(open) => {
+          if (!open) {
+            setModalFaturamentoDetalheOpen(false);
+            setObraFaturamentoSelecionada(null);
+          }
+        }}>
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Faturamento · {obraFaturamentoSelecionada?.obra}</DialogTitle>
+              <p className="text-sm text-muted-foreground mt-1">Registre nota fiscal, data e anexo da remessa.</p>
+            </DialogHeader>
+            {obraFaturamentoSelecionada && (
+              <div className="space-y-4">
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Nota fiscal</label>
+                    <Input
+                      value={notaFiscal}
+                      onChange={(e) => setNotaFiscal(e.target.value)}
+                      placeholder="Digite o número da NF"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Data do faturamento</label>
+                    <Input
+                      type="date"
+                      value={dataFaturamento}
+                      onChange={(e) => setDataFaturamento(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Anexar e-mail</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="file"
+                      accept=".msg,.eml,.pdf"
+                      ref={faturamentoAttachmentInputRef}
+                      className="sr-only"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        setFaturamentoAnexoName(file?.name ?? null);
+                        if (e.target) e.target.value = "";
+                      }}
+                    />
+                    <Button variant="outline" size="sm" onClick={triggerFaturamentoAttachmentUpload}>
+                      Selecionar arquivo
+                    </Button>
+                    {faturamentoAnexoName && (
+                      <span className="text-xs text-muted-foreground">{faturamentoAnexoName}</span>
+                    )}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Observações</label>
+                  <textarea
+                    className="w-full border rounded-xl px-3 py-2 min-h-[120px] text-sm"
+                    value={faturamentoComentarios}
+                    onChange={(e) => setFaturamentoComentarios(e.target.value)}
+                    placeholder="Registre pendências contábeis ou notas complementares."
+                  />
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" onClick={() => setModalFaturamentoDetalheOpen(false)}>Fechar</Button>
+                  <Button onClick={handleSalvarFaturamento}>Salvar faturamento</Button>
                 </div>
               </div>
             )}
