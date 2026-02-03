@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,6 +21,9 @@ type Localizacao = {
   obra: string;
   anotacao: string;
   status: "confirmado" | "em ajuste" | "aguardando" | "";
+  saved: boolean;
+  editingUnlocked: boolean;
+  justificativas: string[];
 };
 
 const buildInitialState = (lista: string[]) =>
@@ -29,13 +32,21 @@ const buildInitialState = (lista: string[]) =>
       obra: "",
       anotacao: "",
       status: "",
+      saved: false,
+      editingUnlocked: false,
+      justificativas: [],
     };
     return acc;
   }, {} as Record<string, Localizacao>);
 
 const Alocacao = () => {
   const [dataBase, setDataBase] = useState(new Date().toISOString().split("T")[0]);
-  const [registros, setRegistros] = useState<Record<string, Localizacao>>(() => buildInitialState(DEFAULT_EQUIPES));
+  const [registrosPorData, setRegistrosPorData] = useState<Record<string, Record<string, Localizacao>>>(() => {
+    const hoje = new Date();
+    return {
+      [hoje.toISOString().split("T")[0]]: buildInitialState(DEFAULT_EQUIPES),
+    };
+  });
   const [listaEquipes, setListaEquipes] = useState<string[]>(DEFAULT_EQUIPES);
   const [obrasDisponiveis, setObrasDisponiveis] = useState<string[]>(DEFAULT_OBRAS);
   const [carregandoEquipes, setCarregandoEquipes] = useState(false);
@@ -43,31 +54,86 @@ const Alocacao = () => {
   const [modalAberto, setModalAberto] = useState(false);
   const [currentMonth, setCurrentMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const [justificationModalTeam, setJustificationModalTeam] = useState<string | null>(null);
+  const [justificationText, setJustificationText] = useState("");
+
+  const dateKey = useCallback((date: Date) => date.toISOString().split("T")[0], []);
+
+  const ensureRecordsForDate = useCallback(
+    (key: string) => {
+      setRegistrosPorData((prev) => {
+        if (prev[key]) return prev;
+        return {
+          ...prev,
+          [key]: buildInitialState(listaEquipes),
+        };
+      });
+    },
+    [listaEquipes],
+  );
+
+  const todayKey = dateKey(new Date());
+  const isSelectedPastDate = dateKey(selectedDate) < todayKey;
+
+  const currentRecords = useMemo(
+    () => registrosPorData[dateKey(selectedDate)] || buildInitialState(listaEquipes),
+    [registrosPorData, dateKey, selectedDate, listaEquipes],
+  );
 
   const resumo = useMemo(() => {
     const totals = { confirmado: 0, "em ajuste": 0, aguardando: 0 };
-    Object.values(registros).forEach((entry) => {
+    Object.values(currentRecords).forEach((entry) => {
       if (entry.status && entry.status in totals) {
         totals[entry.status as keyof typeof totals] += 1;
       }
     });
     return totals;
-  }, [registros]);
+  }, [currentRecords]);
 
   const handleChange = (equipe: string, field: keyof Localizacao, value: string) => {
-    setRegistros((prev) => ({
-      ...prev,
-      [equipe]: {
-        ...prev[equipe],
+    const key = dateKey(selectedDate);
+    const todayKey = dateKey(new Date());
+    const isPastDate = key < todayKey;
+    const bloqueadoPorSave = currentRecords[equipe]?.saved && !currentRecords[equipe]?.editingUnlocked;
+    if (isPastDate || bloqueadoPorSave) {
+      return;
+    }
+    setRegistrosPorData((prev) => {
+      const target = prev[key] ? { ...prev[key] } : buildInitialState(listaEquipes);
+      target[equipe] = {
+        ...target[equipe],
         [field]: value,
-      },
-    }));
+      };
+      return {
+        ...prev,
+        [key]: target,
+      };
+    });
   };
 
   const handleSalvar = () => {
-    console.info("Apontamento salvo", registros);
+    const key = dateKey(selectedDate);
+    setRegistrosPorData((prev) => {
+      const target = prev[key] ?? currentRecords;
+      const atualizado = Object.fromEntries(
+        Object.entries(target).map(([team, entry]) => [
+          team,
+          {
+            ...entry,
+            saved: Boolean(entry.obra && entry.status),
+            editingUnlocked: false,
+          },
+        ]),
+      );
+      return { ...prev, [key]: atualizado };
+    });
+    console.info("Apontamento salvo", currentRecords);
     setModalAberto(false);
   };
+
+  useEffect(() => {
+    ensureRecordsForDate(dateKey(selectedDate));
+  }, [ensureRecordsForDate, dateKey, selectedDate]);
 
   const daysInCalendar = useMemo(() => {
     const year = currentMonth.getFullYear();
@@ -76,7 +142,7 @@ const Alocacao = () => {
     const startOffset = firstDayOfMonth.getDay();
     const startDate = new Date(year, month, 1 - startOffset);
 
-    return Array.from({ length: 42 }).map((_, index) => {
+  return Array.from({ length: 42 }).map((_, index) => {
       const date = new Date(startDate);
       date.setDate(startDate.getDate() + index);
       return {
@@ -96,8 +162,44 @@ const Alocacao = () => {
   };
 
   const handleDayClick = (date: Date) => {
+    const key = dateKey(date);
+    const todayKey = dateKey(new Date());
+    if (key > todayKey) {
+      return;
+    }
     setSelectedDate(date);
     setModalAberto(true);
+    ensureRecordsForDate(key);
+  };
+
+  const handleOpenJustification = (team: string) => {
+    setJustificationText("");
+    setJustificationModalTeam(team);
+  };
+
+  const handleConfirmJustification = () => {
+    if (!justificationModalTeam || !justificationText.trim()) return;
+    const key = dateKey(selectedDate);
+    setRegistrosPorData((prev) => {
+      const target = prev[key] ? { ...prev[key] } : buildInitialState(listaEquipes);
+      const entry = target[justificationModalTeam] || {
+        ...buildInitialState(listaEquipes)[justificationModalTeam],
+      };
+      const atualizado = {
+        ...target,
+        [justificationModalTeam]: {
+          ...entry,
+          editingUnlocked: true,
+          justificativas: [...entry.justificativas, justificationText.trim()],
+        },
+      };
+      return {
+        ...prev,
+        [key]: atualizado,
+      };
+    });
+    setJustificationModalTeam(null);
+    setJustificationText("");
   };
 
   const monthLabel = currentMonth.toLocaleString("pt-BR", { month: "long", year: "numeric" });
@@ -113,16 +215,21 @@ const Alocacao = () => {
         if (!error && data && data.length > 0) {
           const nomes = data.map((item: any) => item.nome);
           setListaEquipes(nomes);
-          setRegistros((prev) => {
-            const novo = { ...prev };
-            nomes.forEach((nome) => {
-              novo[nome] = prev[nome] || {
-                obra: "",
-                anotacao: "",
-                status: "",
-              };
+          setRegistrosPorData((prev) => {
+            const atualizado: Record<string, Record<string, Localizacao>> = {};
+            Object.entries(prev).forEach(([key, registro]) => {
+              atualizado[key] = { ...registro };
+              nomes.forEach((nome) => {
+                if (!atualizado[key][nome]) {
+                  atualizado[key][nome] = {
+                    obra: "",
+                    anotacao: "",
+                    status: "",
+                  };
+                }
+              });
             });
-            return novo;
+            return atualizado;
           });
         }
       } finally {
@@ -151,15 +258,8 @@ const Alocacao = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-1 md:flex-row md:items-end md:justify-between">
-        <div>
-          <p className="text-sm text-muted-foreground">Alocação diária</p>
-          <h1 className="text-2xl font-bold">Apontamento da equipe</h1>
-        </div>
-        <div className="flex items-center gap-3">
-          <label className="text-xs font-semibold tracking-wider text-muted-foreground">Data base</label>
-          <Input type="date" value={dataBase} onChange={(event) => setDataBase(event.target.value)} />
-        </div>
+      <div className="flex flex-col gap-1">
+        <h1 className="text-2xl font-bold">Apontamento da equipe</h1>
       </div>
       <div className="flex flex-wrap gap-3">
         <Badge variant="secondary">Confirmado: {resumo.confirmado}</Badge>
@@ -227,17 +327,25 @@ const Alocacao = () => {
           <div className="grid gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
             {listaEquipes.map((equipe) => (
               <Card key={equipe} className="border shadow-sm">
-                <CardHeader>
-                  <CardTitle className="text-lg">{equipe}</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="space-y-1 text-sm font-medium text-muted-foreground">
-                    <label>Obra em foco</label>
-                    <select
-                      value={registros[equipe]?.obra ?? ""}
-                      onChange={(event) => handleChange(equipe, "obra", event.target.value)}
-                      className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-                    >
+            <CardHeader>
+              <div className="flex items-center justify-between gap-2">
+                <CardTitle className="text-lg">{equipe}</CardTitle>
+                {((currentRecords[equipe]?.saved && !currentRecords[equipe]?.editingUnlocked) || isSelectedPastDate) && (
+                  <Button variant="outline" size="sm" onClick={() => handleOpenJustification(equipe)}>
+                    Editar
+                  </Button>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="space-y-1 text-sm font-medium text-muted-foreground">
+                <label>Obra em foco</label>
+                <select
+                  value={currentRecords[equipe]?.obra ?? ""}
+                  onChange={(event) => handleChange(equipe, "obra", event.target.value)}
+                  disabled={(currentRecords[equipe]?.saved && !currentRecords[equipe]?.editingUnlocked) || isSelectedPastDate}
+                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                >
                       <option value="">Selecione</option>
                       {obrasDisponiveis.map((obra) => (
                         <option key={obra} value={obra}>
@@ -246,13 +354,14 @@ const Alocacao = () => {
                       ))}
                     </select>
                   </div>
-                  <div className="space-y-1 text-sm font-medium text-muted-foreground">
-                    <label>Status do apontamento</label>
-                    <select
-                      value={registros[equipe]?.status ?? ""}
-                      onChange={(event) => handleChange(equipe, "status", event.target.value)}
-                      className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-                    >
+              <div className="space-y-1 text-sm font-medium text-muted-foreground">
+                <label>Status do apontamento</label>
+                <select
+                  value={currentRecords[equipe]?.status ?? ""}
+                  onChange={(event) => handleChange(equipe, "status", event.target.value)}
+                      disabled={(currentRecords[equipe]?.saved && !currentRecords[equipe]?.editingUnlocked) || isSelectedPastDate}
+                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                >
                       <option value="">Selecione</option>
                       <option value="confirmado">Confirmado</option>
                       <option value="em ajuste">Em ajuste</option>
@@ -264,7 +373,7 @@ const Alocacao = () => {
                     <textarea
                       rows={2}
                       className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      value={registros[equipe].anotacao}
+                      value={currentRecords[equipe]?.anotacao ?? ""}
                       onChange={(event) => handleChange(equipe, "anotacao", event.target.value)}
                       placeholder="Descreva o ponto de apoio, logística ou pendência"
                     />
@@ -276,6 +385,40 @@ const Alocacao = () => {
           <DialogFooter>
             <div />
             <Button onClick={handleSalvar}>Salvar apontamento</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={justificationModalTeam !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setJustificationModalTeam(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Justificativa para correção</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Informe o motivo pelo qual precisa liberar os campos de “Obra” e “Status”.
+            </p>
+            <textarea
+              rows={4}
+              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              value={justificationText}
+              onChange={(event) => setJustificationText(event.target.value)}
+              placeholder="Descreva a justificativa"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setJustificationModalTeam(null)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleConfirmJustification} disabled={!justificationText.trim()}>
+              Confirmar justificativa
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
