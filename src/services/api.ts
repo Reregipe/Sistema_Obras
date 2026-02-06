@@ -1,18 +1,7 @@
-// Atualiza o status (ativo/inativo) de um material
-export async function updateMaterialStatus(codigo_material: string, ativo: string): Promise<any> {
-  const response = await fetch(`${BASE_URL}/materiais/${codigo_material}/status`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ativo }),
-  });
-  const json = await response.json();
-  if (json.success) return json.data;
-  throw new Error(json.error || 'Erro ao atualizar status do material');
-}
 // Camada de acesso à API para o frontend React
-// Utiliza fetch e centraliza tratamento de erro
+// Todas as chamadas agora utilizam o cliente Supabase diretamente
 
-const BASE_URL = "http://localhost:3000";
+import { supabase } from '@/integrations/supabase/client';
 
 // Interfaces mínimas
 export interface Usuario {
@@ -32,253 +21,207 @@ export interface Acionamento {
   status: string;
 }
 
-// Resposta padrão da API
-interface ApiResponse<T> {
-  success: boolean;
-  data: T | null;
-  error: string | null;
+// Funções de acesso à API via Supabase
+
+export async function getUsuarios(): Promise<Usuario[]> {
+  const { data, error } = await supabase.from('usuarios').select('*');
+  if (error) throw new Error(error.message);
+  return data || [];
 }
 
-// Helper reutilizável para requisições
-async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE_URL}${endpoint}`, options);
-  const json: ApiResponse<T> = await res.json();
-  if (!json.success) {
-    throw new Error(json.error || 'Erro desconhecido na API');
-  }
-  return json.data as T;
+export async function getEquipes(): Promise<Equipe[]> {
+  const { data, error } = await supabase.from('equipes').select('*');
+  if (error) throw new Error(error.message);
+  return data || [];
 }
 
-// Funções de acesso à API
-export function getUsuarios(): Promise<Usuario[]> {
-  return request<Usuario[]>("/usuarios");
+export async function getAcionamentos(): Promise<Acionamento[]> {
+  const { data, error } = await supabase.from('acionamentos').select('*');
+  if (error) throw new Error(error.message);
+  return data || [];
 }
-
-export function getEquipes(): Promise<Equipe[]> {
-  return request<Equipe[]>("/equipes");
-}
-
 
 export async function createAcionamento(payload: Omit<Acionamento, "id_acionamento"> & Record<string, any>): Promise<Acionamento> {
-  return request<Acionamento>("/acionamentos", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
+  const { data, error } = await supabase.from('acionamentos').insert(payload).select().single();
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function getAcionamentoById(id: string): Promise<any> {
+  const { data, error } = await supabase.from('acionamentos').select('*').eq('id_acionamento', id).single();
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function updateEtapaAcionamento(idAcionamento: string, etapa: string, data_medicao?: string): Promise<any> {
+  const updatePayload: Record<string, any> = { etapa_atual: etapa };
+  if (data_medicao) updatePayload.medicao_registrada_em = data_medicao;
+  const { data, error } = await supabase.from('acionamentos').update(updatePayload).eq('id_acionamento', idAcionamento).select().single();
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function getAcionamentosCountByEtapa(etapaId: string): Promise<number> {
+  const { count, error } = await supabase.from('acionamentos').select('*', { count: 'exact', head: true }).eq('etapa_atual', etapaId);
+  if (error) throw new Error(error.message);
+  return count || 0;
+}
+
+export async function getAcionamentosByEtapa(etapaId: string): Promise<Acionamento[]> {
+  const { data, error } = await supabase.from('acionamentos').select('*').eq('etapa_atual', etapaId);
+  if (error) throw new Error(error.message);
+  return data || [];
 }
 
 export async function vincularEquipesAcionamento(id_acionamento: string, equipes: string[]): Promise<any> {
-  return request<any>("/acionamento_equipes", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ id_acionamento, equipes }),
-  });
+  const rows = equipes.map(id_equipe => ({ id_acionamento, id_equipe }));
+  const { data, error } = await supabase.from('acionamento_equipes').insert(rows).select();
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function getEquipesRelacionadas(idAcionamento: string): Promise<any> {
+  const { data, error } = await supabase.from('acionamento_equipes').select('*').eq('id_acionamento', idAcionamento);
+  if (error) throw new Error(error.message);
+  return data || [];
 }
 
 export async function getCodigosMO(params?: Record<string, any>): Promise<any[]> {
-  const query = new URLSearchParams(params || {}).toString();
-  return request<any[]>(`/codigos_mao_de_obra${query ? `?${query}` : ""}`);
-}
-
-export async function getSystemSettings(keys: string[]): Promise<any[]> {
-  return request<any[]>(`/system_settings?keys=${keys.join(",")}`);
+  let query = supabase.from('codigos_mao_de_obra').select('*');
+  if (params) {
+    Object.entries(params).forEach(([key, value]) => {
+      query = query.eq(key, value);
+    });
+  }
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+  return data || [];
 }
 
 export async function upsertCodigoMO(payload: Record<string, any>): Promise<any> {
-  return request<any>("/codigos_mao_de_obra", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
+  const { data, error } = await supabase.from('codigos_mao_de_obra').upsert(payload).select().single();
+  if (error) throw new Error(error.message);
+  return data;
 }
 
-
-export async function getListaCabecalho(id_acionamento: string): Promise<any> {
-  return request<any>(`/lista_aplicacao_cabecalho?id_acionamento=${id_acionamento}`);
-}
-
-export async function getListaItens(id_lista_aplicacao: string): Promise<any[]> {
-  return request<any[]>(`/lista_aplicacao_itens?id_lista_aplicacao=${id_lista_aplicacao}`);
+export async function getSystemSettings(keys: string[]): Promise<any[]> {
+  const { data, error } = await supabase.from('system_settings').select('*').in('key', keys);
+  if (error) throw new Error(error.message);
+  return data || [];
 }
 
 export async function getMateriais(codigos: string[]): Promise<any[]> {
-  return request<any[]>(`/materiais?codigos=${codigos.join(",")}`);
+  const { data, error } = await supabase.from('materiais').select('*').in('codigo_material', codigos);
+  if (error) throw new Error(error.message);
+  return data || [];
+}
+
+export async function searchMateriais(term: string): Promise<any[]> {
+  const { data, error } = await supabase.from('materiais').select('*').or(`codigo_material.ilike.%${term}%,descricao.ilike.%${term}%`);
+  if (error) throw new Error(error.message);
+  return data || [];
+}
+
+export async function getMaterialByCodigoOrDescricao(term: string): Promise<any[]> {
+  const { data, error } = await supabase.from('materiais').select('*').or(`codigo_material.ilike.%${term}%,descricao.ilike.%${term}%`);
+  if (error) throw new Error(error.message);
+  return data || [];
+}
+
+export async function updateMaterialStatus(codigo_material: string, ativo: string): Promise<any> {
+  const { data, error } = await supabase.from('materiais').update({ ativo }).eq('codigo_material', codigo_material).select().single();
+  if (error) throw new Error(error.message);
+  return data;
 }
 
 export async function getEquipesByIds(ids: string[]): Promise<any[]> {
-  return request<any[]>(`/equipes?ids=${ids.join(",")}`);
+  const { data, error } = await supabase.from('equipes').select('*').in('id_equipe', ids);
+  if (error) throw new Error(error.message);
+  return data || [];
 }
 
-export async function saveMedicao(medicao: any) {
-  try {
-    const response = await fetch(`${BASE_URL}/medicoes`, {
-      method: medicao.id ? 'PUT' : 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(medicao),
-    });
-    return await response.json();
-  } catch (err) {
-    console.error('Erro ao salvar medição', err);
-    return { success: false, error: err };
-  }
+export async function getListaCabecalho(id_acionamento: string): Promise<any> {
+  const { data, error } = await supabase.from('lista_aplicacao_cabecalho').select('*').eq('id_acionamento', id_acionamento).maybeSingle();
+  if (error) throw new Error(error.message);
+  return data;
 }
 
-export async function saveBook(book: any) {
-  try {
-    const response = await fetch(`${BASE_URL}/books`, {
-      method: book.id ? 'PUT' : 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(book),
-    });
-    return await response.json();
-  } catch (err) {
-    console.error('Erro ao salvar book', err);
-    return { success: false, error: err };
-  }
+export async function getListaItens(id_lista_aplicacao: string): Promise<any[]> {
+  const { data, error } = await supabase.from('lista_aplicacao_itens').select('*').eq('id_lista_aplicacao', id_lista_aplicacao);
+  if (error) throw new Error(error.message);
+  return data || [];
 }
 
-export async function saveSucata(sucata: any) {
-  try {
-    const response = await fetch(`${BASE_URL}/sucatas`, {
-      method: sucata.id ? 'PUT' : 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(sucata),
-    });
-    return await response.json();
-  } catch (err) {
-    console.error('Erro ao salvar sucata', err);
-    return { success: false, error: err };
-  }
+export async function saveListaCabecalho(id_acionamento: string): Promise<any> {
+  const { data, error } = await supabase.from('lista_aplicacao_cabecalho').upsert({ id_acionamento }).select().single();
+  if (error) throw new Error(error.message);
+  return data;
 }
 
-export async function saveConsumo(consumo: any) {
-  try {
-    const response = await fetch(`${BASE_URL}/consumos`, {
-      method: consumo.id ? 'PUT' : 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(consumo),
-    });
-    return await response.json();
-  } catch (err) {
-    console.error('Erro ao salvar consumo', err);
-    return { success: false, error: err };
-  }
-}
-
-export async function saveAuditoria(auditoria: any) {
-  try {
-    const response = await fetch(`${BASE_URL}/auditorias`, {
-      method: auditoria.id ? 'PUT' : 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(auditoria),
-    });
-    return await response.json();
-  } catch (err) {
-    console.error('Erro ao salvar auditoria', err);
-    return { success: false, error: err };
-  }
-}
-
-export async function getAcionamentoById(id) {
-  const response = await fetch(`${BASE_URL}/acionamentos/${id}`);
-  return await response.json();
-}
-
-export async function getEquipesRelacionadas(idAcionamento) {
-  const response = await fetch(`${BASE_URL}/acionamento_equipes?id_acionamento=${idAcionamento}`);
-  return await response.json();
-}
-
-export async function getConsumoItens(idAcionamento) {
-  const response = await fetch(`${BASE_URL}/lista_aplicacao_itens?id_acionamento=${idAcionamento}`);
-  return await response.json();
-}
-
-export async function getSucataItens(idAcionamento) {
-  const response = await fetch(`${BASE_URL}/sucata_itens?id_acionamento=${idAcionamento}`);
-  return await response.json();
-}
-
-export async function getMedicaoRascunho(idAcionamento) {
-  const response = await fetch(`${BASE_URL}/medicao_orcamentos?id_acionamento=${idAcionamento}`);
-  return await response.json();
-}
-
-export async function updateEtapaAcionamento(idAcionamento, etapa, data) {
-  const response = await fetch(`${BASE_URL}/acionamentos/${idAcionamento}/etapa`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ etapa_atual: etapa, medicao_registrada_em: data }),
-  });
-  return await response.json();
-}
-
-export async function getAcionamentos() {
-  const response = await fetch(`${BASE_URL}/acionamentos`);
-  const json = await response.json();
-  if (json.success) return json.data;
-  throw new Error(json.error || 'Erro ao buscar acionamentos');
-}
-
-export async function searchMateriais(term: string) {
-  const response = await fetch(`${BASE_URL}/materiais/search?term=${encodeURIComponent(term)}`);
-  return await response.json();
-}
-
-export async function getMaterialByCodigoOrDescricao(term: string) {
-  const response = await fetch(`${BASE_URL}/materiais?codigo=${encodeURIComponent(term)}&descricao=${encodeURIComponent(term)}`);
-  return await response.json();
-}
-
-export async function saveListaCabecalho(id_acionamento: string) {
-  const response = await fetch(`${BASE_URL}/lista_aplicacao_cabecalho`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ id_acionamento })
-  });
-  return await response.json();
-}
-
-export async function saveListaItens(listaId: string, itens: any[]) {
+export async function saveListaItens(listaId: string, itens: any[]): Promise<any> {
   // Remove itens antigos e insere novos
-  await fetch(`${BASE_URL}/lista_aplicacao_itens?listaId=${listaId}`, { method: 'DELETE' });
-  const response = await fetch(`${BASE_URL}/lista_aplicacao_itens`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(itens)
-  });
-  return await response.json();
+  await supabase.from('lista_aplicacao_itens').delete().eq('id_lista_aplicacao', listaId);
+  if (itens.length > 0) {
+    const { data, error } = await supabase.from('lista_aplicacao_itens').insert(itens).select();
+    if (error) throw new Error(error.message);
+    return data;
+  }
+  return [];
 }
 
-export async function getAcionamentoExecucao(id_acionamento) {
-  const response = await fetch(`${BASE_URL}/acionamento_execucao?id_acionamento=${id_acionamento}`);
-  const json = await response.json();
-  if (json.success) return json.data;
-  throw new Error(json.error || 'Erro ao buscar execução do acionamento');
+export async function getConsumoItens(idAcionamento: string): Promise<any[]> {
+  const { data, error } = await supabase.from('lista_aplicacao_itens').select('*').eq('id_acionamento', idAcionamento);
+  if (error) throw new Error(error.message);
+  return data || [];
 }
 
-export async function getAcionamentosCountByEtapa(etapaId) {
-  const response = await fetch(`${BASE_URL}/acionamentos/count?etapa_atual=${etapaId}`);
-  const json = await response.json();
-  if (json.success) return json.data;
-  throw new Error(json.error || 'Erro ao contar acionamentos');
+export async function getSucataItens(idAcionamento: string): Promise<any[]> {
+  const { data, error } = await supabase.from('sucata_itens').select('*').eq('id_acionamento', idAcionamento);
+  if (error) throw new Error(error.message);
+  return data || [];
 }
 
-export async function getAcionamentosByEtapa(etapaId) {
-  const response = await fetch(`${BASE_URL}/acionamentos?etapa_atual=${etapaId}`);
-  const json = await response.json();
-  if (json.success) return json.data;
-  throw new Error(json.error || 'Erro ao buscar acionamentos por etapa');
+export async function getMedicaoRascunho(idAcionamento: string): Promise<any> {
+  const { data, error } = await supabase.from('medicao_orcamentos').select('*').eq('id_acionamento', idAcionamento).maybeSingle();
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function saveMedicao(medicao: any): Promise<any> {
+  const { data, error } = await supabase.from('medicao_orcamentos').upsert(medicao).select().single();
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function saveBook(book: any): Promise<any> {
+  // Books are stored alongside medição data
+  const { data, error } = await supabase.from('medicao_orcamentos').upsert(book).select().single();
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function saveSucata(sucata: any): Promise<any> {
+  const { data, error } = await supabase.from('sucata_itens').upsert(sucata).select().single();
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function saveConsumo(consumo: any): Promise<any> {
+  const { data, error } = await supabase.from('lista_aplicacao_itens').upsert(consumo).select().single();
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function saveAuditoria(auditoria: any): Promise<any> {
+  const { data, error } = await supabase.from('acionamento_etapa_logs').insert(auditoria).select().single();
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function getAcionamentoExecucao(id_acionamento: string): Promise<any> {
+  const { data, error } = await supabase.from('acionamento_execucao').select('*').eq('id_acionamento', id_acionamento).maybeSingle();
+  if (error) throw new Error(error.message);
+  return data;
 }
 
 // Pronto para crescer: adicione novas funções seguindo o padrão acima.

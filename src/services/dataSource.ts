@@ -1,3 +1,4 @@
+import { supabase } from "@/integrations/supabase/client";
 import { equipesCatalog } from "@/data/equipesCatalog";
 import { codigosMOCatalog } from "@/data/codigosMOCatalog";
 // Buscar códigos de mão de obra
@@ -7,33 +8,22 @@ export async function fetchCodigosMO(): Promise<DataSourceResult<any[]>> {
     if (source === "local") {
       // Retorna sempre o mock local
       return { data: codigosMOCatalog, error: null };
-    } else if (source === "api") {
-      // Consome API local e extrai apenas o array
-      const res = await fetch("http://localhost:3000/codigosMO");
-      if (!res.ok) {
+    } else if (source === "supabase" || source === "api") {
+      const { data, error } = await supabase
+        .from('codigos_mao_de_obra')
+        .select('*')
+        .order('codigo');
+      if (error) {
         return {
           data: [],
           error: {
-            message: `HTTP ${res.status}`,
-            code: res.status,
-            details: await res.text(),
+            message: error.message,
+            code: error.code,
+            details: error.details,
           },
         };
       }
-      const json = await res.json();
-      const arr = Array.isArray(json?.data) ? json.data : [];
-      if (arr.length > 0) {
-        return { data: arr, error: null };
-      } else {
-        return {
-          data: [],
-          error: {
-            message: 'Resposta da API não contém array de códigos.',
-            code: 'invalid_api_response',
-            details: json,
-          },
-        };
-      }
+      return { data: data || [], error: null };
     } else {
       return {
         data: [],
@@ -61,33 +51,22 @@ export async function fetchMateriais(): Promise<DataSourceResult<any[]>> {
     if (source === "local") {
       // Retorna sempre o mock local (se existir)
       return { data: materiaisCatalog, error: null };
-    } else if (source === "api") {
-      // Consome API local e extrai apenas o array
-      const res = await fetch("http://localhost:3000/materiais");
-      if (!res.ok) {
+    } else if (source === "supabase" || source === "api") {
+      const { data, error } = await supabase
+        .from('materiais')
+        .select('*')
+        .order('codigo_material');
+      if (error) {
         return {
           data: [],
           error: {
-            message: `HTTP ${res.status}`,
-            code: res.status,
-            details: await res.text(),
+            message: error.message,
+            code: error.code,
+            details: error.details,
           },
         };
       }
-      const json = await res.json();
-      const arr = Array.isArray(json?.data) ? json.data : [];
-      if (arr.length > 0) {
-        return { data: arr, error: null };
-      } else {
-        return {
-          data: [],
-          error: {
-            message: 'Resposta da API não contém array de materiais.',
-            code: 'invalid_api_response',
-            details: json,
-          },
-        };
-      }
+      return { data: data || [], error: null };
     } else {
       return {
         data: [],
@@ -129,33 +108,22 @@ export async function fetchEquipes(): Promise<DataSourceResult<any[]>> {
     if (source === "local") {
       // Retorna sempre o mock local
       return { data: equipesCatalog, error: null };
-    } else if (source === "api") {
-      // Consome API local e extrai apenas o array
-      const res = await fetch("http://localhost:3000/equipes");
-      if (!res.ok) {
+    } else if (source === "supabase" || source === "api") {
+      const { data, error } = await supabase
+        .from('equipes')
+        .select('*')
+        .order('nome_equipe');
+      if (error) {
         return {
           data: [],
           error: {
-            message: `HTTP ${res.status}`,
-            code: res.status,
-            details: await res.text(),
+            message: error.message,
+            code: error.code,
+            details: error.details,
           },
         };
       }
-      const json = await res.json();
-      const arr = Array.isArray(json?.data) ? json.data : [];
-      if (arr.length > 0) {
-        return { data: arr, error: null };
-      } else {
-        return {
-          data: [],
-          error: {
-            message: 'Resposta da API não contém array de equipes.',
-            code: 'invalid_api_response',
-            details: json,
-          },
-        };
-      }
+      return { data: data || [], error: null };
     } else {
       return {
         data: [],
