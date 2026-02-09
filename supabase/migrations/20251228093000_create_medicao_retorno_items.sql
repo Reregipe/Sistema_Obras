@@ -1,4 +1,4 @@
-﻿-- Create table for concessionaria return items used by the auditing modal
+-- Create table for concessionaria return items used by the auditing modal
 CREATE TABLE IF NOT EXISTS public.medicao_retorno_items (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   id_acionamento UUID NOT NULL REFERENCES public.acionamentos(id_acionamento) ON DELETE CASCADE,

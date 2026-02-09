@@ -7,8 +7,8 @@ DO $$
 BEGIN
   CREATE TABLE IF NOT EXISTS public.acionamento_equipes (
     id uuid primary key default gen_random_uuid(),
-    id_acionamento uuid not null references public.acionamentos(id) on delete cascade,
-    id_equipe uuid not null references public.equipes(id) on delete cascade,
+    id_acionamento uuid not null references public.acionamentos(id_acionamento) on delete cascade,
+    id_equipe uuid not null references public.equipes(id_equipe) on delete cascade,
     
     -- Papéis/funções da equipe no acionamento
     papel text, -- 'lider', 'eletricista', 'ajudante', etc
@@ -16,7 +16,7 @@ BEGIN
     -- Auditoria
     criado_em timestamptz default now(),
     atualizado_em timestamptz default now(),
-    criado_por uuid references public.usuarios(id),
+    criado_por uuid references public.usuarios(id_usuario),
     
     unique(id_acionamento, id_equipe)
   );

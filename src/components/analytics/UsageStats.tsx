@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+// Supabase removido
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Users, Activity, FileText, TrendingUp } from "lucide-react";
 
@@ -19,46 +19,19 @@ export const UsageStats = () => {
   });
   const [loading, setLoading] = useState(true);
 
+  // Dados mocados/local: ajuste conforme integração futura
   useEffect(() => {
-    fetchStats();
-  }, []);
-
-  const fetchStats = async () => {
-    try {
-      // Total de usuários
-      const { count: totalUsers } = await supabase
-        .from("profiles")
-        .select("*", { count: "exact", head: true });
-
-      // Usuários ativos (com pelo menos uma role)
-      const { data: activeUsersData } = await supabase
-        .from("user_roles")
-        .select("user_id", { count: "exact" });
-
-      const activeUsers = new Set(activeUsersData?.map((r) => r.user_id)).size;
-
-      // Total de acionamentos
-      const { count: totalAcionamentos } = await supabase
-        .from("acionamentos")
-        .select("*", { count: "exact", head: true });
-
-      // Total de obras
-      const { count: totalObras } = await supabase
-        .from("obras")
-        .select("*", { count: "exact", head: true });
-
+    // Simula carregamento e popula com dados zerados ou mocados
+    setTimeout(() => {
       setStats({
-        totalUsers: totalUsers || 0,
-        activeUsers,
-        totalAcionamentos: totalAcionamentos || 0,
-        totalObras: totalObras || 0,
+        totalUsers: 0,
+        activeUsers: 0,
+        totalAcionamentos: 0,
+        totalObras: 0,
       });
-    } catch (error) {
-      console.error("Error fetching stats:", error);
-    } finally {
       setLoading(false);
-    }
-  };
+    }, 500);
+  }, []);
 
   const cards = [
     {

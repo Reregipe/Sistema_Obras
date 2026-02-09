@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+// Supabase removido
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -41,41 +41,10 @@ export const UsersManagement = () => {
 
   const fetchUsers = async () => {
     setLoading(true);
-    try {
-      const { data: profiles, error: profilesError } = await supabase
-        .from("profiles")
-        .select("id, nome, email")
-        .order("nome");
-      if (profilesError) throw profilesError;
-
-      const { data: rolesData, error: rolesError } = await supabase.from("user_roles").select("user_id, role");
-      if (rolesError) throw rolesError;
-
-      const { data: perms } = await supabase
-        .from("usuarios")
-        .select("id_usuario, pode_alterar_acionamento");
-
-      const mapped: UserProfile[] =
-        profiles?.map((profile) => {
-          const perm = perms?.find((p: any) => p.id_usuario === profile.id);
-          return {
-            ...profile,
-            roles: rolesData?.filter((r) => r.user_id === profile.id) || [],
-            pode_alterar_acionamento: perm?.pode_alterar_acionamento ?? false,
-          };
-        }) || [];
-
-      setUsers(mapped);
-    } catch (error) {
-      console.error("Erro ao carregar usuários", error);
-      toast({
-        title: "Erro ao carregar usuários",
-        description: "Não foi possível carregar a lista de usuários.",
-        variant: "destructive",
-      });
-    } finally {
+    setTimeout(() => {
+      setUsers([]); // Lista vazia por padrão
       setLoading(false);
-    }
+    }, 500);
   };
 
   useEffect(() => {
@@ -98,19 +67,8 @@ export const UsersManagement = () => {
   };
 
   const togglePermissao = async (user: UserProfile, value: boolean) => {
-    try {
-      const { error } = await supabase
-        .from("usuarios")
-        .update({ pode_alterar_acionamento: value })
-        .eq("id_usuario", user.id);
-      if (error) throw error;
-      setUsers((prev) => prev.map((u) => (u.id === user.id ? { ...u, pode_alterar_acionamento: value } : u)));
-    } catch (err) {
-      toast({
-        description: "Não foi possível atualizar a permissão.",
-        variant: "destructive",
-      });
-    }
+    // Simula atualização local
+    setUsers((prev) => prev.map((u) => (u.id === user.id ? { ...u, pode_alterar_acionamento: value } : u)));
   };
 
   if (loading) {

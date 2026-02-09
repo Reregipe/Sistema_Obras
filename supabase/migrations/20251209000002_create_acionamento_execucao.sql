@@ -5,7 +5,7 @@
 
 create table if not exists public.acionamento_execucao (
   id uuid primary key default gen_random_uuid(),
-  id_acionamento uuid not null unique references public.acionamentos(id) on delete cascade,
+  id_acionamento uuid not null unique references public.acionamentos(id_acionamento) on delete cascade,
   
   -- Dados de saída/retorno
   saida_base timestamptz,
@@ -42,9 +42,9 @@ create table if not exists public.acionamento_execucao (
   -- Auditoria
   criado_em timestamptz default now(),
   atualizado_em timestamptz default now(),
-  criado_por uuid references public.usuarios(id),
+  criado_por uuid references public.usuarios(id_usuario),
   
-  constraint fk_acionamento_execucao_acionamento foreign key (id_acionamento) references public.acionamentos(id)
+  constraint fk_acionamento_execucao_acionamento foreign key (id_acionamento) references public.acionamentos(id_acionamento)
 );
 
 -- Índices

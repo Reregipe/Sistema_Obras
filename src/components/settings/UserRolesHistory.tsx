@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
+// Supabase removido
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -8,7 +8,7 @@ import { Loader2, History, UserPlus, UserMinus, Download, FileText } from "lucid
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { exportToPDF, exportToExcel } from "@/utils/exportUtils";
-import { useRealtimeRoleChanges } from "@/hooks/useRealtimeRoleChanges";
+// import removido: useRealtimeRoleChanges
 
 interface HistoryEntry {
   id: string;
@@ -36,46 +36,14 @@ export const UserRolesHistory = () => {
   const { toast } = useToast();
 
   // Hook para escutar mudanças em tempo real
-  useRealtimeRoleChanges();
+  // useRealtimeRoleChanges removido
 
   const fetchHistory = async () => {
     setLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from("user_roles_history")
-        .select(`
-          *,
-          profiles!user_roles_history_user_id_fkey(nome, email),
-          profiles!user_roles_history_concedido_por_fkey(nome)
-        `)
-        .order("criado_em", { ascending: false })
-        .limit(50);
-
-      if (error) throw error;
-
-      const formattedData = data?.map((entry: any) => ({
-        id: entry.id,
-        user_id: entry.user_id,
-        role: entry.role,
-        acao: entry.acao,
-        concedido_por: entry.concedido_por,
-        criado_em: entry.criado_em,
-        user_nome: entry.profiles?.nome || "Usuário",
-        user_email: entry.profiles?.email || "",
-        admin_nome: entry.concedido_por ? (entry.profiles_1?.nome || "Admin") : null,
-      })) || [];
-
-      setHistory(formattedData);
-    } catch (error) {
-      console.error("Error fetching history:", error);
-      toast({
-        title: "Erro ao carregar histórico",
-        description: "Não foi possível carregar o histórico de permissões.",
-        variant: "destructive",
-      });
-    } finally {
+    setTimeout(() => {
+      setHistory([]); // Lista vazia por padrão
       setLoading(false);
-    }
+    }, 500);
   };
 
   useEffect(() => {

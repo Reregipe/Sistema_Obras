@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+// Supabase removido
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
@@ -10,63 +10,13 @@ export const DashboardCharts = () => {
   const [timelineData, setTimelineData] = useState<any[]>([]);
 
   useEffect(() => {
-    loadChartData();
+    // Dados mocados/local: ajuste conforme integração futura
+    setTimeout(() => {
+      setStatusData([]);
+      setPrioridadeData([]);
+      setTimelineData([]);
+    }, 500);
   }, []);
-
-  const loadChartData = async () => {
-    // Status de acionamentos
-    const { data: acionamentos } = await supabase
-      .from('acionamentos')
-      .select('status');
-
-    if (acionamentos) {
-      const statusCount = acionamentos.reduce((acc: any, item) => {
-        acc[item.status] = (acc[item.status] || 0) + 1;
-        return acc;
-      }, {});
-
-      setStatusData(
-        Object.entries(statusCount).map(([name, value]) => ({ name, value }))
-      );
-    }
-
-    // Prioridade de acionamentos
-    const { data: prioridades } = await supabase
-      .from('acionamentos')
-      .select('prioridade');
-
-    if (prioridades) {
-      const prioridadeCount = prioridades.reduce((acc: any, item) => {
-        acc[item.prioridade] = (acc[item.prioridade] || 0) + 1;
-        return acc;
-      }, {});
-
-      setPrioridadeData(
-        Object.entries(prioridadeCount).map(([name, value]) => ({ name, value }))
-      );
-    }
-
-    // Timeline de obras (últimos 7 dias)
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-
-    const { data: obras } = await supabase
-      .from('obras')
-      .select('criado_em')
-      .gte('criado_em', sevenDaysAgo.toISOString());
-
-    if (obras) {
-      const timeline = obras.reduce((acc: any, item) => {
-        const date = new Date(item.criado_em).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
-        acc[date] = (acc[date] || 0) + 1;
-        return acc;
-      }, {});
-
-      setTimelineData(
-        Object.entries(timeline).map(([date, count]) => ({ date, count }))
-      );
-    }
-  };
 
   const COLORS = ['hsl(var(--primary))', 'hsl(var(--secondary))', 'hsl(var(--accent))', 'hsl(var(--muted))'];
 

@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useState, useMemo, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,6 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { AcionamentoForm } from "@/components/forms/AcionamentoForm";
 import { WorkflowSteps } from "@/components/domain/WorkflowSteps";
 import { Plus, Download } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Input } from "@/components/ui/input";
 import { useNavigate } from "react-router-dom";
@@ -41,10 +40,25 @@ export default function Acionamentos() {
   const [open, setOpen] = useState(false);
   const [rows, setRows] = useState<Acionamento[]>([]);
   const [loading, setLoading] = useState(false);
+
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await import("@/services/api").then(m => m.getAcionamentos ? m.getAcionamentos() : []);
+      setRows(data || []);
+    } catch (error) {
+      toast({ title: "Erro ao carregar", description: error.message, variant: "destructive" });
+    }
+    setLoading(false);
+  }, [toast]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
   const sortedRows = useMemo(() => {
     const priorityScore = (item: Acionamento) =>
       (item.prioridade || "").toLowerCase() === "urgente" ? 0 : 1;
-
     return [...rows].sort((a, b) => {
       const scoreDiff = priorityScore(b) - priorityScore(a);
       if (scoreDiff !== 0) return scoreDiff;
@@ -53,26 +67,6 @@ export default function Acionamentos() {
       return dateB - dateA;
     });
   }, [rows]);
-
-  const loadData = async () => {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from("acionamentos")
-      .select("codigo_acionamento, numero_os, status, prioridade, municipio, data_abertura, modalidade")
-      .order("data_abertura", { ascending: false })
-      .limit(100);
-
-    if (error) {
-      toast({ title: "Erro ao carregar", description: error.message, variant: "destructive" });
-    } else {
-      setRows(data || []);
-    }
-    setLoading(false);
-  };
-
-  useEffect(() => {
-    loadData();
-  }, []);
 
   return (
     <div className="container mx-auto px-6 py-8 space-y-6">

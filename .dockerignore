@@ -1,0 +1,49 @@
+# Dependencies
+node_modules/
+npm-debug.log*
+
+# Backend (not deployed - using Supabase directly)
+backend/
+
+# Build output (rebuilt in Docker)
+dist/
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment files (secrets)
+.env
+.env.local
+.env.*.local
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Scripts (not needed in container)
+scripts/
+supabase/
+
+# Data files
+*.csv
+*.xlsx
+*.db
+*.sqlite
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Misc
+bun.lockb
+check_db.py
+apply_schema.py
+import_csv.py

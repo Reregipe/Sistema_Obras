@@ -11,7 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { supabase } from "@/integrations/supabase/client";
+import { fetchCodigosMO } from "@/services/dataSource";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Plus } from "lucide-react";
 
@@ -43,33 +43,27 @@ export default function CodigosMO() {
   });
 
   useEffect(() => {
-    carregar();
-  }, []);
-
-  const carregar = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("codigos_mao_de_obra")
-      .select("codigo_mao_de_obra, descricao, unidade, operacao, ups, tipo, ativo")
-      .order("codigo_mao_de_obra", { ascending: true });
-
-    if (error) {
-      toast({
-        title: "Erro ao carregar",
-        description: error.message,
-        variant: "destructive",
-      });
-    } else {
-      setLista(data || []);
-    }
-    setLoading(false);
-  };
+    fetchCodigosMO().then(({ data, error }) => {
+      if (error) {
+        toast({
+          title: "Erro ao carregar",
+          description: error.message,
+          variant: "destructive",
+        });
+        setLista([]);
+      } else {
+        setLista(data ?? []);
+      }
+      setLoading(false);
+    });
+  }, []);
 
   const filtrados = useMemo(() => {
     const term = busca.toLowerCase();
     return lista.filter(
       (item) =>
-        item.codigo_mao_de_obra.toLowerCase().includes(term) ||
+        String(item.codigo_mao_de_obra).toLowerCase().includes(term) ||
         (item.descricao || "").toLowerCase().includes(term)
     );
   }, [busca, lista]);
@@ -82,7 +76,6 @@ export default function CodigosMO() {
       if (!form.tipo.trim()) {
         throw new Error("Selecione o tipo (LM ou LV).");
       }
-
       setIsSaving(true);
       const payload = {
         codigo_mao_de_obra: form.codigo.trim().toUpperCase(),
@@ -93,35 +86,11 @@ export default function CodigosMO() {
         tipo: form.tipo.trim().toUpperCase(),
         ativo: form.ativo ? "S" : "N",
       };
-
-      const { error } = await supabase
-        .from("codigos_mao_de_obra")
-        .upsert([payload], { onConflict: "codigo_mao_de_obra,operacao,tipo" });
-
-      if (error) throw error;
-
-      toast({
-        title: "Salvo",
-        description: "Código de mão de obra inserido/atualizado.",
-      });
-
+      // Função de salvar não implementada na API local/dataSource
+      toast({ title: "Função de salvar não implementada na API local/dataSource" });
       setOpen(false);
-      setForm({
-        codigo: "",
-        descricao: "",
-        unidade: "",
-        operacao: "",
-        ups: "",
-        tipo: "",
-        ativo: true,
-      });
-      carregar();
-    } catch (err: any) {
-      toast({
-        title: "Erro ao salvar",
-        description: err?.message || "Falha ao salvar.",
-        variant: "destructive",
-      });
+    } catch (error: any) {
+      toast({ title: "Erro ao salvar", description: error.message, variant: "destructive" });
     } finally {
       setIsSaving(false);
     }

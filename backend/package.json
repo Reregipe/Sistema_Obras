@@ -1,0 +1,11 @@
+{
+  "name": "backend",
+  "type": "module",
+  "scripts": {
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "fastify": "^4.0.0",
+    "better-sqlite3": "^8.0.0"
+  }
+}

@@ -1,6 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+import {
+  getAcionamentoById,
+  getListaCabecalho,
+  getListaItens,
+  getMaterialByCodigoOrDescricao,
+  searchMateriais,
+  saveListaCabecalho,
+  saveListaItens
+} from "@/services/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -61,54 +69,27 @@ export default function AcionamentoMateriais() {
       setLoading(true);
       setError(null);
       try {
-        // tenta pelo id_acionamento (uuid) e, se não achar, pelo código
-        let acRes = await supabase
-          .from("acionamentos")
-          .select("id_acionamento,codigo_acionamento,municipio,data_abertura")
-          .eq("id_acionamento", id)
-          .maybeSingle();
-        if (!acRes.data) {
-          acRes = await supabase
-            .from("acionamentos")
-            .select("id_acionamento,codigo_acionamento,municipio,data_abertura")
-            .eq("codigo_acionamento", id)
-            .maybeSingle();
+        let acRes = await getAcionamentoById(id);
+        if (!acRes) {
+          acRes = await getAcionamentoById(undefined, id); // busca por código
         }
-        if (!acRes.data) {
+        if (!acRes) {
           setError("Acionamento não encontrado.");
           return;
         }
-        setAcionamento(acRes.data as AcionamentoRow);
-
+        setAcionamento(acRes);
         // cabeçalho existente
-        const { data: cab } = await supabase
-          .from("lista_aplicacao_cabecalho")
-          .select("*")
-          .eq("id_acionamento", (acRes.data as any).id_acionamento)
-          .maybeSingle();
-        if (cab) setLista(cab as ListaCabecalho);
-
+        const cab = await getListaCabecalho(acRes.id_acionamento);
+        if (cab) setLista(cab);
         // itens existentes
         if (cab?.id_lista_aplicacao) {
-          const { data: itensExist } = await supabase
-            .from("lista_aplicacao_itens")
-            .select("codigo_material,descricao_item,unidade_medida,quantidade,ordem_item")
-            .eq("id_lista_aplicacao", cab.id_lista_aplicacao)
-            .order("ordem_item");
-          const mapped =
-            itensExist?.map((it) => ({
-              codigo_material: it.codigo_material,
-              descricao_item: it.descricao_item || "",
-              unidade_medida: it.unidade_medida || "",
-              quantidade: Number(it.quantidade || 0),
-            })) || [];
-          setItens(mapped);
+          const itensExist = await getListaItens(cab.id_lista_aplicacao);
+          setItens(itensExist || []);
         }
       } catch (err: any) {
-        setError(err.message || "Erro ao carregar dados.");
-      } finally {
-        setLoading(false);
+        setError(err.message);
       }
+      setLoading(false);
     };
     load();
   }, [id]);
@@ -122,18 +103,13 @@ export default function AcionamentoMateriais() {
     setError(null);
     setInfo(null);
     try {
-      const { data, error: err } = await supabase
-        .from("materiais")
-        .select("*")
-        .or(`codigo_material.eq.${term},descricao.ilike.%${term}%`)
-        .limit(5);
-      if (err) throw err;
+      const data = await getMaterialByCodigoOrDescricao(term);
       if (!data || data.length === 0) {
         setMaterialEncontrado(null);
         setError("Material não encontrado.");
         return;
       }
-      const exact = data.find((m) => (m.codigo_material || "").toLowerCase() === term.toLowerCase());
+      const exact = data.find((m: any) => (m.codigo_material || "").toLowerCase() === term.toLowerCase());
       setMaterialEncontrado((exact || data[0]) as MaterialRow);
     } catch (err: any) {
       setError(err.message || "Erro ao buscar material.");
@@ -149,12 +125,7 @@ export default function AcionamentoMateriais() {
     const handler = setTimeout(async () => {
       setLoadingSugestoes(true);
       try {
-        const { data } = await supabase
-          .from("materiais")
-          .select("*")
-          .or(`codigo_material.ilike.%${term}%,descricao.ilike.%${term}%`)
-          .order("descricao")
-          .limit(8);
+        const data = await searchMateriais(term);
         setSugestoes((data || []) as MaterialRow[]);
       } catch {
         setSugestoes([]);
@@ -216,12 +187,7 @@ export default function AcionamentoMateriais() {
 
   const ensureLista = async (idAcionamento: string) => {
     if (lista) return lista;
-    const { data, error } = await supabase
-      .from("lista_aplicacao_cabecalho")
-      .insert([{ id_acionamento: idAcionamento }])
-      .select("*")
-      .single();
-    if (error) throw error;
+    const data = await saveListaCabecalho(idAcionamento);
     setLista(data as ListaCabecalho);
     return data as ListaCabecalho;
   };
@@ -250,9 +216,7 @@ export default function AcionamentoMateriais() {
         ordem_item: idx + 1,
       }));
 
-      await supabase.from("lista_aplicacao_itens").delete().eq("id_lista_aplicacao", listaId);
-      const { error: errIns } = await supabase.from("lista_aplicacao_itens").insert(payload);
-      if (errIns) throw errIns;
+      await saveListaItens(listaId, payload);
       setInfo("Lista salva em lista_aplicacao_itens.");
     } catch (err: any) {
       setError(err.message || "Erro ao gravar lista.");

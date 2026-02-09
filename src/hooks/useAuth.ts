@@ -1,114 +1,144 @@
-import { useEffect, useState } from 'react';
-import { User, Session } from '@supabase/supabase-js';
+import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useNavigate } from 'react-router-dom';
+import type { User, Session, AuthError } from '@supabase/supabase-js';
 
-interface UserRole {
-  role: 'ADMIN' | 'ADM' | 'OPER' | 'GESTOR' | 'FIN';
+interface AuthUser extends User {
+  roles?: string[];
 }
 
-export const useAuth = () => {
-  const [user, setUser] = useState<User | null>(null);
+interface SignInResult {
+  data?: { user: User | null; session: Session | null };
+  error: AuthError | null;
+}
+
+interface SignUpResult {
+  data?: { user: User | null; session: Session | null };
+  error: AuthError | null;
+}
+
+export function useAuth() {
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
-  const [userRoles, setUserRoles] = useState<UserRole[]>([]);
-  const navigate = useNavigate();
+  const [roles, setRoles] = useState<string[]>([]);
+
+  // Fetch user roles from the user_roles table
+  const fetchRoles = useCallback(async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', userId);
+
+      if (error) {
+        console.error('Error fetching user roles:', error);
+        return [];
+      }
+
+      return (data || []).map((r: { role: string }) => r.role);
+    } catch (err) {
+      console.error('Error fetching roles:', err);
+      return [];
+    }
+  }, []);
 
   useEffect(() => {
-    // Set up auth state listener
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        
-        // Fetch user roles when session changes
-        if (session?.user) {
-          setTimeout(() => {
-            fetchUserRoles(session.user.id);
-          }, 0);
+    let mounted = true;
+
+    // Get initial session
+    const initAuth = async () => {
+      try {
+        const { data: { session: currentSession } } = await supabase.auth.getSession();
+
+        if (!mounted) return;
+
+        if (currentSession?.user) {
+          const userRoles = await fetchRoles(currentSession.user.id);
+          if (!mounted) return;
+
+          const authUser: AuthUser = { ...currentSession.user, roles: userRoles };
+          setUser(authUser);
+          setSession(currentSession);
+          setRoles(userRoles);
         } else {
-          setUserRoles([]);
+          setUser(null);
+          setSession(null);
+          setRoles([]);
         }
+      } catch (err) {
+        console.error('Error initializing auth:', err);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+
+    initAuth();
+
+    // Listen for auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, newSession) => {
+        if (!mounted) return;
+
+        if (newSession?.user) {
+          const userRoles = await fetchRoles(newSession.user.id);
+          if (!mounted) return;
+
+          const authUser: AuthUser = { ...newSession.user, roles: userRoles };
+          setUser(authUser);
+          setSession(newSession);
+          setRoles(userRoles);
+        } else {
+          setUser(null);
+          setSession(null);
+          setRoles([]);
+        }
+
+        setLoading(false);
       }
     );
 
-    // Check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      
-      if (session?.user) {
-        fetchUserRoles(session.user.id);
-      }
-      setLoading(false);
-    });
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, [fetchRoles]);
 
-    return () => subscription.unsubscribe();
+  const signIn = useCallback(async (email: string, password: string): Promise<SignInResult> => {
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    return { data, error };
   }, []);
 
-  const fetchUserRoles = async (userId: string) => {
-    const { data } = await supabase
-      .from('user_roles')
-      .select('role')
-      .eq('user_id', userId);
-    
-    if (data) {
-      setUserRoles(data as UserRole[]);
-    }
-  };
-
-  const signUp = async (email: string, password: string, nome: string) => {
-    const redirectUrl = `${window.location.origin}/`;
-    
+  const signUp = useCallback(async (email: string, password: string, nome?: string): Promise<SignUpResult> => {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        emailRedirectTo: redirectUrl,
-        data: {
-          nome,
-          must_change_password: true,
-        },
+        data: { nome, full_name: nome },
       },
     });
-    
     return { data, error };
-  };
+  }, []);
 
-  const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    
-    return { error };
-  };
+  const signOut = useCallback(async () => {
+    await supabase.auth.signOut();
+    setUser(null);
+    setSession(null);
+    setRoles([]);
+  }, []);
 
-  const signOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (!error) {
-      navigate('/auth');
-    }
-    return { error };
-  };
-
-  const hasRole = (role: 'ADMIN' | 'ADM' | 'OPER' | 'GESTOR' | 'FIN') => {
-    return userRoles.some(r => r.role === role);
-  };
-
-  const isAdmin = () => {
-    return hasRole('ADMIN') || hasRole('ADM');
-  };
+  const hasRole = useCallback((role: string): boolean => {
+    return roles.includes(role) || roles.includes('ADMIN');
+  }, [roles]);
 
   return {
     user,
     session,
     loading,
-    userRoles,
-    signUp,
+    isAuthenticated: !!user,
+    roles,
     signIn,
+    signUp,
     signOut,
     hasRole,
-    isAdmin,
   };
-};
+}

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+// Supabase removido
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,7 +37,7 @@ const roleNames: Record<string, string> = {
 const AcceptInvite = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { toast } = useToast();
+  // import removido: supabase
 
   const [invite, setInvite] = useState<Invite | null>(null);
   const [loading, setLoading] = useState(true);
@@ -58,28 +58,19 @@ const AcceptInvite = () => {
       navigate("/auth");
       return;
     }
-
     fetchInvite(token);
+    // eslint-disable-next-line
   }, [searchParams]);
 
   const fetchInvite = async (token: string) => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from("invites")
-        .select("*")
-        .eq("token", token)
-        .single();
-
-      if (error || !data) {
-        toast({
-          title: "Convite não encontrado",
-          description: "Este convite não existe ou já foi utilizado.",
-          variant: "destructive",
-        });
-        navigate("/auth");
-        return;
-      }
+      // Busca convite na API local
+      const res = await fetch(`http://localhost:3000/invites?token=${encodeURIComponent(token)}`);
+      if (!res.ok) throw new Error("Convite não encontrado ou já utilizado.");
+      const json = await res.json();
+      const data = json.data?.[0];
+      if (!data) throw new Error("Convite não encontrado ou já utilizado.");
 
       // Verificar se o convite expirou
       if (new Date(data.expira_em) < new Date()) {
@@ -104,11 +95,10 @@ const AcceptInvite = () => {
       }
 
       setInvite(data);
-    } catch (error) {
-      console.error("Error fetching invite:", error);
+    } catch (error: any) {
       toast({
         title: "Erro",
-        description: "Não foi possível carregar o convite.",
+        description: error?.message || "Não foi possível carregar o convite.",
         variant: "destructive",
       });
       navigate("/auth");
@@ -120,6 +110,16 @@ const AcceptInvite = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+        // const { data: authData, error: signUpError } = await supabase.auth.signUp({
+        //   email: invite.email,
+        //   password,
+        //   options: {
+        //     data: {
+        //       nome: nome.trim(),
+        //     },
+        //     emailRedirectTo: `${window.location.origin}/`,
+        //   },
+        // });
     if (!invite) return;
 
     // Validar nome
@@ -135,6 +135,7 @@ const AcceptInvite = () => {
     // Validar senha
     const passwordValidation = passwordSchema.safeParse(password);
     if (!passwordValidation.success) {
+        // const { error: rolesError } = await supabase.from("user_roles").insert(roleInserts);
       setPasswordError(passwordValidation.error.errors[0].message);
       return;
     }
@@ -152,49 +153,26 @@ const AcceptInvite = () => {
     setPasswordError("");
 
     try {
-      // Criar conta
-      const { data: authData, error: signUpError } = await supabase.auth.signUp({
-        email: invite.email,
-        password,
-        options: {
-          data: {
-            nome: nome.trim(),
-          },
-          emailRedirectTo: `${window.location.origin}/`,
-        },
+      // Criar conta via API local
+      const res = await fetch("http://localhost:3000/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: invite.email,
+          password,
+          nome: nome.trim(),
+          roles: invite.roles,
+          convidado_por: invite.convidado_por,
+          convite_id: invite.id,
+        }),
       });
-
-      if (signUpError) throw signUpError;
-      if (!authData.user) throw new Error("Erro ao criar usuário");
-
-      // Aguardar um pouco para o trigger criar o perfil
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
-      // Atribuir roles
-      const roleInserts = invite.roles.map((role) => ({
-        user_id: authData.user!.id,
-        role: role as any,
-        concedido_por: invite.convidado_por,
-      }));
-
-      const { error: rolesError } = await supabase.from("user_roles").insert(roleInserts);
-
-      if (rolesError) {
-        console.error("Error assigning roles:", rolesError);
-        // Continuar mesmo com erro nas roles
-      }
-
-      // Marcar convite como aceito
-      await supabase
-        .from("invites")
-        .update({ status: "accepted", aceito_em: new Date().toISOString() })
-        .eq("id", invite.id);
+      const json = await res.json();
+      if (!res.ok || json.error) throw new Error(json.error?.message || "Erro ao criar usuário");
 
       toast({
         title: "Conta criada com sucesso!",
         description: "Você já pode acessar o sistema.",
       });
-
       navigate("/");
     } catch (error: any) {
       console.error("Error accepting invite:", error);

@@ -1,0 +1,2 @@
+id_notificacao,tipo,titulo,mensagem,etapa,referencia_id,referencia_tipo,lida,criado_em,usuario_id
+40a2db87-0380-4b4b-9bc7-7251ade0548e,urgente,Acionamentos urgentes sem equipe,2 acionamento(s) de emergência aguardando atribuição de equipe,Etapa 1: Acionamentos recebidos,,,true,2025-12-01 18:40:46.124023+00,

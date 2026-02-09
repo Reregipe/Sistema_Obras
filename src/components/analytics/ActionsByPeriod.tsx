@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+// Supabase removido
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from "recharts";
@@ -21,84 +21,25 @@ export const ActionsByPeriod = () => {
   const [period, setPeriod] = useState<"7" | "30">("7");
 
   useEffect(() => {
-    fetchData();
-  }, [period]);
-
-  const fetchData = async () => {
+    // Dados mocados/local: ajuste conforme integração futura
     setLoading(true);
-    try {
+    setTimeout(() => {
+      // Gera dados zerados para o período selecionado
       const days = parseInt(period);
-      const startDate = startOfDay(subDays(new Date(), days));
-
-      // Buscar acionamentos por dia
-      const { data: acionamentosData } = await supabase
-        .from("acionamentos")
-        .select("criado_em")
-        .gte("criado_em", startDate.toISOString());
-
-      // Buscar obras por dia
-      const { data: obrasData } = await supabase
-        .from("obras")
-        .select("criado_em")
-        .gte("criado_em", startDate.toISOString());
-
-      // Buscar notificações por dia
-      const { data: notificacoesData } = await supabase
-        .from("notificacoes")
-        .select("criado_em")
-        .gte("criado_em", startDate.toISOString());
-
-      // Buscar mudanças de roles por dia
-      const { data: roleChangesData } = await supabase
-        .from("user_roles_history")
-        .select("criado_em")
-        .gte("criado_em", startDate.toISOString());
-
-      // Processar dados por dia
-      const dailyData: Record<string, ActionData> = {};
-
+      const dailyData: ActionData[] = [];
       for (let i = 0; i < days; i++) {
-        const date = format(subDays(new Date(), days - i - 1), "yyyy-MM-dd");
-        dailyData[date] = {
+        dailyData.push({
           date: format(subDays(new Date(), days - i - 1), "dd/MM", { locale: ptBR }),
           acionamentos: 0,
           obras: 0,
           notificacoes: 0,
           roleChanges: 0,
-        };
+        });
       }
-
-      // Contar acionamentos
-      acionamentosData?.forEach((item) => {
-        const date = format(new Date(item.criado_em), "yyyy-MM-dd");
-        if (dailyData[date]) dailyData[date].acionamentos++;
-      });
-
-      // Contar obras
-      obrasData?.forEach((item) => {
-        const date = format(new Date(item.criado_em), "yyyy-MM-dd");
-        if (dailyData[date]) dailyData[date].obras++;
-      });
-
-      // Contar notificações
-      notificacoesData?.forEach((item) => {
-        const date = format(new Date(item.criado_em), "yyyy-MM-dd");
-        if (dailyData[date]) dailyData[date].notificacoes++;
-      });
-
-      // Contar mudanças de roles
-      roleChangesData?.forEach((item) => {
-        const date = format(new Date(item.criado_em), "yyyy-MM-dd");
-        if (dailyData[date]) dailyData[date].roleChanges++;
-      });
-
-      setData(Object.values(dailyData));
-    } catch (error) {
-      console.error("Error fetching actions data:", error);
-    } finally {
+      setData(dailyData);
       setLoading(false);
-    }
-  };
+    }, 500);
+  }, [period]);
 
   return (
     <Card>

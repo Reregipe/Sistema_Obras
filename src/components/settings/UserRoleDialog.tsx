@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
+// Supabase removido
 import {
   Dialog,
   DialogContent,
@@ -65,68 +65,14 @@ export const UserRoleDialog = ({
 
   const handleSave = async () => {
     setSaving(true);
-    try {
-      // Get current roles
-      const currentRoles = new Set(user.roles.map((r) => r.role));
-      
-      // Determine roles to add and remove
-      const rolesToAdd = Array.from(selectedRoles).filter((r) => !currentRoles.has(r));
-      const rolesToRemove = Array.from(currentRoles).filter((r) => !selectedRoles.has(r));
-
-      const sensitiveAdded = rolesToAdd.some((r) => ["ADMIN", "FIN"].includes(r));
-      const sensitiveRemoved = rolesToRemove.some((r) => ["ADMIN", "FIN"].includes(r));
-      if (sensitiveAdded || sensitiveRemoved) {
-        const msg = sensitiveAdded
-          ? "Você está concedendo acesso sensível (ADMIN/FIN). Confirmar?"
-          : "Você está removendo acesso sensível (ADMIN/FIN). Confirmar?";
-        if (!window.confirm(msg)) {
-          setSaving(false);
-          return;
-        }
-      }
-
-      // Remove roles
-      if (rolesToRemove.length > 0) {
-        const { error: deleteError } = await supabase
-          .from("user_roles")
-          .delete()
-          .eq("user_id", user.id)
-          .in("role", rolesToRemove as Array<'ADMIN' | 'ADM' | 'OPER' | 'GESTOR' | 'FIN'>);
-
-        if (deleteError) throw deleteError;
-      }
-
-      // Add roles
-      if (rolesToAdd.length > 0) {
-        const { error: insertError } = await supabase
-          .from("user_roles")
-          .insert(
-            rolesToAdd.map((role) => ({
-              user_id: user.id,
-              role: role as any,
-              concedido_por: currentUser?.id,
-            }))
-          );
-
-        if (insertError) throw insertError;
-      }
-
+    setTimeout(() => {
       toast({
         title: "Permissões atualizadas",
-        description: `As permissões de ${user.nome} foram atualizadas com sucesso.`,
+        description: `As permissões de ${user.nome} foram atualizadas (mock).`,
       });
-
       onSuccess();
-    } catch (error) {
-      console.error("Error updating roles:", error);
-      toast({
-        title: "Erro ao atualizar permissões",
-        description: "Não foi possível atualizar as permissões do usuário.",
-        variant: "destructive",
-      });
-    } finally {
       setSaving(false);
-    }
+    }, 500);
   };
 
   return (

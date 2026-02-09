@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { fetchMateriais } from '@/services/dataSource';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
+import { updateMaterialStatus } from '@/services/api';
 import { Button } from '@/components/ui/button';
 import { Search, Pencil, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -11,7 +13,7 @@ interface Material {
   codigo_material: string;
   descricao: string;
   unidade_medida: string;
-  ativo: string;
+  status: number;
 }
 
 export const MateriaisTable = () => {
@@ -22,7 +24,21 @@ export const MateriaisTable = () => {
   const { toast } = useToast();
 
   useEffect(() => {
-    loadMateriais();
+    setLoading(true);
+    fetchMateriais().then(({ data, error }) => {
+      if (error) {
+        toast({
+          variant: 'destructive',
+          title: 'Erro ao carregar materiais',
+          description: error.message,
+        });
+        setMateriais([]);
+      } else {
+        setMateriais(data ?? []);
+        console.log('Materiais recebidos:', data);
+      }
+      setLoading(false);
+    });
   }, []);
 
   useEffect(() => {
@@ -38,50 +54,26 @@ export const MateriaisTable = () => {
     }
   }, [search, materiais]);
 
-  const loadMateriais = async () => {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from('materiais')
-      .select('*')
-      .order('codigo_material');
 
-    if (error) {
-      toast({
-        variant: 'destructive',
-        title: 'Erro ao carregar materiais',
-        description: error.message,
-      });
-    } else {
-      setMateriais(data || []);
-    }
-    setLoading(false);
-  };
-
-  const handleDelete = async (codigo: string) => {
-    if (!confirm('Tem certeza que deseja excluir este material?')) return;
-
-    const { error } = await supabase
-      .from('materiais')
-      .delete()
-      .eq('codigo_material', codigo);
-
-    if (error) {
-      toast({
-        variant: 'destructive',
-        title: 'Erro ao excluir material',
-        description: error.message,
-      });
-    } else {
-      toast({
-        title: 'Material excluído com sucesso',
-      });
-      loadMateriais();
-    }
-  };
 
   if (loading) {
     return <div className="text-center py-8">Carregando...</div>;
   }
+
+  // Função para atualizar status do material
+  const handleStatusChange = async (codigo: string, novoStatus: number) => {
+    try {
+      await updateMaterialStatus(codigo, novoStatus);
+      setMateriais((prev) => prev.map((m) => m.codigo_material === codigo ? { ...m, status: novoStatus } : m));
+      toast({ title: `Status alterado para ${novoStatus === 1 ? 'Ativo' : 'Inativo'}` });
+    } catch (error: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao atualizar status',
+        description: error?.message || 'Erro desconhecido',
+      });
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -105,7 +97,7 @@ export const MateriaisTable = () => {
               <TableHead>Descrição</TableHead>
               <TableHead>Unidade</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead className="text-right">Ações</TableHead>
+
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -122,23 +114,7 @@ export const MateriaisTable = () => {
                   <TableCell>{material.descricao}</TableCell>
                   <TableCell>{material.unidade_medida}</TableCell>
                   <TableCell>
-                    <Badge variant={material.ativo === 'S' ? 'default' : 'secondary'}>
-                      {material.ativo === 'S' ? 'Ativo' : 'Inativo'}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
-                      <Button variant="ghost" size="icon">
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleDelete(material.codigo_material)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
+                    {Number(material.status) === 1 ? 'Inativo' : 'Ativo'}
                   </TableCell>
                 </TableRow>
               ))

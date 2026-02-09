@@ -15,7 +15,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { TeamCard, equipesCatalog } from "@/data/equipesCatalog";
+import { TeamCard } from "@/data/equipesCatalog";
+import { fetchEquipes } from "@/services/dataSource";
+import { useEquipes } from '../hooks/useEquipes';
 
 const STORAGE_KEY = "equipes-cards";
 
@@ -83,7 +85,9 @@ const TeamBoard = ({ team, onEdit }: { team: TeamCard; onEdit?: () => void }) =>
 };
 
 const Equipes = () => {
-  const [teams, setTeams] = useState<TeamCard[]>(equipesCatalog);
+  const [teams, setTeams] = useState<TeamCard[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string|null>(null);
   const [open, setOpen] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [form, setForm] = useState({
@@ -97,15 +101,26 @@ const Equipes = () => {
   const { toast } = useToast();
 
   useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved) as TeamCard[];
-        setTeams(parsed);
-      } catch {
-        // ignore parse errors
+    setLoading(true);
+    fetchEquipes().then(({ data, error }) => {
+      if (error) {
+        setError(error);
+        setTeams([]);
+      } else {
+        // Mapeia id_equipe para code, encarregado_nome para encarregado, etc.
+        const mapped = (data ?? []).map((item: any) => ({
+          code: item.code || item.nome_equipe || item.id_equipe || "",
+          encarregado: item.encarregado || item.encarregado_nome || "",
+          members: item.members || item.membros || [],
+          phone: item.phone || item.encarregado_telefone || "",
+          linha: item.linha,
+          ativa: item.ativa ?? (item.ativo === "S" || item.ativo === true),
+        }));
+        setTeams(mapped);
+        setError(null);
       }
-    }
+      setLoading(false);
+    });
   }, []);
 
   const persist = (data: TeamCard[]) => {
@@ -225,11 +240,17 @@ const Equipes = () => {
         </Button>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-        {teams.map((team, index) => (
-          <TeamBoard key={team.code} team={team} onEdit={() => handleEdit(index)} />
-        ))}
-      </div>
+      {loading ? (
+        <div className="py-8 text-center text-muted-foreground">Carregando equipes...</div>
+      ) : error ? (
+        <div className="py-8 text-center text-red-600">Erro ao carregar equipes: {error}</div>
+      ) : (
+        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+          {teams.map((team, index) => (
+            <TeamBoard key={team.code} team={team} onEdit={() => handleEdit(index)} />
+          ))}
+        </div>
+      )}
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
